@@ -1,0 +1,74 @@
+#!/bin/bash
+# Adds (or with --uninstall removes) the Claude Notch hooks in ~/.claude/settings.json.
+# Other settings and hooks are kept; a backup is written next to the file.
+set -euo pipefail
+
+SETTINGS="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
+HOOK="$HOME/Applications/ClaudeNotch.app/Contents/MacOS/claude-notch-hook"
+MODE="${1:-install}"
+
+if [[ "$MODE" != "install" && "$MODE" != "--uninstall" ]]; then
+    echo "usage: $0 [--uninstall]" >&2
+    exit 2
+fi
+if [[ "$MODE" == "install" && ! -x "$HOOK" ]]; then
+    echo "Hook binary not found at $HOOK — run ./build.sh first." >&2
+    exit 1
+fi
+
+mkdir -p "$(dirname "$SETTINGS")"
+[[ -f "$SETTINGS" ]] || echo '{}' > "$SETTINGS"
+cp "$SETTINGS" "$SETTINGS.bak-claudenotch"
+
+python3 -I - "$SETTINGS" "$HOOK" "$MODE" <<'EOF'
+import json, sys
+
+path, hook, mode = sys.argv[1:4]
+
+# event -> (matcher or None, timeout in seconds)
+EVENTS = {
+    "UserPromptSubmit": (None, 3),
+    "PreToolUse": ("*", 3),
+    "PostToolUse": ("*", 3),
+    "PostToolUseFailure": ("*", 3),
+    "PermissionRequest": ("*", 600),  # waits for a click in the notch
+    "Notification": (None, 3),
+    "PreCompact": (None, 3),
+    "Stop": (None, 3),
+    "StopFailure": (None, 3),
+    "SessionEnd": (None, 3),
+}
+
+def is_ours(group):
+    return any(h.get("command", "").endswith("claude-notch-hook") for h in group.get("hooks", []))
+
+with open(path, encoding="utf-8") as f:
+    settings = json.load(f)
+hooks = settings.setdefault("hooks", {})
+
+for event in set(hooks) | set(EVENTS):
+    groups = [g for g in hooks.get(event, []) if not is_ours(g)]
+    if mode == "install" and event in EVENTS:
+        matcher, timeout = EVENTS[event]
+        group = {"hooks": [{"type": "command", "command": hook, "timeout": timeout}]}
+        if matcher:
+            group = {"matcher": matcher, **group}
+        groups.append(group)
+    if groups:
+        hooks[event] = groups
+    else:
+        hooks.pop(event, None)
+
+if not hooks:
+    settings.pop("hooks")
+
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(settings, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+EOF
+
+if [[ "$MODE" == "install" ]]; then
+    echo "Hooks installed in $SETTINGS (backup: $SETTINGS.bak-claudenotch)"
+else
+    echo "Hooks removed from $SETTINGS (backup: $SETTINGS.bak-claudenotch)"
+fi
