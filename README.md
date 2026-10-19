@@ -8,11 +8,6 @@
 
 <img src="docs/notch.gif" width="640" alt="Чёлка во время задачи: Clawd достаёт ноутбук, печатает, выполняется команда, «Готово»">
 
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white)
-![Swift](https://img.shields.io/badge/Swift-SwiftUI-F05138?logo=swift&logoColor=white)
-![Claude Code](https://img.shields.io/badge/Claude_Code-hooks-D97757)
-![License: MIT](https://img.shields.io/badge/license-MIT-blue)
-
 </div>
 
 ## Установка
