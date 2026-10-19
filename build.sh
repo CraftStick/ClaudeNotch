@@ -1,11 +1,17 @@
 #!/bin/bash
 # Builds ClaudeNotch.app, installs it to ~/Applications and (re)starts it.
+# --no-install only builds it into build/.
 set -euo pipefail
 cd "$(dirname "$0")"
 
+if ! command -v swiftc >/dev/null; then
+    echo "Swift not found. Install the Xcode Command Line Tools first: xcode-select --install" >&2
+    exit 1
+fi
+
 APP=build/ClaudeNotch.app
 DEST="$HOME/Applications/ClaudeNotch.app"
-FLAGS=(-O -swift-version 5 -target arm64-apple-macos14.0)
+FLAGS=(-O -swift-version 5 -target "$(uname -m)-apple-macos14.0")
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
@@ -22,4 +28,3 @@ rm -rf "$DEST"
 cp -R "$APP" "$DEST"
 open "$DEST"
 echo "Installed $DEST"
-echo "Hook command: $DEST/Contents/MacOS/claude-notch-hook"

@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Combine
 import ServiceManagement
 import SwiftUI
@@ -7,6 +8,10 @@ import SwiftUI
 enum ClaudeNotchMain {
     @MainActor
     static func main() {
+        if CommandLine.arguments.contains("--unregister-login-item") {  // used by uninstall.sh
+            try? SMAppService.mainApp.unregister()
+            return
+        }
         signal(SIGPIPE, SIG_IGN)  // a hook may hang up before we answer
         let app = NSApplication.shared
         let delegate = AppDelegate()
@@ -51,6 +56,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var loginItem: NSMenuItem?
     private var promptsObserver: AnyCancellable?
+    private var hoverTimer: Timer?
+    private var notchScreen: NSScreen?
+    private var notch: NotchMetrics?
+    private var soundsItem: NSMenuItem?
+    private let hotKeys = HotKeys()
+    /// The pointer is over the visible notch: take clicks there (to focus a session).
+    private var pointerInside = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if SocketServer.isAlive(Paths.socket) {  // already running
@@ -71,8 +83,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         layoutPanel()
         setUpStatusItem()
         syncLaunchAtLogin()
-        promptsObserver = store.$prompts.sink { [panel] prompts in
-            panel.ignoresMouseEvents = prompts.isEmpty
+        _ = ClawdAssets.laptop  // read Clawd's sprites from Claude.app now, not on the first event
+        promptsObserver = store.$prompts.sink { [weak self] _ in
+            DispatchQueue.main.async {  // after `prompts` has its new value
+                self?.resizePanel()
+                self?.updateMouseHandling()
+                self?.updateHotKeys()
+            }
+        }
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            self?.trackPointer()
         }
         NotificationCenter.default.addObserver(
             self, selector: #selector(layoutPanel),
@@ -87,21 +107,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let screens = NSScreen.screens
         guard let screen = screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main ?? screens.first else { return }
         let notch = NotchMetrics(screen: screen)
-        let size = NSSize(width: 640, height: notch.height + NotchView.permissionHeight + 40)
-        let origin = NSPoint(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height)
+        notchScreen = screen
+        self.notch = notch
 
         let hosting = FirstClickHostingView(rootView: NotchView(store: store, notch: notch))
         hosting.sizingOptions = []
         panel.contentView = hosting
-        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+        resizePanel()
         panel.orderFrontRegardless()
+    }
+
+    /// Tall enough for the hover card; only as tall as the permission card while that one takes
+    /// clicks, so the transparent rest of the window doesn't swallow clicks meant for other apps.
+    private func resizePanel() {
+        guard let screen = notchScreen, let notch else { return }
+        let height = store.prompts.isEmpty
+            ? NotchView.maxHeight(notch: notch) + 30
+            : notch.height + NotchView.permissionHeight + 30
+        let size = NSSize(width: 640, height: height)
+        let origin = NSPoint(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height)
+        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+    }
+
+    // MARK: - Hover
+
+    /// The pointer is polled rather than tracked: the panel lets clicks through, so it gets no
+    /// mouse events, and polling needs no special permission.
+    private func trackPointer() {
+        guard let screen = notchScreen, let notch else { return }
+        let mode = store.mode
+        let zoneMode: DisplayMode = mode == .details || mode == .permission ? mode : .compact
+        let details = store.detailsSession
+        let size = NotchView.size(of: zoneMode, session: details,
+                                  others: store.others(than: details?.id).count, notch: notch)
+        let zone = NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
+                          width: size.width, height: size.height).insetBy(dx: -4, dy: -4)
+        let inside = zone.contains(NSEvent.mouseLocation)
+        store.pointer(inside: inside)
+        let visible = inside && mode != .hidden
+        if visible != pointerInside {
+            pointerInside = visible
+            updateMouseHandling()
+        }
+    }
+
+    /// Click-through, except over a visible notch or while a permission card has buttons.
+    private func updateMouseHandling() {
+        panel.ignoresMouseEvents = store.prompts.isEmpty && !pointerInside
+    }
+
+    // MARK: - Permission shortcuts
+
+    /// ⌘Y / ⌘N answer the oldest request, only while one is shown.
+    private func updateHotKeys() {
+        if store.prompts.isEmpty {
+            hotKeys.unregisterAll()
+        } else if !hotKeys.isRegistered {
+            hotKeys.register(keyCode: kVK_ANSI_Y, modifiers: cmdKey) { [weak self] in self?.answerPrompt(.allow) }
+            hotKeys.register(keyCode: kVK_ANSI_N, modifiers: cmdKey) { [weak self] in self?.answerPrompt(.deny) }
+        }
+    }
+
+    private func answerPrompt(_ decision: Store.Decision) {
+        guard let prompt = store.prompt else { return }
+        store.answer(prompt, decision)
     }
 
     // MARK: - Menu bar
 
     private func setUpStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "sparkle", accessibilityDescription: "Claude Notch")
+        item.button?.image = ClawdSprite.menuBarImage()
+        item.button?.toolTip = "Claude Notch"
 
         let menu = NSMenu()
         menu.delegate = self
@@ -116,6 +193,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         login.target = self
         menu.addItem(login)
         loginItem = login
+        let sounds = NSMenuItem(title: "Звук, когда готово или нужен ответ", action: #selector(toggleSounds), keyEquivalent: "")
+        sounds.target = self
+        menu.addItem(sounds)
+        soundsItem = sounds
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Выйти", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         item.menu = menu
@@ -124,6 +205,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         loginItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        soundsItem?.state = UserDefaults.standard.bool(forKey: Store.soundsKey) ? .on : .off
+    }
+
+    @objc private func toggleSounds() {
+        let on = !UserDefaults.standard.bool(forKey: Store.soundsKey)
+        UserDefaults.standard.set(on, forKey: Store.soundsKey)
+        if on { NSSound(named: "Glass")?.play() }
     }
 
     @objc private func runDemo() {

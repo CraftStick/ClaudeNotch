@@ -37,6 +37,8 @@ EVENTS = {
     "Stop": (None, 3),
     "StopFailure": (None, 3),
     "SessionEnd": (None, 3),
+    "SubagentStart": (None, 3),
+    "SubagentStop": (None, 3),
 }
 
 def is_ours(group):

@@ -28,6 +28,22 @@ func contains(_ haystack: [UInt8], _ needle: String) -> Bool {
 // A permission request waits for a click in the notch (Claude Code's own timeout is 600 s).
 if contains(payload, "\"PermissionRequest\"") { alarm(590) }
 
+/// Tell the app which app runs this session (Terminal, iTerm, VS Code, Claude…), so a click on
+/// the notch can bring it to the front: macOS passes the launching app's bundle id down to child
+/// processes in __CFBundleIdentifier.
+func env(_ name: String) -> String {
+    guard let value = getenv(name) else { return "" }
+    return String(String(cString: value).unicodeScalars.filter {
+        ($0.properties.isAlphabetic && $0.isASCII) || ("0"..."9").contains($0) || "._-".unicodeScalars.contains($0)
+    }.prefix(100))
+}
+if let close = payload.lastIndex(of: UInt8(ascii: "}")) {
+    let before = payload[..<close].last { ![UInt8(ascii: " "), UInt8(ascii: "\n"), UInt8(ascii: "\r"), UInt8(ascii: "\t")].contains($0) }
+    let comma = before == UInt8(ascii: "{") ? "" : ","
+    let extra = comma + "\"notch_host\":\"\(env("__CFBundleIdentifier"))\",\"notch_term\":\"\(env("TERM_PROGRAM"))\""
+    payload.insert(contentsOf: Array(extra.utf8), at: close)
+}
+
 guard !payload.isEmpty, let home = getenv("HOME") else { exit(0) }
 let path = String(cString: home) + "/Library/Application Support/ClaudeNotch/notch.sock"
 

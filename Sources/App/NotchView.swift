@@ -55,50 +55,87 @@ struct NotchView: View {
     @ObservedObject var store: Store
     let notch: NotchMetrics
 
-    static let permissionHeight: CGFloat = 92
-    private let ear: CGFloat = 6
-    private let wing: CGFloat = 46
-    private let detailHeight: CGFloat = 54
+    static let permissionHeight: CGFloat = 104
+    private static let ear: CGFloat = 6
+    /// Room on each side of the notch: Clawd (36) and his hint icon (~14) on the left must fit,
+    /// or the icon slides under the camera.
+    private static let wing: CGFloat = 72
+    private static let detailHeight: CGFloat = 54
+    private var ear: CGFloat { Self.ear }
+    private var wing: CGFloat { Self.wing }
+    private var detailHeight: CGFloat { Self.detailHeight }
 
     var body: some View {
         let mode = store.mode
-        let size = bodySize(mode)
-        let shape = NotchShape(topRadius: ear, bottomRadius: mode == .expanded || mode == .permission ? 20 : 10)
+        let session = store.focused
+        let others = store.others(than: session?.id)
+        let size = Self.size(of: mode, session: session, others: others.count, notch: notch)
+        let isOpen = mode == .expanded || mode == .permission || mode == .details
+        let shape = NotchShape(topRadius: ear, bottomRadius: isOpen ? 20 : 10)
 
         ZStack(alignment: .top) {
             shape.fill(Color.black)
-            if let session = store.focused, mode != .hidden {
-                content(session, mode: mode)
+            if let session, mode != .hidden {
+                content(session, others: others, mode: mode)
                     .padding(.horizontal, ear)
                     .transition(.opacity)
             }
         }
-        .frame(width: size.width + 2 * ear, height: size.height)
+        .frame(width: size.width, height: size.height)
         .clipShape(shape)
-        .shadow(color: .black.opacity(mode == .expanded || mode == .permission ? 0.35 : 0), radius: 10, y: 4)
+        .contentShape(shape)
+        .onTapGesture {  // buttons inside win over this
+            if let session { store.focus(session.id) }
+        }
+        .shadow(color: .black.opacity(isOpen ? 0.35 : 0), radius: 10, y: 4)
         .opacity(mode == .hidden ? 0 : 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(.spring(response: 0.42, dampingFraction: 0.8), value: mode)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: size)
         .animation(.easeInOut(duration: 0.2), value: store.focused?.activity)
     }
 
-    private func bodySize(_ mode: DisplayMode) -> CGSize {
+    /// Outer size of the black shape (including the small top curves) for `mode`.
+    static func size(of mode: DisplayMode, session: Session?, others: Int = 0, notch: NotchMetrics) -> CGSize {
+        let body: CGSize
         switch mode {
-        case .hidden: return CGSize(width: notch.width, height: notch.height)
-        case .compact: return CGSize(width: notch.width + 2 * wing, height: notch.height)
-        case .expanded: return CGSize(width: max(notch.width + 2 * wing + 150, 420), height: notch.height + detailHeight)
-        case .permission: return CGSize(width: max(notch.width + 2 * wing + 170, 440), height: notch.height + Self.permissionHeight)
+        case .hidden: body = CGSize(width: notch.width, height: notch.height)
+        case .compact: body = CGSize(width: notch.width + 2 * wing, height: notch.height)
+        case .expanded: body = CGSize(width: max(notch.width + 2 * wing + 150, 420), height: notch.height + detailHeight)
+        case .permission: body = CGSize(width: max(notch.width + 2 * wing + 190, 470), height: notch.height + permissionHeight)
+        case .details:
+            body = CGSize(width: max(notch.width + 2 * wing + 190, 470),
+                          height: notch.height + (session.map { DetailsLayout.height($0, others: others) } ?? detailHeight))
         }
+        return CGSize(width: body.width + 2 * ear, height: body.height)
     }
 
-    private func content(_ s: Session, mode: DisplayMode) -> some View {
+    /// Tallest the shape can get, for sizing the window.
+    static func maxHeight(notch: NotchMetrics) -> CGFloat {
+        notch.height + max(permissionHeight, DetailsLayout.maxHeight)
+    }
+
+    private func content(_ s: Session, others: [Session], mode: DisplayMode) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                PhaseIcon(session: s)
-                    .frame(width: wing)
+                ClawdBadge(session: s, showsHint: mode == .compact)
+                    .padding(.leading, 8)
+                    .frame(width: wing, alignment: .leading)
                 Spacer(minLength: notch.width)
-                ElapsedLabel(session: s)
-                    .frame(width: wing)
+                HStack(spacing: 5) {
+                    let busy = store.working.count
+                    if busy > 1 {
+                        Text("\(busy)")
+                            .font(.system(size: 10, weight: .bold).monospacedDigit())
+                            .foregroundStyle(.black)
+                            .frame(minWidth: 15, minHeight: 15)
+                            .background(Capsule().fill(claudeOrange))
+                            .help("Сессий в работе: \(busy)")
+                    }
+                    ElapsedLabel(session: s)
+                }
+                .padding(.trailing, 10)
+                .frame(width: wing, alignment: .trailing)
             }
             .padding(.horizontal, mode == .compact ? 0 : 6)
             .frame(height: notch.height)
@@ -112,6 +149,9 @@ struct NotchView: View {
                     PermissionCard(prompt: prompt, waiting: store.prompts.count - 1) { store.answer(prompt, $0) }
                         .frame(height: Self.permissionHeight, alignment: .top)
                 }
+            case .details:
+                DetailsCard(session: s, others: others) { store.focus($0) }
+                    .frame(height: DetailsLayout.height(s, others: others.count), alignment: .top)
             default:
                 EmptyView()
             }
@@ -119,7 +159,7 @@ struct NotchView: View {
     }
 }
 
-private func phaseColor(_ phase: Phase) -> Color {
+func phaseColor(_ phase: Phase) -> Color {
     switch phase {
     case .thinking: return claudeOrange
     case .tool: return .white
@@ -130,31 +170,34 @@ private func phaseColor(_ phase: Phase) -> Color {
     }
 }
 
-private struct PhaseIcon: View {
+/// Claude itself (Clawd). In the compact notch, where there is no detail row, a small hint
+/// says when it waits for you or has stopped; while it works, Clawd typing says enough.
+private struct ClawdBadge: View {
     let session: Session
+    let showsHint: Bool
+
+    private var hint: String? {
+        guard showsHint else { return nil }
+        switch session.phase {
+        case .waiting: return "hand.raised.fill"
+        case .done: return "checkmark"
+        case .stopped: return "stop.fill"
+        case .failed: return "exclamationmark.triangle.fill"
+        case .thinking, .tool: return nil
+        }
+    }
 
     var body: some View {
-        Group {
-            switch session.phase {
-            case .thinking:
-                Image(systemName: "sparkle")
-                    .symbolEffect(.pulse, options: .repeating)
-            case .tool:
-                Image(systemName: session.activity.symbol)
+        HStack(spacing: 5) {
+            ClawdView(session: session)
+            if let hint {
+                Image(systemName: hint)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(phaseColor(session.phase))
                     .contentTransition(.symbolEffect(.replace))
-            case .waiting:
-                Image(systemName: "hand.raised.fill")
-                    .symbolEffect(.pulse, options: .repeating)
-            case .done:
-                Image(systemName: "checkmark")
-            case .stopped:
-                Image(systemName: "stop.fill")
-            case .failed:
-                Image(systemName: "exclamationmark.triangle.fill")
+                    .transition(.scale.combined(with: .opacity))
             }
         }
-        .foregroundStyle(phaseColor(session.phase))
-        .font(.system(size: 13, weight: .semibold))
     }
 }
 
@@ -171,7 +214,7 @@ private struct ElapsedLabel: View {
     }
 }
 
-private struct IconBadge: View {
+struct IconBadge: View {
     let symbol: String
     let color: Color
 
@@ -234,7 +277,7 @@ private struct PermissionCard: View {
     let answer: (Store.Decision) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 IconBadge(symbol: "hand.raised.fill", color: .yellow)
                 TitleAndDetail(title: prompt.question, activity: prompt.activity)
@@ -246,17 +289,41 @@ private struct PermissionCard: View {
                 }
             }
             HStack(spacing: 8) {
-                Button("Ответить в приложении") { answer(.askInApp) }
+                Button("В приложении") { answer(.askInApp) }
                     .buttonStyle(NotchButtonStyle(kind: .plain))
-                Spacer(minLength: 8)
-                Button("Запретить") { answer(.deny) }
+                Spacer(minLength: 6)
+                Button { answer(.deny) } label: { ShortcutLabel(title: "Запретить", key: "⌘N") }
                     .buttonStyle(NotchButtonStyle(kind: .secondary))
-                Button("Разрешить") { answer(.allow) }
+                if prompt.ruleSummary != nil {
+                    Button("Всегда") { answer(.allowAlways) }
+                        .buttonStyle(NotchButtonStyle(kind: .secondary))
+                }
+                Button { answer(.allow) } label: { ShortcutLabel(title: "Разрешить", key: "⌘Y") }
                     .buttonStyle(NotchButtonStyle(kind: .primary))
             }
+            Text(prompt.ruleSummary.map { "«Всегда» добавит правило \($0)" } ?? " ")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.white.opacity(0.38))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(height: 12)
         }
         .padding(.horizontal, 16)
         .padding(.top, 4)
+    }
+}
+
+private struct ShortcutLabel: View {
+    let title: String
+    let key: String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(title)
+            Text(key)
+                .font(.system(size: 10.5, weight: .medium))
+                .opacity(0.45)
+        }
     }
 }
 
