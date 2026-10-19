@@ -179,33 +179,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = ClawdSprite.menuBarImage()
         item.button?.toolTip = "Claude Notch"
+        statusItem = item
+        buildMenu()
+    }
 
+    /// Rebuilt when the language changes.
+    private func buildMenu() {
         let menu = NSMenu()
         menu.delegate = self
         let title = NSMenuItem(title: "Claude Notch", action: nil, keyEquivalent: "")
         title.isEnabled = false
         menu.addItem(title)
         menu.addItem(.separator())
-        let demo = NSMenuItem(title: "Показать демо", action: #selector(runDemo), keyEquivalent: "")
+        let demo = NSMenuItem(title: tr("Показать демо", "Show demo"), action: #selector(runDemo), keyEquivalent: "")
         demo.target = self
         menu.addItem(demo)
-        let login = NSMenuItem(title: "Запускать при входе", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        let login = NSMenuItem(title: tr("Запускать при входе", "Open at login"), action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         login.target = self
         menu.addItem(login)
         loginItem = login
-        let sounds = NSMenuItem(title: "Звук, когда готово или нужен ответ", action: #selector(toggleSounds), keyEquivalent: "")
+        let sounds = NSMenuItem(title: tr("Звук, когда готово или нужен ответ", "Sound when done or waiting for you"),
+                                action: #selector(toggleSounds), keyEquivalent: "")
         sounds.target = self
         menu.addItem(sounds)
         soundsItem = sounds
+
+        let languages = NSMenu()
+        for (choice, name) in [(nil, tr("Как в системе", "System")), (Language.en, "English"), (Language.ru, "Русский")] {
+            let option = NSMenuItem(title: name, action: #selector(pickLanguage(_:)), keyEquivalent: "")
+            option.target = self
+            option.representedObject = choice?.rawValue
+            option.state = Language.choice == choice ? .on : .off
+            languages.addItem(option)
+        }
+        let language = NSMenuItem(title: tr("Язык", "Language"), action: nil, keyEquivalent: "")
+        language.submenu = languages
+        menu.addItem(language)
+
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Выйти", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        item.menu = menu
-        statusItem = item
+        menu.addItem(NSMenuItem(title: tr("Выйти", "Quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        statusItem?.menu = menu
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         loginItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
         soundsItem?.state = UserDefaults.standard.bool(forKey: Store.soundsKey) ? .on : .off
+    }
+
+    @objc private func pickLanguage(_ sender: NSMenuItem) {
+        Language.choice = (sender.representedObject as? String).flatMap(Language.init(rawValue:))
+        buildMenu()
+        store.objectWillChange.send()  // redraw the notch in the new language
     }
 
     @objc private func toggleSounds() {

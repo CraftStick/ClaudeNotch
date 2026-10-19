@@ -65,7 +65,7 @@ struct DetailsCard: View {
         VStack(alignment: .leading, spacing: DetailsLayout.gap) {
             let taskLines = DetailsLayout.taskLines(session)
             if taskLines > 0 {
-                section("Задача") {
+                section(tr("Задача", "Task")) {
                     Text(session.task)
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.85))
@@ -76,19 +76,19 @@ struct DetailsCard: View {
             section(nowCaption) { NowRow(activity: Self.now(session), phase: session.phase) }
             if !session.agents.isEmpty {
                 let running = session.agents.filter { $0.finished == nil }.count
-                section(running > 0 ? "Агенты · работают \(running)" : "Агенты") {
+                section(running > 0 ? tr("Агенты · работают \(running)", "Agents · \(running) running") : tr("Агенты", "Agents")) {
                     let shown = session.agents.suffix(DetailsLayout.maxAgentRows)
                     ForEach(Array(shown.enumerated()), id: \.offset) { _, agent in AgentRow(agent: agent) }
                 }
             }
             if !session.history.isEmpty {
-                section("Перед этим") {
+                section(tr("Перед этим", "Before that")) {
                     let recent = session.history.reversed().prefix(DetailsLayout.maxHistoryRows)
                     ForEach(Array(recent.enumerated()), id: \.offset) { _, a in HistoryRow(activity: a) }
                 }
             }
             if !others.isEmpty {
-                section("Другие сессии · клик — открыть") {
+                section(tr("Другие сессии · клик — открыть", "Other sessions · click to open")) {
                     ForEach(others.prefix(DetailsLayout.maxOtherRows), id: \.id) { other in
                         SessionRow(session: other).onTapGesture { focus(other.id) }
                     }
@@ -108,9 +108,9 @@ struct DetailsCard: View {
 
     private var nowCaption: String {
         switch session.phase {
-        case .thinking, .tool: return "Сейчас"
-        case .waiting: return "Ждёт тебя"
-        case .done, .stopped, .failed: return "Итог"
+        case .thinking, .tool: return tr("Сейчас", "Now")
+        case .waiting: return tr("Ждёт тебя", "Waiting for you")
+        case .done, .stopped, .failed: return tr("Итог", "Result")
         }
     }
 
@@ -118,17 +118,17 @@ struct DetailsCard: View {
     private var footer: String {
         var parts = [session.project]
         if session.actions > 0 {
-            parts.append("\(session.actions) " + plural(session.actions, "действие", "действия", "действий"))
+            parts.append(actionsText(session.actions))
         }
         if session.linesAdded + session.linesRemoved > 0 {
             parts.append("+\(session.linesAdded) −\(session.linesRemoved)")
         }
         if session.turnOutputTokens > 0 {
-            parts.append(tokens(session.turnOutputTokens) + " ток.")
+            parts.append(tokens(session.turnOutputTokens) + tr(" ток.", " tokens"))
         }
         if session.contextTokens > 0 {
             let percent = min(100, session.contextTokens * 100 / max(1, session.contextWindow))
-            parts.append("контекст \(percent)% из \(tokens(session.contextWindow))")
+            parts.append(tr("контекст \(percent)% из ", "context \(percent)% of ") + tokens(session.contextWindow))
         }
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
@@ -238,15 +238,15 @@ private struct AgentRow: View {
     }
 
     private var name: String {
-        let type = agent.type.isEmpty ? "агент" : agent.type
+        let type = agent.type.isEmpty ? tr("агент", "agent") : agent.type
         return agent.task.isEmpty ? type : "\(type) · \(agent.task)"
     }
 
     private var status: String {
         if agent.finished != nil {
-            return "готово · \(agent.actions) " + plural(agent.actions, "действие", "действия", "действий")
+            return tr("готово", "done") + " · " + actionsText(agent.actions)
         }
-        guard let a = agent.activity else { return "запускается…" }
+        guard let a = agent.activity else { return tr("запускается…", "starting…") }
         return a.headline
     }
 }
@@ -281,7 +281,7 @@ private struct SessionRow: View {
                 .fill(phaseColor(session.phase == .tool ? .thinking : session.phase))
                 .frame(width: 7, height: 7)
                 .frame(width: 13)
-            Text(session.project.isEmpty ? "сессия" : session.project)
+            Text(session.project.isEmpty ? tr("сессия", "session") : session.project)
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(.white.opacity(0.85))
                 .lineLimit(1)
@@ -301,12 +301,12 @@ private struct SessionRow: View {
 
     private var status: String {
         switch session.phase {
-        case .thinking: return "думает"
+        case .thinking: return tr("думает", "thinking")
         case .tool: return session.activity.headline
-        case .waiting: return "ждёт тебя"
-        case .done: return "готово"
-        case .stopped: return "остановлено"
-        case .failed: return "ошибка"
+        case .waiting: return tr("ждёт тебя", "waiting for you")
+        case .done: return tr("готово", "done")
+        case .stopped: return tr("остановлено", "stopped")
+        case .failed: return tr("ошибка", "error")
         }
     }
 }

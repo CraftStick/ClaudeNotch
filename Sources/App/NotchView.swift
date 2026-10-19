@@ -130,7 +130,7 @@ struct NotchView: View {
                             .foregroundStyle(.black)
                             .frame(minWidth: 15, minHeight: 15)
                             .background(Capsule().fill(claudeOrange))
-                            .help("Сессий в работе: \(busy)")
+                            .help(tr("Сессий в работе: \(busy)", "Sessions at work: \(busy)"))
                     }
                     ElapsedLabel(session: s)
                 }
@@ -283,25 +283,25 @@ private struct PermissionCard: View {
                 TitleAndDetail(title: prompt.question, activity: prompt.activity)
                 Spacer(minLength: 8)
                 if waiting > 0 {
-                    Text("ещё \(waiting)")
+                    Text(tr("ещё \(waiting)", "+\(waiting) more"))
                         .font(.system(size: 11))
                         .foregroundStyle(.white.opacity(0.4))
                 }
             }
             HStack(spacing: 8) {
-                Button("В приложении") { answer(.askInApp) }
+                Button(tr("В приложении", "In app")) { answer(.askInApp) }
                     .buttonStyle(NotchButtonStyle(kind: .plain))
                 Spacer(minLength: 6)
-                Button { answer(.deny) } label: { ShortcutLabel(title: "Запретить", key: "⌘N") }
+                Button { answer(.deny) } label: { ShortcutLabel(title: tr("Запретить", "Deny"), key: "⌘N") }
                     .buttonStyle(NotchButtonStyle(kind: .secondary))
                 if prompt.ruleSummary != nil {
-                    Button("Всегда") { answer(.allowAlways) }
+                    Button(tr("Всегда", "Always")) { answer(.allowAlways) }
                         .buttonStyle(NotchButtonStyle(kind: .secondary))
                 }
-                Button { answer(.allow) } label: { ShortcutLabel(title: "Разрешить", key: "⌘Y") }
+                Button { answer(.allow) } label: { ShortcutLabel(title: tr("Разрешить", "Allow"), key: "⌘Y") }
                     .buttonStyle(NotchButtonStyle(kind: .primary))
             }
-            Text(prompt.ruleSummary.map { "«Всегда» добавит правило \($0)" } ?? " ")
+            Text(prompt.ruleSummary.map { tr("«Всегда» добавит правило ", "“Always” adds the rule ") + $0 } ?? " ")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.white.opacity(0.38))
                 .lineLimit(1)

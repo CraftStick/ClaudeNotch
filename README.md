@@ -1,26 +1,28 @@
 <div align="center">
 
+**English** · [Русский](README.ru.md)
+
 # Claude Notch
 
-**Статус [Claude Code](https://claude.com/claude-code) в чёлке MacBook — как Dynamic Island на iPhone.**<br>
-Что агент делает прямо сейчас, сколько идёт задача, когда он ждёт тебя.<br>
-Разрешения — кнопками прямо в чёлке. А рядом живёт Clawd.
+**[Claude Code](https://claude.com/claude-code) status in your MacBook notch — like the Dynamic Island on an iPhone.**<br>
+See what the agent is doing right now, how long the task has been running, and when it's waiting for you.<br>
+Answer permission requests with buttons right in the notch. And Clawd lives there too.
 
-<img src="docs/notch.gif" width="640" alt="Чёлка во время задачи: Clawd достаёт ноутбук, печатает, выполняется команда, «Готово»">
+<img src="docs/notch.gif" width="640" alt="The notch during a task: Clawd gets out his laptop and types, a command runs, Done">
 
 </div>
 
-## Установка
+## Install
 
-Нужны **macOS 14 или новее** и **Claude Code** (в терминале или во вкладке Code приложения Claude).
+You need **macOS 14 or later** and **Claude Code** (in the terminal or in the Code tab of the Claude desktop app).
 
-**1.** Поставь инструменты разработчика Apple, если их ещё нет (откроется окно установки; если уже стоят — команда так и скажет):
+**1.** Install Apple's command line developer tools if you don't have them yet (an installer window opens; if they're already there, the command says so):
 
 ```bash
 xcode-select --install
 ```
 
-**2.** Скачай и установи Claude Notch:
+**2.** Download and install Claude Notch:
 
 ```bash
 git clone https://github.com/CraftStick/ClaudeNotch.git
@@ -28,10 +30,10 @@ cd ClaudeNotch
 ./install.sh
 ```
 
-Всё. В строке меню появится Clawd, а чёлка оживёт, как только Claude Code возьмётся за задачу. Проверить сразу, без Claude: значок Clawd → **«Показать демо»**.
+That's it. Clawd shows up in the menu bar, and the notch comes alive as soon as Claude Code starts a task. To try it right away without Claude: Clawd's menu bar icon → **Show demo**.
 
 <details>
-<summary>Без git — скачать ZIP</summary>
+<summary>Without git — download the ZIP</summary>
 
 ```bash
 curl -L -o ClaudeNotch.zip https://github.com/CraftStick/ClaudeNotch/archive/refs/heads/main.zip
@@ -42,90 +44,94 @@ chmod +x *.sh && ./install.sh
 </details>
 
 <details>
-<summary>Что делает <code>install.sh</code></summary>
+<summary>What <code>install.sh</code> does</summary>
 
-1. Собирает приложение из исходников (`build.sh`) в `~/Applications/ClaudeNotch.app` и запускает его. Сборка локальная, поэтому macOS не показывает предупреждений Gatekeeper.
-2. Добавляет хуки в `~/.claude/settings.json` (`install-hooks.sh`). Остальные настройки и чужие хуки не трогаются, рядом сохраняется копия `settings.json.bak-claudenotch`, повторный запуск ничего не дублирует.
-3. Приложение само включает автозапуск при входе в систему (выключается в меню).
+1. Builds the app from source (`build.sh`) into `~/Applications/ClaudeNotch.app` and starts it. It's built on your Mac, so macOS shows no Gatekeeper warnings.
+2. Adds the hooks to `~/.claude/settings.json` (`install-hooks.sh`). Your other settings and hooks stay untouched, a copy is saved as `settings.json.bak-claudenotch`, and running it again adds nothing twice.
+3. The app turns on Open at Login by itself (you can switch it off in the menu).
 
 </details>
 
-**Обновление:**
+**Update:**
 
 ```bash
 cd ClaudeNotch && git pull && ./install.sh
 ```
 
-**Удаление** (хуки, автозапуск, приложение и его данные):
+**Uninstall** (hooks, login item, the app and its data):
 
 ```bash
 cd ClaudeNotch && ./uninstall.sh
 ```
 
-## Что умеет
+## Features
 
-### Статус в чёлке
+### Status in the notch
 
-Слева от чёлки — Clawd, справа — время задачи. На каждом действии чёлка на пару секунд раскрывается: «Выполняет команду», «Читает файл», «Редактирует», «Ищет в коде», «Браузер»… с деталями. Работает с несколькими сессиями сразу: рядом с таймером счётчик сессий в работе.
+Clawd on the left of the notch, the task's time on the right. On every action the notch opens for a couple of seconds: "Running a command", "Reading file", "Editing", "Searching code", "Browser"… with the details. Several sessions at once are fine: a counter next to the timer shows how many are at work.
 
-### Подробности при наведении
+### Details on hover
 
-Наведи курсор на чёлку — раскроется карточка: задача, что происходит сейчас (с описанием и полной командой), субагенты, последние действия с размером правок, другие сессии, а внизу — правки, токены и заполненность контекста за ход. Клик по чёлке открывает приложение, в котором идёт сессия (Terminal, iTerm, VS Code, Cursor, приложение Claude…).
+Rest the pointer on the notch and a card opens: the task, what's happening now (with the description and the full command), subagents, recent actions with the size of each edit, other sessions, and at the bottom the turn's line changes, tokens and context fill. Click the notch to bring forward the app the session runs in (Terminal, iTerm, VS Code, Cursor, the Claude app…).
 
-<p align="center"><img src="docs/card.png" width="560" alt="Карточка при наведении"></p>
+<p align="center"><img src="docs/card.png" width="560" alt="The card you get on hover"></p>
 
-### Разрешения из чёлки
+### Permissions from the notch
 
-Когда Claude Code просит разрешения, в чёлке появляются кнопки **Разрешить** (⌘Y), **Запретить** (⌘N) и **Всегда** — добавить правило, которое предложил Claude Code, чтобы больше не спрашивал. Горячие клавиши работают только пока висит запрос и не требуют разрешений macOS. В приложении Claude обычное окно разрешения тоже появляется, и засчитывается тот ответ, что пришёл первым; в терминале кнопка «В приложении» возвращает обычный диалог.
+When Claude Code asks for permission, the notch shows **Allow** (⌘Y), **Deny** (⌘N) and **Always** — add the rule Claude Code suggests so it won't ask again. The shortcuts only work while a request is showing and need no macOS permissions. In the Claude app the usual permission dialog appears too, and whichever answer comes first wins; in the terminal, **In app** hands the question back to the usual prompt.
 
-<p align="center"><img src="docs/permission.png" width="560" alt="Запрос разрешения в чёлке"></p>
+<p align="center"><img src="docs/permission.png" width="560" alt="A permission request in the notch"></p>
 
 ### Clawd
 
-| Когда | Что делает Clawd |
+| When | Clawd |
 |---|---|
-| Пришла новая задача | над головой загорается лампочка, потом достаёт ноутбук и печатает |
-| Долго думает (12+ с без действий) | садится, над ним облачко с «…» |
-| Команда идёт дольше 8 с | пересаживается за компьютер |
-| Работают субагенты или много действий подряд | бегает |
-| Ждёт тебя: вопрос, разрешение, план | машет тебе |
-| Ты разрешил действие | радуется |
-| Команда упала или ты нажал «Запретить» | facepalm |
-| Готово | радостно подпрыгивает; после большой задачи — конфетти и брейк-данс |
-| Остановлен через Esc / ошибка API | расстроенно оседает / кружится голова |
-| После задачи | ещё 15 минут остаётся в чёлке: оглядывается, танцует, через 3 минуты засыпает, а в конце уходит пешком |
+| A new task comes in | a light bulb goes on above his head, then he gets out his laptop and types |
+| Thinking for a while (12+ s with no actions) | sits down with a speech bubble "…" |
+| A command runs longer than 8 s | moves over to a desktop computer |
+| Subagents at work or many actions in a row | runs |
+| Waiting for you: a question, a permission, a plan | waves at you |
+| You allowed an action | is delighted |
+| A command failed or you pressed Deny | facepalms |
+| Done | hops for joy; after a big task — confetti and a breakdance |
+| Stopped with Esc / API error | slumps / gets dizzy |
+| After the task | stays in the notch for 15 more minutes: looks around, dances, dozes off after 3 minutes, and finally walks away |
 
-Если ты в другом приложении, когда Claude закончил или ждёт ответа, — звучит сигнал (выключается в меню).
+If you're in another app when Claude finishes or needs an answer, a sound plays (can be switched off in the menu).
 
-## Как это устроено
+### Language
+
+The interface is in English or Russian, following your system language. Switch it in Clawd's menu → **Language**.
+
+## How it works
 
 ```
-Claude Code ──хук (JSON в stdin)──▶ claude-notch-hook ──Unix-сокет──▶ ClaudeNotch.app
-                  ◀── решение (только для запроса разрешения) ──┘
+Claude Code ──hook (JSON on stdin)──▶ claude-notch-hook ──Unix socket──▶ ClaudeNotch.app
+                    ◀── decision (permission requests only) ──┘
 ```
 
-- **`Sources/Hook/main.swift`** — крошечный бинарник, который Claude Code запускает на каждое событие. Пересылает JSON в приложение и печатает ответ, если он есть. Всегда завершается с кодом 0 и молча, даже если приложение не запущено, — Claude Code он не мешает.
-- **`Store.swift`** — превращает события хуков в состояние чёлки и отвечает на запросы разрешений.
-- **`NotchView.swift`**, **`DetailsCard.swift`** — интерфейс: форма вокруг чёлки, раскрытые режимы, карточки.
-- **`ClawdAnimation.swift`**, **`Clawd.swift`** — анимации Clawd (см. ниже).
-- **`TranscriptWatcher.swift`** — следит за файлом сессии: на Esc Claude Code не вызывает хуков, а ещё там расход токенов.
-- **`AppFocus.swift`**, **`HotKeys.swift`**, **`SocketServer.swift`** — клик по чёлке, ⌘Y/⌘N, сокет.
+- **`Sources/Hook/main.swift`** — a tiny binary Claude Code runs on every event. It forwards the JSON to the app and prints the answer, if there is one. It always exits 0, silently, even when the app isn't running, so it never gets in Claude Code's way.
+- **`Store.swift`** — turns hook events into the notch's state and answers permission requests.
+- **`NotchView.swift`**, **`DetailsCard.swift`** — the interface: the shape around the notch, the open states, the cards.
+- **`ClawdAnimation.swift`**, **`Clawd.swift`** — Clawd's animations (see below).
+- **`TranscriptWatcher.swift`** — watches the session file: Claude Code sends no hook on Esc, and token usage lives there too.
+- **`AppFocus.swift`**, **`HotKeys.swift`**, **`SocketServer.swift`**, **`Language.swift`** — click to focus, ⌘Y/⌘N, the socket, the two languages.
 
-**Приватность.** Всё работает локально, без сети. Хук отправляет события только в сокет `~/Library/Application Support/ClaudeNotch/notch.sock`, доступный лишь твоему пользователю. Приложение читает файлы сессий в `~/.claude/projects` только чтобы заметить Esc и посчитать токены.
+**Privacy.** Everything stays on your Mac, no network. The hook sends events only to the socket `~/Library/Application Support/ClaudeNotch/notch.sock`, which only your user can open. The app reads the session files in `~/.claude/projects` only to notice Esc and to count tokens.
 
-## Если что-то не работает
+## Troubleshooting
 
-- **Чёлка не реагирует.** Проверь, что приложение запущено (`pgrep -x ClaudeNotch`) и хуки на месте (`grep -c claude-notch-hook ~/.claude/settings.json`). Уже открытые сессии Claude Code иногда подхватывают новые хуки только после перезапуска.
-- **Что доходит до приложения** — видно в журнале: `tail -f ~/Library/Application\ Support/ClaudeNotch/events.log`.
-- **Заполненность контекста** считается от 200K токенов, а если сессия заняла больше — от 1M: размер окна Claude Code в файл сессии не пишет.
-- **Монитор без чёлки** — рисуется «виртуальная» чёлка в строке меню.
+- **The notch doesn't react.** Check that the app is running (`pgrep -x ClaudeNotch`) and the hooks are in place (`grep -c claude-notch-hook ~/.claude/settings.json`). Claude Code sessions that were already open sometimes pick up new hooks only after a restart.
+- **What reaches the app** is in the log: `tail -f ~/Library/Application\ Support/ClaudeNotch/events.log`.
+- **Context fill** is counted against 200K tokens, or 1M once a session has used more: Claude Code doesn't write the window size into the session file.
+- **A display without a notch** gets a "virtual" notch in the menu bar.
 
-## Про Clawd
+## About Clawd
 
-Clawd — персонаж Anthropic, и его спрайтов в исходниках нет. При запуске приложение читает их из установленного у тебя Claude.app (они лежат в его `app.asar`, в пасхалке Clawd Quest). Если Claude.app не установлен или формат спрайтов изменится, показывается упрощённый Clawd, нарисованный в коде. Картинки в `docs/` — скриншоты работающего приложения.
+Clawd is Anthropic's character, and his sprites aren't in this source code. At launch the app reads them from the Claude app installed on your Mac (they live in its `app.asar`, in the Clawd Quest easter egg). If Claude.app isn't installed or the sprite format changes, a simplified Clawd drawn in code is shown instead. The images in `docs/` are screenshots of the running app.
 
-Проект не связан с Anthropic и не одобрен ей. Claude — товарный знак Anthropic.
+This project is not affiliated with or endorsed by Anthropic. Claude is a trademark of Anthropic.
 
-## Лицензия
+## License
 
 [MIT](LICENSE)

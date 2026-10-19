@@ -25,7 +25,7 @@ struct Activity: Equatable {
     /// A Task/Agent call: subagents are at work.
     var agent = false
 
-    static let thinking = Activity(symbol: "sparkle", title: "Думает…", detail: "")
+    static var thinking: Activity { Activity(symbol: "sparkle", title: tr("Думает…", "Thinking…"), detail: "") }
 
     /// One readable line for lists: "Читает файл · Store.swift", or for a command what it does
     /// ("Собрать и установить приложение") rather than the command itself.
@@ -167,8 +167,8 @@ struct PermissionPrompt: Identifiable, Equatable {
             let content = rule["ruleContent"] as? String ?? ""
             return content.isEmpty ? tool : "\(tool)(\(content))"
         }
-        if let mode = first["mode"] as? String { return "режим \(mode)" }
-        if let dir = (first["directories"] as? [String])?.first { return "папка \((dir as NSString).lastPathComponent)" }
+        if let mode = first["mode"] as? String { return tr("режим \(mode)", "mode \(mode)") }
+        if let dir = (first["directories"] as? [String])?.first { return tr("папка ", "folder ") + (dir as NSString).lastPathComponent }
         return nil
     }
 
@@ -300,7 +300,7 @@ final class Store: ObservableObject {
             dropPrompts(for: id)
             s.phase = .waiting
             let activity = Describe.tool(toolName, toolInput)
-            s.activity = Activity(symbol: "hand.raised.fill", title: "Ждёт разрешения",
+            s.activity = Activity(symbol: "hand.raised.fill", title: tr("Ждёт разрешения", "Waiting for permission"),
                                   detail: activity.detail, monospaced: activity.monospaced)
             prompts.append(PermissionPrompt(sessionID: id, question: Describe.permissionQuestion(toolName, activity),
                                             activity: activity,
@@ -326,7 +326,7 @@ final class Store: ObservableObject {
             s.phase = .thinking
             s.startTurn(at: now)
             s.task = String(prompt.split(whereSeparator: \.isNewline).joined(separator: " ").prefix(300))
-            s.activity = Activity(symbol: "sparkle", title: "Взялся за задачу", detail: oneLine(prompt))
+            s.activity = Activity(symbol: "sparkle", title: tr("Взялся за задачу", "New task"), detail: oneLine(prompt))
             s.play(.idea, at: now)
             commit(s, expandFor: 3)
 
@@ -376,20 +376,20 @@ final class Store: ObservableObject {
             if prompts.contains(where: { $0.sessionID == id }) { return }  // already asking in the notch
             s.phase = .waiting
             s.activity = Activity(symbol: "hand.raised.fill",
-                                  title: type == "permission_prompt" ? "Ждёт разрешения" : "Ждёт тебя",
+                                  title: type == "permission_prompt" ? tr("Ждёт разрешения", "Waiting for permission") : tr("Ждёт тебя", "Waiting for you"),
                                   detail: oneLine(message))
             chime("Tink", for: s)
             commit(s, expandFor: .infinity)
 
         case "PreCompact":
-            s.activity = Activity(symbol: "archivebox", title: "Сжимает контекст", detail: "")
+            s.activity = Activity(symbol: "archivebox", title: tr("Сжимает контекст", "Compacting context"), detail: "")
             commit(s, expandFor: 2.5)
 
         case "Stop":
             dropPrompts(for: id)
             s.phase = .done
             s.turnEnd = now
-            s.activity = Activity(symbol: "checkmark.circle.fill", title: "Готово", detail: summary(s, until: now))
+            s.activity = Activity(symbol: "checkmark.circle.fill", title: tr("Готово", "Done"), detail: summary(s, until: now))
             // A big task (5+ minutes or 150+ changed lines) gets confetti instead of a hop.
             if now.timeIntervalSince(s.turnStart) >= 300 || s.linesAdded + s.linesRemoved >= 150 {
                 s.play(.celebrate, at: now)
@@ -402,7 +402,7 @@ final class Store: ObservableObject {
             s.phase = .failed
             s.turnEnd = now
             let error = json["last_assistant_message"] as? String ?? json["error"] as? String ?? ""
-            s.activity = Activity(symbol: "exclamationmark.triangle.fill", title: "Ошибка", detail: oneLine(error))
+            s.activity = Activity(symbol: "exclamationmark.triangle.fill", title: tr("Ошибка", "Error"), detail: oneLine(error))
             commit(s, expandFor: 6)
 
         case "SessionEnd":
@@ -495,12 +495,12 @@ final class Store: ObservableObject {
                 s.activity = prompt.activity
             }
         case .deny:
-            prompt.reply.send(Self.permissionOutput(["behavior": "deny", "message": "Пользователь отклонил это действие."]))
+            prompt.reply.send(Self.permissionOutput(["behavior": "deny", "message": tr("Пользователь отклонил это действие.", "The user denied this action.")]))
             update(id) { s, now in
                 s.play(.facepalm, at: now)
                 s.lastFacepalm = now
                 s.phase = .thinking
-                s.activity = Activity(symbol: "xmark.circle.fill", title: "Отклонено", detail: prompt.activity.detail)
+                s.activity = Activity(symbol: "xmark.circle.fill", title: tr("Отклонено", "Denied"), detail: prompt.activity.detail)
             }
         case .askInApp:
             prompt.reply.send(nil)  // no decision: Claude Code's own dialog takes over
@@ -580,7 +580,7 @@ final class Store: ObservableObject {
         s.phase = .stopped
         s.turnEnd = now
         s.lastEvent = now
-        s.activity = Activity(symbol: "stop.circle.fill", title: "Остановлено", detail: summary(s, until: now))
+        s.activity = Activity(symbol: "stop.circle.fill", title: tr("Остановлено", "Stopped"), detail: summary(s, until: now))
         commit(s, expandFor: 3)
     }
 
@@ -623,13 +623,13 @@ final class Store: ObservableObject {
     func runDemo() {
         let id = "demo-\(UUID().uuidString)"
         let steps: [(TimeInterval, [String: Any])] = [
-            (0.0, ["hook_event_name": "UserPromptSubmit", "prompt": "Сделай статус Claude в чёлке MacBook"]),
+            (0.0, ["hook_event_name": "UserPromptSubmit", "prompt": tr("Сделай статус Claude в чёлке MacBook", "Show Claude's status in the MacBook notch")]),
             (2.5, ["hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": ["file_path": "/src/NotchView.swift"]]),
             (3.5, ["hook_event_name": "PostToolUse"]),
             (5.0, ["hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": ["file_path": "/src/Store.swift"]]),
             (6.0, ["hook_event_name": "PostToolUse"]),
             (8.0, ["hook_event_name": "PermissionRequest", "tool_name": "Bash",
-                   "tool_input": ["command": "rm -rf build && ./build.sh", "description": "Пересобрать приложение"]]),
+                   "tool_input": ["command": "rm -rf build && ./build.sh", "description": tr("Пересобрать приложение", "Rebuild the app")]]),
             // 12 s to try the buttons (nothing real is allowed or denied), then the turn ends.
             (20.0, ["hook_event_name": "PostToolUse"]),
             (21.0, ["hook_event_name": "Stop"]),
@@ -652,43 +652,43 @@ enum Describe {
 
         switch name {
         case "Bash":
-            return Activity(symbol: "terminal", title: "Выполняет команду", detail: flat(str("command")),
+            return Activity(symbol: "terminal", title: tr("Выполняет команду", "Running a command"), detail: flat(str("command")),
                             monospaced: true, note: oneLine(str("description")), command: true)
         case "BashOutput":
-            return Activity(symbol: "terminal", title: "Смотрит вывод команды", detail: "")
+            return Activity(symbol: "terminal", title: tr("Смотрит вывод команды", "Reading command output"), detail: "")
         case "Read":
-            return Activity(symbol: "doc.text", title: "Читает файл", detail: file())
+            return Activity(symbol: "doc.text", title: tr("Читает файл", "Reading file"), detail: file())
         case "Edit", "MultiEdit":
             let edits = name == "Edit" ? [input] : input["edits"] as? [[String: Any]] ?? []
             let diff = edits.reduce((added: 0, removed: 0)) { sum, edit in
                 let d = lineDiff(edit["old_string"] as? String ?? "", edit["new_string"] as? String ?? "")
                 return (sum.added + d.added, sum.removed + d.removed)
             }
-            return Activity(symbol: "pencil", title: "Редактирует", detail: file(), added: diff.added, removed: diff.removed)
+            return Activity(symbol: "pencil", title: tr("Редактирует", "Editing"), detail: file(), added: diff.added, removed: diff.removed)
         case "Write":
-            return Activity(symbol: "doc.badge.plus", title: "Пишет файл", detail: file(),
+            return Activity(symbol: "doc.badge.plus", title: tr("Пишет файл", "Writing file"), detail: file(),
                             added: lineDiff("", str("content")).added)
         case "NotebookEdit":
-            return Activity(symbol: "pencil", title: "Редактирует блокнот", detail: file("notebook_path"),
+            return Activity(symbol: "pencil", title: tr("Редактирует блокнот", "Editing notebook"), detail: file("notebook_path"),
                             added: lineDiff("", str("new_source")).added)
         case "Grep":
-            return Activity(symbol: "magnifyingglass", title: "Ищет в коде", detail: oneLine(str("pattern")), monospaced: true,
-                            note: str("path").isEmpty ? "" : "в " + file("path"))
+            return Activity(symbol: "magnifyingglass", title: tr("Ищет в коде", "Searching code"), detail: oneLine(str("pattern")), monospaced: true,
+                            note: str("path").isEmpty ? "" : tr("в ", "in ") + file("path"))
         case "Glob":
-            return Activity(symbol: "folder", title: "Ищет файлы", detail: oneLine(str("pattern")), monospaced: true)
+            return Activity(symbol: "folder", title: tr("Ищет файлы", "Finding files"), detail: oneLine(str("pattern")), monospaced: true)
         case "WebSearch":
-            return Activity(symbol: "globe", title: "Ищет в интернете", detail: oneLine(str("query")))
+            return Activity(symbol: "globe", title: tr("Ищет в интернете", "Searching the web"), detail: oneLine(str("query")))
         case "WebFetch":
-            return Activity(symbol: "globe", title: "Читает страницу", detail: host(str("url")))
+            return Activity(symbol: "globe", title: tr("Читает страницу", "Reading page"), detail: host(str("url")))
         case "Task", "Agent":
-            return Activity(symbol: "person.2", title: "Запускает агента", detail: oneLine(str("description")),
+            return Activity(symbol: "person.2", title: tr("Запускает агента", "Starting an agent"), detail: oneLine(str("description")),
                             note: str("subagent_type"), agent: true)
         case "TodoWrite":
-            return Activity(symbol: "checklist", title: "Обновляет план", detail: "", quiet: true)
+            return Activity(symbol: "checklist", title: tr("Обновляет план", "Updating the plan"), detail: "", quiet: true)
         case "Skill":
-            return Activity(symbol: "book", title: "Читает навык", detail: str("skill"))
+            return Activity(symbol: "book", title: tr("Читает навык", "Reading a skill"), detail: str("skill"))
         case "ToolSearch":
-            return Activity(symbol: "wrench.and.screwdriver", title: "Подключает инструменты", detail: "", quiet: true)
+            return Activity(symbol: "wrench.and.screwdriver", title: tr("Подключает инструменты", "Loading tools"), detail: "", quiet: true)
         default:
             return mcp(name, input)
         }
@@ -699,9 +699,9 @@ enum Describe {
         switch name {
         case "AskUserQuestion":
             let first = (input["questions"] as? [[String: Any]])?.first?["question"] as? String ?? ""
-            return Activity(symbol: "questionmark.bubble.fill", title: "Задаёт тебе вопрос", detail: oneLine(first))
+            return Activity(symbol: "questionmark.bubble.fill", title: tr("Задаёт тебе вопрос", "Asking you a question"), detail: oneLine(first))
         case "ExitPlanMode":
-            return Activity(symbol: "list.bullet.clipboard", title: "Ждёт одобрения плана", detail: "")
+            return Activity(symbol: "list.bullet.clipboard", title: tr("Ждёт одобрения плана", "Waiting for plan approval"), detail: "")
         default:
             return nil
         }
@@ -709,12 +709,12 @@ enum Describe {
 
     static func permissionQuestion(_ tool: String, _ activity: Activity) -> String {
         switch tool {
-        case "Bash": return "Разрешить команду?"
-        case "Edit", "MultiEdit", "Write", "NotebookEdit": return "Разрешить изменить файл?"
-        case "WebFetch": return "Разрешить открыть страницу?"
-        case "WebSearch": return "Разрешить поиск в интернете?"
-        case "Read", "Grep", "Glob": return "Разрешить чтение?"
-        default: return "Разрешить «\(activity.title)»?"
+        case "Bash": return tr("Разрешить команду?", "Allow this command?")
+        case "Edit", "MultiEdit", "Write", "NotebookEdit": return tr("Разрешить изменить файл?", "Allow editing this file?")
+        case "WebFetch": return tr("Разрешить открыть страницу?", "Allow opening this page?")
+        case "WebSearch": return tr("Разрешить поиск в интернете?", "Allow a web search?")
+        case "Read", "Grep", "Glob": return tr("Разрешить чтение?", "Allow reading?")
+        default: return tr("Разрешить «\(activity.title)»?", "Allow “\(activity.title)”?")
         }
     }
 
@@ -727,13 +727,13 @@ enum Describe {
         let server = parts[1]
         let tool = parts[2...].joined(separator: "__")
         switch tool {
-        case "update_plan": return Activity(symbol: "checklist", title: "Обновляет план", detail: "", quiet: true)
-        case "wrap_up": return Activity(symbol: "flag.checkered", title: "Подводит итог", detail: "", quiet: true)
+        case "update_plan": return Activity(symbol: "checklist", title: tr("Обновляет план", "Updating the plan"), detail: "", quiet: true)
+        case "wrap_up": return Activity(symbol: "flag.checkered", title: tr("Подводит итог", "Wrapping up"), detail: "", quiet: true)
         default: break
         }
         if server.localizedCaseInsensitiveContains("browser") || server.localizedCaseInsensitiveContains("chrome") {
             let url = input["url"] as? String
-            return Activity(symbol: "safari", title: "Браузер", detail: url.map(host) ?? pretty(tool))
+            return Activity(symbol: "safari", title: tr("Браузер", "Browser"), detail: url.map(host) ?? pretty(tool))
         }
         let isOpaqueID = server.count >= 32 && server.allSatisfy { $0.isHexDigit || $0 == "-" }
         return Activity(symbol: "puzzlepiece.extension", title: isOpaqueID ? "MCP" : pretty(server), detail: pretty(tool))
@@ -791,15 +791,15 @@ func flat(_ text: String) -> String {
 
 func formatElapsed(_ interval: TimeInterval) -> String {
     let s = max(0, Int(interval))
-    if s < 60 { return "\(s)с" }
+    if s < 60 { return tr("\(s)с", "\(s)s") }
     if s < 3600 { return String(format: "%d:%02d", s / 60, s % 60) }
     return String(format: "%d:%02d:%02d", s / 3600, s % 3600 / 60, s % 60)
 }
 
 private func summary(_ s: Session, until end: Date) -> String {
-    let time = "за " + formatElapsed(end.timeIntervalSince(s.turnStart))
+    let time = tr("за ", "in ") + formatElapsed(end.timeIntervalSince(s.turnStart))
     guard s.actions > 0 else { return time }
-    return time + " · \(s.actions) " + plural(s.actions, "действие", "действия", "действий")
+    return time + " · " + actionsText(s.actions)
 }
 
 func plural(_ n: Int, _ one: String, _ few: String, _ many: String) -> String {
