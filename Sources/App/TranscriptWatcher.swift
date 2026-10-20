@@ -18,6 +18,8 @@ final class TranscriptWatcher {
     var onUsage: (String, TranscriptUsage) -> Void = { _, _ in }
     /// The gist of a thinking block or a message Claude just wrote, and when it was written.
     var onThought: (String, String, Date) -> Void = { _, _, _ in }
+    /// Anything at all was written: the session is alive.
+    var onWrite: (String) -> Void = { _ in }
     private var watches: [String: Watch] = [:]
 
     private final class Watch {
@@ -73,6 +75,7 @@ final class TranscriptWatcher {
         guard (try? handle.seek(toOffset: watch.offset)) != nil,
               let data = try? handle.readToEnd(), !data.isEmpty else { return }
         watch.offset += UInt64(data.count)
+        onWrite(sessionID)
 
         var buffer = watch.partialLine + data
         while let newline = buffer.firstIndex(of: UInt8(ascii: "\n")) {

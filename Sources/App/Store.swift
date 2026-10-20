@@ -29,11 +29,19 @@ struct Activity: Equatable {
     /// Why Claude runs this tool, in its own words: what it wrote around the call. Only for tools
     /// without a note of their own.
     var reason = ""
+    /// The tool failed or was turned down: its icon goes red.
+    var failed = false
+    /// The answers Claude offers to its question.
+    var options: [String] = []
 
     /// The line under the title in the card: the tool's own note, or else Claude's reason.
     var aside: String { note.isEmpty ? reason : note }
 
     static var thinking: Activity { thinking(about: "") }
+
+    static var compacting: Activity {
+        Activity(symbol: "archivebox", title: tr("Сжимает контекст", "Compacting context"), detail: "")
+    }
 
     static func thinking(about thought: String) -> Activity {
         Activity(symbol: "sparkle", title: tr("Думает…", "Thinking…"), detail: thought, prose: true)
@@ -78,6 +86,8 @@ struct Session: Equatable {
     var cwd = ""
     /// Bundle id of the app the session runs in (Terminal, VS Code, Claude…), for click-to-focus.
     var host: String?
+    /// The terminal tab's device (/dev/ttys003): a click picks out that very tab in Terminal or iTerm.
+    var tty: String?
     /// CLAUDE_CODE_ENTRYPOINT: "cli" in a terminal, something else in the desktop app or an IDE.
     var entrypoint = ""
     var transcriptPath: String?
@@ -107,6 +117,8 @@ struct Session: Equatable {
     /// it. The next tool takes it as its reason.
     var thought = ""
     var thoughtWritten = Date.distantPast
+    /// When the shown failure (a tool that failed or was turned down) happened.
+    var failedAt = Date.distantPast
     /// Finished actions of this turn, oldest first (the last few only).
     var history: [Activity] = []
     var agents: [SubAgent] = []
@@ -115,6 +127,8 @@ struct Session: Equatable {
     var turnStart: Date
     var turnEnd: Date?
     var lastEvent: Date
+    /// When the transcript last grew: Claude at work between hook events, e.g. on a long reply.
+    var lastWrite = Date.distantPast
     var actions = 0
     var linesAdded = 0
     var linesRemoved = 0
@@ -146,6 +160,14 @@ struct Session: Equatable {
     /// Six or more tools in the last 12 seconds.
     private func isBusy(at now: Date) -> Bool {
         recentTools.filter { now.timeIntervalSince($0) < 12 }.count >= 6
+    }
+
+    /// Minutes without a sign of life while Claude should be at work: it hung, or a command runs long.
+    /// Nil under five minutes, and while it waits for you, which is quiet by design.
+    func quietMinutes(at now: Date) -> Int? {
+        guard phase == .thinking || phase == .tool else { return nil }
+        let quiet = now.timeIntervalSince(max(lastEvent, lastWrite))
+        return quiet >= 300 ? Int(quiet / 60) : nil
     }
 
     mutating func syncMotion(at now: Date) {
@@ -246,6 +268,7 @@ final class Store: ObservableObject {
         transcripts.onInterrupt = { [weak self] id in self?.interrupted(id) }
         transcripts.onUsage = { [weak self] id, usage in self?.recordUsage(id, usage) }
         transcripts.onThought = { [weak self] id, thought, written in self?.recordThought(id, thought, written: written) }
+        transcripts.onWrite = { [weak self] id in self?.recordWrite(id) }
         pruneTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             self?.prune()
         }
@@ -310,7 +333,7 @@ final class Store: ObservableObject {
         }
         guard let s = sessions[id] else { return }
         if s.host == AppFocus.claudeBundleID || s.entrypoint == "claude-desktop", AppFocus.openInClaudeApp(id) { return }
-        AppFocus.show(host: s.host, folder: s.cwd)
+        AppFocus.show(host: s.host, folder: s.cwd, tty: s.tty)
     }
 
     /// Sessions Claude was already at work in when the app started: shown now rather than at their
@@ -410,6 +433,9 @@ final class Store: ObservableObject {
         if let entry = json["notch_entry"] as? String, !entry.isEmpty {
             s.entrypoint = entry
         }
+        if let tty = json["notch_tty"] as? String, !tty.isEmpty {
+            s.tty = tty
+        }
         s.lastEvent = now
 
         if event == "PermissionRequest" {
@@ -502,20 +528,78 @@ final class Store: ObservableObject {
             if !known { s.phase = .thinking }  // the app started mid-turn: Claude is between tools
             guard s.phase.isActive else { return }
             if TaskList.handles(toolName) { s.tasks.finish(toolName, response: json["tool_response"], useID: json["tool_use_id"] as? String) }
+            // A failure Claude now has to deal with. An abort isn't one: Esc shows as "Stopped".
+            let failed = event == "PostToolUseFailure" && json["is_interrupt"] as? Bool != true
             // Recorded from currentTool, not the shown activity: a tool approved in the app's own
             // dialog arrives here while the notch still says "Waiting for permission".
-            if let tool = s.currentTool, !tool.quiet {
+            if var tool = s.currentTool, !tool.quiet {
+                tool.failed = failed
                 s.history = Array((s.history + [tool]).suffix(4))
                 if event == "PostToolUse" {
                     s.linesAdded += tool.added
                     s.linesRemoved += tool.removed
-                } else if now.timeIntervalSince(s.lastFacepalm) > 45 {  // not for every failing grep
+                } else if failed, now.timeIntervalSince(s.lastFacepalm) > 45 {  // not for every failing grep
                     s.play(.facepalm, at: now)
                     s.lastFacepalm = now
                 }
             }
+            let tool = s.currentTool ?? Describe.tool(toolName, toolInput)
             s.currentTool = nil
             s.phase = .thinking
+            if failed, !tool.quiet {
+                // What went wrong stays up until Claude writes its next thought or picks its next tool.
+                s.activity = Describe.failure(toolName, tool, error: json["error"] as? String ?? "")
+                s.failedAt = now
+                commit(s, expandFor: 2.5)
+            } else {
+                commit(s, expandFor: nil)
+            }
+
+        case "PermissionDenied":
+            // Auto mode turned the tool down (a dialog you answer "no" in sends no hook); Claude carries on without it.
+            dropPrompts(for: id) { $0.agentID == nil }
+            let tool = s.currentTool ?? Describe.tool(toolName, toolInput)
+            if !tool.quiet {
+                var denied = tool
+                denied.failed = true
+                s.history = Array((s.history + [denied]).suffix(4))
+            }
+            s.currentTool = nil
+            s.phase = .thinking
+            // "[Irreversible Local Destruction]": the rule it matched.
+            let reason = oneLine(json["reason"] as? String ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "[] "))
+            s.activity = Activity(symbol: "nosign", title: tr("Авторежим запретил действие", "Auto mode blocked this"),
+                                  detail: tool.command ? tool.detail : tool.headline, monospaced: tool.command,
+                                  note: reason, failed: true)
+            s.failedAt = now
+            if now.timeIntervalSince(s.lastFacepalm) > 45 {
+                s.play(.facepalm, at: now)
+                s.lastFacepalm = now
+            }
+            commit(s, expandFor: 4)
+
+        case "Elicitation":
+            // An MCP server asks you for something mid-tool: a form, or a page to open. Its dialog shows as usual.
+            let server = json["mcp_server_name"] as? String ?? ""
+            let page = json["mode"] as? String == "url"
+            s.phase = .waiting
+            s.activity = Activity(symbol: page ? "safari" : "keyboard",
+                                  title: page ? tr("MCP-сервер просит открыть страницу", "An MCP server asks you to open a page")
+                                              : tr("MCP-сервер просит данные", "An MCP server needs your input"),
+                                  detail: oneLine(json["message"] as? String ?? ""), note: Describe.server(server), prose: true)
+            chime("Tink", for: s)
+            commit(s, expandFor: .infinity)
+
+        case "ElicitationResult":
+            // Answered: back to the tool that asked.
+            guard s.phase == .waiting, !prompts.contains(where: { $0.sessionID == id }) else { return }
+            if let tool = s.currentTool {
+                s.phase = .tool
+                s.activity = tool
+            } else {
+                s.phase = .thinking
+                s.activity = .thinking
+            }
             commit(s, expandFor: nil)
 
         case "Notification":
@@ -523,8 +607,12 @@ final class Store: ObservableObject {
             let type = json["notification_type"] as? String ?? ""
             // "Claude is waiting for your input" after a finished turn is just noise.
             if type == "idle_prompt" || message.localizedCaseInsensitiveContains("waiting for your input") { return }
-            guard type == "permission_prompt" || type.hasPrefix("elicitation") || type == "agent_needs_input" || type.isEmpty else { return }
+            // Only dialogs that wait for you: "elicitation_complete" and "elicitation_response" mean it's over.
+            let dialogs = ["permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input", ""]
+            guard dialogs.contains(type) else { return }
             if prompts.contains(where: { $0.sessionID == id }) { return }  // already asking in the notch
+            // The Elicitation hook has put it up already, in the server's own words.
+            if type.hasPrefix("elicitation"), s.phase == .waiting { return }
             s.phase = .waiting
             s.activity = Activity(symbol: "hand.raised.fill",
                                   title: type == "permission_prompt" ? tr("Ждёт разрешения", "Waiting for permission") : tr("Ждёт тебя", "Waiting for you"),
@@ -535,8 +623,14 @@ final class Store: ObservableObject {
         case "PreCompact":
             // Only mid-turn: a manual /compact between turns isn't Claude at work.
             guard known, s.phase.isActive else { return }
-            s.activity = Activity(symbol: "archivebox", title: tr("Сжимает контекст", "Compacting context"), detail: "")
+            s.activity = .compacting
             commit(s, expandFor: 2.5)
+
+        case "PostCompact":
+            // Done compacting: back to work, rather than "Compacting" until the next tool.
+            guard known, s.phase.isActive, s.activity == .compacting else { return }
+            s.activity = s.currentTool ?? .thinking(about: s.thought)
+            commit(s, expandFor: nil)
 
         case "Stop":
             dropPrompts(for: id)
@@ -569,8 +663,11 @@ final class Store: ObservableObject {
             s.phase = .failed
             s.turnEnd = now
             s.currentTool = nil
-            let error = json["last_assistant_message"] as? String ?? json["error"] as? String ?? ""
-            s.activity = Activity(symbol: "exclamationmark.triangle.fill", title: tr("Ошибка", "Error"), detail: oneLine(error))
+            // `error` is the kind ("rate_limit"); the message is the error as Claude Code shows it
+            // ("API Error: Rate limit reached"), often with when to try again.
+            let message = json["last_assistant_message"] as? String ?? json["error_details"] as? String ?? ""
+            s.activity = Activity(symbol: "exclamationmark.triangle.fill", title: Describe.apiError(json["error"] as? String ?? ""),
+                                  detail: oneLine(message), note: summary(s, until: now), prose: true)
             commit(s, expandFor: 6)
 
         case "SessionEnd":
@@ -642,6 +739,12 @@ final class Store: ObservableObject {
             s.thought = thought
             s.thoughtWritten = written
             s.lastEvent = Date()
+            // A failure stays up until Claude has something new to say. What it wrote before the tool
+            // only reaches the transcript after the tool's hook, so it would hide the failure at once.
+            if s.activity.failed, written <= s.failedAt {
+                sessions[id] = s
+                return
+            }
             s.activity = .thinking(about: thought)
         case .tool where s.activity.aside.isEmpty && !s.activity.quiet:
             s.activity.reason = thought
@@ -650,6 +753,13 @@ final class Store: ObservableObject {
             return
         }
         commit(s, expandFor: 3)
+    }
+
+    /// The transcript grew. Noted at most every 10 seconds: it only serves to notice long silences.
+    private func recordWrite(_ id: String) {
+        let now = Date()
+        guard let s = sessions[id], now.timeIntervalSince(s.lastWrite) > 10 else { return }
+        sessions[id]?.lastWrite = now
     }
 
     private func recordUsage(_ id: String, _ usage: TranscriptUsage) {
@@ -795,7 +905,7 @@ final class Store: ObservableObject {
     private func prune() {
         let now = Date()
         for (id, s) in sessions {
-            let idle = now.timeIntervalSince(s.lastEvent)
+            let idle = now.timeIntervalSince(max(s.lastEvent, s.lastWrite))  // a long reply is no hook event
             switch s.phase {
             case .thinking where idle > 600, .tool where idle > 1800, .waiting where idle > 1800:
                 update(id) { s, _ in
@@ -881,8 +991,14 @@ enum Describe {
     static func question(_ name: String, _ input: [String: Any]) -> Activity? {
         switch name {
         case "AskUserQuestion":
-            let first = (input["questions"] as? [[String: Any]])?.first?["question"] as? String ?? ""
-            return Activity(symbol: "questionmark.bubble.fill", title: tr("Задаёт тебе вопрос", "Asking you a question"), detail: oneLine(first))
+            // Up to four questions, each with two to four options: the first one, and how many there are.
+            let questions = input["questions"] as? [[String: Any]] ?? []
+            let first = questions.first ?? [:]
+            let options = (first["options"] as? [[String: Any]] ?? []).compactMap { $0["label"] as? String }.map(oneLine)
+            return Activity(symbol: "questionmark.bubble.fill", title: tr("Задаёт тебе вопрос", "Asking you a question"),
+                            detail: oneLine(first["question"] as? String ?? ""),
+                            note: questions.count > 1 ? tr("Вопрос 1 из \(questions.count)", "Question 1 of \(questions.count)") : "",
+                            prose: true, options: Array(options.filter { !$0.isEmpty }.prefix(4)))
         case "ExitPlanMode":
             return Activity(symbol: "list.bullet.clipboard", title: tr("Ждёт одобрения плана", "Waiting for plan approval"), detail: "")
         default:
@@ -899,6 +1015,66 @@ enum Describe {
         case "Read", "Grep", "Glob": return tr("Разрешить чтение?", "Allow reading?")
         default: return tr("Разрешить «\(activity.title)»?", "Allow “\(activity.title)”?")
         }
+    }
+
+    /// A tool that ran and failed: what didn't work, and the error in one line.
+    static func failure(_ name: String, _ tool: Activity, error: String) -> Activity {
+        let title: String
+        let what: String
+        switch name {
+        case "Bash":
+            title = tr("Команда завершилась с ошибкой", "Command failed")
+            what = tool.note.isEmpty ? tool.detail : tool.note
+        case "Edit", "MultiEdit", "Write", "NotebookEdit":
+            title = tr("Не удалось изменить файл", "Couldn't edit the file")
+            what = tool.detail
+        case "Read":
+            title = tr("Не удалось прочитать файл", "Couldn't read the file")
+            what = tool.detail
+        case "WebFetch":
+            title = tr("Страница не открылась", "Couldn't open the page")
+            what = tool.detail
+        default:
+            title = tr("Инструмент вернул ошибку", "The tool returned an error")
+            what = tool.headline
+        }
+        // Cut at the end: the exit code and the start of the message matter most.
+        return Activity(symbol: "xmark.octagon.fill", title: title, detail: errorLine(error), monospaced: name == "Bash",
+                        note: what, prose: true, failed: true)
+    }
+
+    /// A tool error in one line. A command's starts with "Exit code N", then its output: the code and
+    /// the first line it printed.
+    private static func errorLine(_ error: String) -> String {
+        let lines = error.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard let first = lines.first else { return "" }
+        guard first.hasPrefix("Exit code ") else { return String(first.prefix(200)) }
+        let code = tr("Код выхода ", "Exit code ") + first.dropFirst("Exit code ".count)
+        return String((lines.count > 1 ? "\(code) · \(lines[1])" : code).prefix(200))
+    }
+
+    /// What a StopFailure's `error` kind means, in plain words: short enough for the notch's title line,
+    /// with Claude Code's own message under it.
+    static func apiError(_ kind: String) -> String {
+        switch kind {
+        case "rate_limit": return tr("Лимит запросов, попробуй позже", "Rate limited, try again soon")
+        case "overloaded": return tr("Claude перегружен, подожди", "Claude is overloaded, wait a bit")
+        case "authentication_failed": return tr("Нужно снова войти в Claude", "Signed out: log in again")
+        case "oauth_org_not_allowed": return tr("Организация запрещает вход", "Login not allowed by your org")
+        case "account_on_hold": return tr("Аккаунт приостановлен", "Your account is on hold")
+        case "billing_error": return tr("Проблема с оплатой", "Billing problem")
+        case "invalid_request": return tr("API отклонил запрос", "The API rejected the request")
+        case "model_not_found": return tr("Эта модель недоступна", "That model isn't available")
+        case "server_error": return tr("Сбой API, попробуй ещё раз", "API server error, try again")
+        case "max_output_tokens": return tr("Ответ упёрся в лимит длины", "The reply hit the length limit")
+        case "cloud_credential_error": return tr("Не подошли облачные ключи", "Cloud credentials failed")
+        default: return tr("Ошибка", "Error")
+        }
+    }
+
+    /// An MCP server's name as the notch shows it; nothing for the long ids some clients give theirs.
+    static func server(_ name: String) -> String {
+        name.count >= 32 && name.allSatisfy({ $0.isHexDigit || $0 == "-" }) ? "" : pretty(name)
     }
 
     /// MCP tools are named `mcp__<server>__<tool>`.
@@ -918,8 +1094,8 @@ enum Describe {
             let url = input["url"] as? String
             return Activity(symbol: "safari", title: tr("Браузер", "Browser"), detail: url.map(host) ?? pretty(tool))
         }
-        let isOpaqueID = server.count >= 32 && server.allSatisfy { $0.isHexDigit || $0 == "-" }
-        return Activity(symbol: "puzzlepiece.extension", title: isOpaqueID ? "MCP" : pretty(server), detail: pretty(tool))
+        let shown = Self.server(server)
+        return Activity(symbol: "puzzlepiece.extension", title: shown.isEmpty ? "MCP" : shown, detail: pretty(tool))
     }
 
     private static func pretty(_ s: String) -> String { s.replacingOccurrences(of: "_", with: " ") }

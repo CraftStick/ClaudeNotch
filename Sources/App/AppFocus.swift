@@ -36,6 +36,70 @@ enum AppFocus {
             .first
     }
 
+    /// Terminal and iTerm tell their tabs apart by tty; this script brings the tab with the one passed in to the front.
+    private static let tabScripts: [String: String] = [
+        "com.apple.Terminal": """
+            on run argv
+                tell application id "com.apple.Terminal"
+                    repeat with w in windows
+                        repeat with t in tabs of w
+                            if tty of t is (item 1 of argv) then
+                                set selected of t to true
+                                set index of w to 1
+                                activate
+                                return "found"
+                            end if
+                        end repeat
+                    end repeat
+                end tell
+                return ""
+            end run
+            """,
+        "com.googlecode.iterm2": """
+            on run argv
+                tell application id "com.googlecode.iterm2"
+                    repeat with w in windows
+                        repeat with t in tabs of w
+                            repeat with s in sessions of t
+                                if tty of s is (item 1 of argv) then
+                                    select w
+                                    select t
+                                    select s
+                                    activate
+                                    return "found"
+                                end if
+                            end repeat
+                        end repeat
+                    end repeat
+                end tell
+                return ""
+            end run
+            """,
+    ]
+
+    /// In Terminal and iTerm, the very tab the session runs in; elsewhere, or when macOS says no, the app.
+    /// osascript runs in the background: the first time, macOS asks whether Claude Notch may control the
+    /// terminal, and that question mustn't hold up the notch.
+    static func show(host: String?, folder: String, tty: String?) {
+        guard let host, let tty, let script = tabScripts[host],
+              tty.range(of: #"^/dev/ttys?[0-9]+$"#, options: .regularExpression) != nil,
+              !NSRunningApplication.runningApplications(withBundleIdentifier: host).isEmpty else {
+            show(host: host, folder: folder)
+            return
+        }
+        let osascript = Process()
+        osascript.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        osascript.arguments = ["-e", script, tty]
+        let output = Pipe()
+        osascript.standardOutput = output
+        osascript.standardError = FileHandle.nullDevice
+        osascript.terminationHandler = { _ in
+            let found = output.fileHandleForReading.readDataToEndOfFile().starts(with: Data("found".utf8))
+            if !found { DispatchQueue.main.async { show(host: host, folder: folder) } }
+        }
+        do { try osascript.run() } catch { show(host: host, folder: folder) }
+    }
+
     static func show(host: String?, folder: String) {
         guard let host, let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: host) else { return }
         if folderEditors.contains(host), let root = workspaceRoot(of: folder) {

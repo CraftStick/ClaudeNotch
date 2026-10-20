@@ -81,13 +81,18 @@ A thin rim runs along the island's edge: red, orange and gold, flowing around it
 The notch also says what Claude is thinking about: "Thinking…" with the gist of its thoughts, and under each action why it's doing it ("Editing · auth.ts — Fix the token check"). It takes this from what Claude writes between actions; for a command, its description is shown instead of the command itself.
 
 When Claude keeps a task list (TodoWrite, TaskCreate/TaskUpdate, or the Claude app's plan), a green line grows along the bottom of the island as steps get done, and the card says "Plan · step 3 of 5" with the step under way. When it's done, the notch shows the last line of its reply; if that's a question, Clawd waves: "Waiting for your answer".
+
+When something goes wrong, the notch says so plainly. A command that fails, a file Claude couldn't edit or an action auto mode turned down shows with a red icon and the error's first line ("Command failed · Exit code 1 · Error: Cannot find module 'express'"), and stays red among the card's recent actions. If the turn itself dies on an API error, the notch says why in plain words (rate limited, Claude overloaded, signed out, a billing problem…) with Claude Code's own message under it. And when an MCP server asks you to fill in a form or open a page, the notch waits with you.
+
 Open the app itself (at login, along with a new Claude Code session, or again from Finder or Spotlight) and Clawd hops and waves from the notch: "Ready to work". Click it to open Claude, or wherever Claude Code ran last.
 
 <p align="center"><img src="docs/greeting.png" width="560" alt="The notch says Ready to work"></p>
 
 ### Details on hover
 
-Rest the pointer on the notch and a card opens: the task, what's happening now (with the description and the full command), subagents, recent actions with the size of each edit, other sessions, and at the bottom the turn's line changes, tokens and context fill. Click the notch to bring forward the app the session runs in (Terminal, iTerm, VS Code, Cursor, the Claude app…).
+Rest the pointer on the notch and a card opens: the task, what's happening now (with the description and the full command), subagents, recent actions with the size of each edit, other sessions, and at the bottom the turn's line changes, tokens and context fill. When Claude asks you a question, its options are there too. And when a session at work has given no sign of life for five minutes, the card says "Now · quiet for 6 min": it may have hung, or a command is taking its time.
+
+Click the notch to bring forward the app the session runs in (Terminal, iTerm, VS Code, Cursor, the Claude app…). In Terminal and iTerm it's the very tab the session runs in; the first time, macOS asks whether Claude Notch may control the terminal.
 
 <p align="center"><img src="docs/card.png" width="560" alt="The card you get on hover"></p>
 
@@ -130,15 +135,16 @@ Claude Code ──hook (JSON on stdin)──▶ claude-notch-hook ──Unix soc
 - **`NotchView.swift`**, **`NotchRim.swift`**, **`DetailsCard.swift`** — the interface: the shape around the notch and its rim, the open states, the cards.
 - **`ClawdAnimation.swift`**, **`Clawd.swift`** — Clawd's animations ([all of them](docs/clawd/README.md)).
 - **`TranscriptWatcher.swift`** — watches the session file: Claude Code sends no hook on Esc, and token usage lives there too.
-- **`AppFocus.swift`**, **`HotKeys.swift`**, **`SocketServer.swift`**, **`Language.swift`** — click to focus, ⌃⌥⌘Y/⌃⌥⌘N, the socket, the two languages.
+- **`AppFocus.swift`**, **`HotKeys.swift`**, **`SocketServer.swift`**, **`Language.swift`** — click to focus (the hook tells the app which terminal tab a session runs in, by its tty), ⌃⌥⌘Y/⌃⌥⌘N, the socket, the two languages.
 
-**Privacy.** Everything stays on your Mac, no network. The hook sends events only to the socket `~/Library/Application Support/ClaudeNotch/notch.sock`, which only your user can open. The app reads the session files in `~/.claude/projects` only to notice Esc, to count tokens, to show what Claude is thinking about and, at launch, to find sessions already at work.
+**Privacy.** Everything stays on your Mac, no network. The hook sends events only to the socket `~/Library/Application Support/ClaudeNotch/notch.sock`, which only your user can open. The app reads the session files in `~/.claude/projects` only to notice Esc, to count tokens, to show what Claude is thinking about and, at launch, to find sessions already at work. To bring a Terminal or iTerm tab forward, it asks that terminal over AppleScript for the tab with the session's tty, and does nothing else with it.
 
 **Resources.** About 22 MB of memory. While Claude works, Clawd's animation takes 1–2% of one CPU core (measured on an M2 MacBook); with nothing in the notch the app just waits and wakes up less than once a second. The flowing rim costs the app nothing, but macOS redraws that corner of the menu bar for it (about 7% of a core for WindowServer while Claude works); it holds still otherwise, and you can switch it off.
 
 ## Troubleshooting
 
 - **The notch doesn't react.** Check that the app is running (`pgrep -x ClaudeNotch`) and the hooks are in place (`grep -c claude-notch-hook ~/.claude/settings.json`). Claude Code sessions that were already open sometimes pick up new hooks only after a restart.
+- **A click brings Terminal or iTerm forward, but not the session's tab.** Turn Claude Notch on in System Settings → Privacy & Security → Automation. macOS may ask again after an update: the app is built on your Mac, and each build looks new to it.
 - **What reaches the app** is in the log: `tail -f ~/Library/Application\ Support/ClaudeNotch/events.log`.
 - **Context fill** is counted against 200K tokens, or 1M once a session has used more: Claude Code doesn't write the window size into the session file.
 - **A display without a notch** gets a "virtual" notch in the menu bar.

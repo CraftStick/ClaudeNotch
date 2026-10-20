@@ -37,13 +37,33 @@ func env(_ name: String) -> String {
         ($0.properties.isAlphabetic && $0.isASCII) || ("0"..."9").contains($0) || "._-".unicodeScalars.contains($0)
     }.prefix(100))
 }
+/// The terminal tab Claude Code runs in (/dev/ttys003), so a click on the notch can pick out that very tab
+/// in Terminal or iTerm: the controlling terminal of this process or of the nearest parent that has one.
+/// Empty in the desktop app, which runs Claude Code without a terminal.
+func terminalDevice() -> String {
+    var pid = getpid()
+    for _ in 0..<10 where pid > 1 {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { break }
+        let dev = info.kp_eproc.e_tdev
+        if dev != -1, let name = devname(dev, S_IFCHR) {  // -1: no terminal
+            let tty = String(cString: name)
+            if tty.hasPrefix("tty"), tty.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) { return "/dev/" + tty }
+        }
+        pid = info.kp_eproc.e_ppid
+    }
+    return ""
+}
+
 if let close = payload.lastIndex(of: UInt8(ascii: "}")) {
     let before = payload[..<close].last { ![UInt8(ascii: " "), UInt8(ascii: "\n"), UInt8(ascii: "\r"), UInt8(ascii: "\t")].contains($0) }
     let comma = before == UInt8(ascii: "{") ? "" : ","
     // CLAUDE_CODE_ENTRYPOINT tells the terminal ("cli") from the desktop app and IDE extensions,
     // which show their own permission dialog while the hook runs.
     let extra = comma + "\"notch_host\":\"\(env("__CFBundleIdentifier"))\",\"notch_term\":\"\(env("TERM_PROGRAM"))\","
-        + "\"notch_entry\":\"\(env("CLAUDE_CODE_ENTRYPOINT"))\""
+        + "\"notch_entry\":\"\(env("CLAUDE_CODE_ENTRYPOINT"))\",\"notch_tty\":\"\(terminalDevice())\""
     payload.insert(contentsOf: Array(extra.utf8), at: close)
 }
 

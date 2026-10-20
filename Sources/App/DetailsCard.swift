@@ -15,6 +15,8 @@ enum DetailsLayout {
     static let maxOtherRows = 3
     /// The current step's line and the progress bar under it.
     static let plan: CGFloat = line + 5 + 3
+    /// The row of answers to a question, with a little room above it.
+    static let options: CGFloat = 21
 
     /// Rough wrap estimate for the card's ~390 pt text column.
     static func taskLines(_ s: Session) -> Int {
@@ -27,7 +29,7 @@ enum DetailsLayout {
 
     static func nowHeight(_ a: Activity) -> CGFloat {
         let lines = 1 + (a.aside.isEmpty ? 0 : 1) + detailLines(a)
-        return max(30, CGFloat(lines) * line + CGFloat(lines - 1))
+        return max(30, CGFloat(lines) * line + CGFloat(lines - 1) + (a.options.isEmpty ? 0 : 1 + options))
     }
 
     static func agentRows(_ s: Session) -> Int { min(s.agents.count, maxAgentRows) }
@@ -47,12 +49,14 @@ enum DetailsLayout {
     }
 
     /// The tallest card, measured with `height` itself so the two can't drift apart: a two-line
-    /// task, a command with a description and a two-line command line, and every list full.
+    /// task, a command with a description and a two-line command line (or a question with its
+    /// answers under it), and every list full.
     static let maxHeight: CGFloat = {
         var s = Session(id: "", turnStart: .distantPast, lastEvent: .distantPast)
         s.phase = .tool
         s.task = String(repeating: "x", count: 300)
-        s.activity = Activity(symbol: "", title: "x", detail: String(repeating: "x", count: 300), monospaced: true, note: "x")
+        s.activity = Activity(symbol: "", title: "x", detail: String(repeating: "x", count: 300), monospaced: true, note: "x",
+                              options: ["x"])
         s.agents = Array(repeating: SubAgent(id: "", type: "", started: .distantPast), count: maxAgentRows)
         s.history = Array(repeating: Activity(symbol: "", title: "x", detail: ""), count: maxHistoryRows)
         s.tasks.apply("TodoWrite", ["todos": [["content": "x", "status": "pending"]]], useID: nil)
@@ -66,9 +70,10 @@ struct DetailsCard: View {
     let others: [Session]
     let focus: (String) -> Void
 
-    /// Between tools Claude is thinking; the last tool has already moved to the history.
+    /// Between tools Claude is thinking; the last tool has already moved to the history. Unless it
+    /// failed: that stays until Claude writes its next thought.
     static func now(_ s: Session) -> Activity {
-        s.phase == .thinking ? .thinking(about: s.thought) : s.activity
+        s.phase == .thinking && !s.activity.failed ? .thinking(about: s.thought) : s.activity
     }
 
     var body: some View {
@@ -83,7 +88,10 @@ struct DetailsCard: View {
                         .frame(height: CGFloat(taskLines) * DetailsLayout.line, alignment: .topLeading)
                 }
             }
-            section(nowCaption) { NowRow(activity: Self.now(session), phase: session.phase) }
+            // Ticks slowly, for "quiet for 6 min".
+            TimelineView(.periodic(from: .now, by: 20)) { context in
+                section(nowCaption(at: context.date)) { NowRow(activity: Self.now(session), phase: session.phase) }
+            }
             if !session.tasks.isEmpty {
                 section(planCaption) { PlanRow(tasks: session.tasks) }
             }
@@ -101,7 +109,7 @@ struct DetailsCard: View {
                 }
             }
             if !others.isEmpty {
-                section(tr("Другие сессии · клик — открыть", "Other sessions · click to open")) {
+                section(tr("Другие сессии", "Other sessions")) {
                     ForEach(others.prefix(DetailsLayout.maxOtherRows), id: \.id) { other in
                         SessionRow(session: other).onTapGesture { focus(other.id) }
                     }
@@ -125,9 +133,11 @@ struct DetailsCard: View {
         return tr("План · шаг \(current.step) из \(tasks.count)", "Plan · step \(current.step) of \(tasks.count)")
     }
 
-    private var nowCaption: String {
+    private func nowCaption(at date: Date) -> String {
         switch session.phase {
-        case .thinking, .tool: return tr("Сейчас", "Now")
+        case .thinking, .tool:
+            guard let minutes = session.quietMinutes(at: date) else { return tr("Сейчас", "Now") }
+            return tr("Сейчас · тихо уже \(minutes) мин", "Now · quiet for \(minutes) min")
         case .waiting: return tr("Ждёт тебя", "Waiting for you")
         case .done, .stopped, .failed: return tr("Итог", "Result")
         }
@@ -196,8 +206,8 @@ private struct NowRow: View {
         let detailLines = DetailsLayout.detailLines(activity)
         // Up to two lines fit beside the icon: center them on it. Longer text starts at its top.
         let lines = 1 + (activity.aside.isEmpty ? 0 : 1) + detailLines
-        HStack(alignment: lines <= 2 ? .center : .top, spacing: 10) {
-            IconBadge(symbol: activity.symbol, color: phaseColor(phase))
+        HStack(alignment: lines <= 2 && activity.options.isEmpty ? .center : .top, spacing: 10) {
+            IconBadge(symbol: activity.symbol, color: activity.failed ? .red : phaseColor(phase))
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 8) {
                     Text(activity.title)
@@ -222,9 +232,33 @@ private struct NowRow: View {
                         .truncationMode(activity.prose ? .tail : .middle)
                         .frame(height: CGFloat(detailLines) * DetailsLayout.line, alignment: .topLeading)
                 }
+                if !activity.options.isEmpty {
+                    OptionsRow(options: activity.options)
+                }
             }
         }
         .frame(height: DetailsLayout.nowHeight(activity), alignment: .topLeading)
+    }
+}
+
+/// The answers Claude offers, as it lists them. You pick one where Claude Code asks.
+private struct OptionsRow: View {
+    let options: [String]
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(Array(options.enumerated()), id: \.offset) { _, option in
+                Text(option)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 8)
+                    .frame(height: 18)
+                    .background(Capsule().fill(Color.white.opacity(0.1)))
+            }
+        }
+        .frame(height: DetailsLayout.options, alignment: .bottom)
     }
 }
 
@@ -298,9 +332,9 @@ private struct HistoryRow: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            Image(systemName: activity.symbol)
+            Image(systemName: activity.failed ? "xmark.octagon.fill" : activity.symbol)
                 .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(activity.failed ? Color.red.opacity(0.85) : .white.opacity(0.45))
                 .frame(width: 13)
             Text(activity.headline)
                 .font(.system(size: 11.5))
@@ -342,6 +376,7 @@ private struct SessionRow: View {
     }
 
     private var status: String {
+        if let minutes = session.quietMinutes(at: Date()) { return tr("тихо уже \(minutes) мин", "quiet for \(minutes) min") }
         switch session.phase {
         case .thinking: return session.thought.isEmpty ? tr("думает", "thinking") : session.thought
         case .tool: return session.activity.headline

@@ -202,7 +202,7 @@ func phaseColor(_ phase: Phase) -> Color {
 }
 
 /// Claude itself (Clawd). In the compact notch, where there is no detail row, a small hint
-/// says when it waits for you or has stopped; while it works, Clawd typing says enough.
+/// says how the turn ended; while it works or waits for you, Clawd typing or waving says enough.
 private struct ClawdBadge: View {
     let session: Session
     let showsHint: Bool
@@ -210,11 +210,10 @@ private struct ClawdBadge: View {
     private var hint: String? {
         guard showsHint else { return nil }
         switch session.phase {
-        case .waiting: return "hand.raised.fill"
         case .done: return "checkmark"
         case .stopped: return "stop.fill"
         case .failed: return "exclamationmark.triangle.fill"
-        case .thinking, .tool: return nil
+        case .thinking, .tool, .waiting: return nil
         }
     }
 
@@ -292,8 +291,13 @@ private struct DetailRow: View {
 
     /// The line under the title says why, when Claude said so: its reason for the tool (the file or
     /// pattern then moves up into the title), or a command's description, which reads better than the code.
+    /// A question shows itself and its choices.
     private var shown: Activity {
         let a = session.activity
+        if !a.options.isEmpty {
+            return Activity(symbol: a.symbol, title: a.detail.isEmpty ? a.title : a.detail,
+                            detail: a.options.joined(separator: "  ·  "), prose: true)
+        }
         if !a.reason.isEmpty {
             let title = a.detail.isEmpty ? a.title : "\(a.title) · \(a.detail)"
             return Activity(symbol: a.symbol, title: title, detail: a.reason, prose: true)
@@ -307,7 +311,7 @@ private struct DetailRow: View {
     var body: some View {
         HStack(spacing: 10) {
             let shown = shown
-            IconBadge(symbol: shown.symbol, color: phaseColor(session.phase))
+            IconBadge(symbol: shown.symbol, color: session.activity.failed ? .red : phaseColor(session.phase))
             TitleAndDetail(title: shown.title, activity: shown)
             Spacer(minLength: 8)
             if !session.project.isEmpty {

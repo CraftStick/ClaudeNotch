@@ -24,5 +24,7 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>A click on the notch brings forward the very Terminal or iTerm tab Claude Code runs in.</string>
 </dict>
 </plist>

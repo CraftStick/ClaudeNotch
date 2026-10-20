@@ -35,8 +35,12 @@ EVENTS = {
     "PostToolUse": ("*", 3),
     "PostToolUseFailure": ("*", 3),
     "PermissionRequest": ("*", 600),  # waits for a click in the notch
+    "PermissionDenied": ("*", 3),  # auto mode turned a tool down
     "Notification": (None, 3),
+    "Elicitation": (None, 3),  # an MCP server asks for input; the hook never answers it
+    "ElicitationResult": (None, 3),
     "PreCompact": (None, 3),
+    "PostCompact": (None, 3),
     "Stop": (None, 3),
     "StopFailure": (None, 3),
     "SessionEnd": (None, 3),
