@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var notch: NotchMetrics?
     private var soundsItem: NSMenuItem?
     private var rimItem: NSMenuItem?
+    private var aliveItem: NSMenuItem?
     private var claudeCodeItem: NSMenuItem?
     private let hotKeys = HotKeys()
     /// The pointer is over the visible notch: take clicks there (to focus a session).
@@ -150,7 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let screen = notchScreen, let notch else { return }
         let height = store.prompts.isEmpty
             ? NotchView.maxHeight(notch: notch) + 30
-            : notch.height + NotchView.permissionHeight + 30
+            : notch.height + NotchView.promptHeight(store.prompt) + 30
         let size = NSSize(width: 640, height: height)
         let origin = NSPoint(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height)
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
@@ -183,7 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let zoneMode: DisplayMode = mode == .details || mode == .permission || greeting ? mode : .compact
         let details = store.detailsSession
         let size = NotchView.size(of: zoneMode, session: details,
-                                  others: store.others(than: details?.id).count, notch: notch)
+                                  others: store.others(than: details?.id).count, prompt: store.prompt, notch: notch)
         let zone = NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
                           width: size.width, height: size.height).insetBy(dx: -4, dy: -4)
         let inside = zone.contains(NSEvent.mouseLocation)
@@ -202,7 +203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Permission shortcuts
 
-    /// ⌃⌥⌘Y / ⌃⌥⌘N answer the oldest request, only while one is shown. System-wide hot keys take
+    /// ⌃⌥⌘Y / ⌃⌥⌘N answer the oldest request (⌃⌥⌘1…4 a question), only while one is shown. System-wide hot keys take
     /// the keys away from every app, so they must not be everyday shortcuts like ⌘N.
     static let hotKeyModifiers = cmdKey | optionKey | controlKey
 
@@ -212,12 +213,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else if !hotKeys.isRegistered {
             hotKeys.register(keyCode: kVK_ANSI_Y, modifiers: Self.hotKeyModifiers) { [weak self] in self?.answerPrompt(.allow) }
             hotKeys.register(keyCode: kVK_ANSI_N, modifiers: Self.hotKeyModifiers) { [weak self] in self?.answerPrompt(.deny) }
+            for (i, key) in [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4].enumerated() {
+                hotKeys.register(keyCode: key, modifiers: Self.hotKeyModifiers) { [weak self] in self?.chooseOption(i) }
+            }
         }
     }
 
+    /// For a question, ⌃⌥⌘Y sends the ticked answers and ⌃⌥⌘N does nothing.
     private func answerPrompt(_ decision: Store.Decision) {
         guard let prompt = store.prompt else { return }
+        guard prompt.form == nil else {
+            if decision == .allow { store.submitPicked(prompt) }
+            return
+        }
         store.answer(prompt, decision)
+    }
+
+    /// ⌃⌥⌘1…4 pick an answer to a question.
+    private func chooseOption(_ index: Int) {
+        guard let prompt = store.prompt, prompt.form != nil else { return }
+        store.choose(prompt, option: index)
     }
 
     // MARK: - Menu bar
@@ -230,32 +245,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         buildMenu()
     }
 
-    /// Rebuilt when the language changes.
+    /// Rebuilt when the language changes. Every row has an SF Symbol in front, as in macOS's own menus:
+    /// macOS 26 puts one on Quit by itself, and rows without one were left with a gap.
     private func buildMenu() {
         let menu = NSMenu()
         menu.delegate = self
         let title = NSMenuItem(title: "Claude Notch", action: nil, keyEquivalent: "")
+        title.image = ClawdSprite.menuBarImage(cell: 1.2)
         title.isEnabled = false
         menu.addItem(title)
         menu.addItem(.separator())
-        let claudeCode = NSMenuItem(title: tr("Подключено к Claude Code", "Connected to Claude Code"),
-                                    action: #selector(toggleClaudeCode), keyEquivalent: "")
-        claudeCode.target = self
-        menu.addItem(claudeCode)
-        claudeCodeItem = claudeCode
-        let login = NSMenuItem(title: tr("Запускать при входе", "Open at login"), action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        login.target = self
-        menu.addItem(login)
-        loginItem = login
-        let sounds = NSMenuItem(title: tr("Звук, когда готово или нужен ответ", "Sound when done or waiting for you"),
-                                action: #selector(toggleSounds), keyEquivalent: "")
-        sounds.target = self
-        menu.addItem(sounds)
-        soundsItem = sounds
-        let rim = NSMenuItem(title: tr("Переливающаяся обводка", "Glowing rim"), action: #selector(toggleRim), keyEquivalent: "")
-        rim.target = self
-        menu.addItem(rim)
-        rimItem = rim
+        claudeCodeItem = add(to: menu, tr("Подключено к Claude Code", "Connected to Claude Code"), "link", #selector(toggleClaudeCode))
+        loginItem = add(to: menu, tr("Запускать при входе", "Open at login"), "arrow.up.forward.app", #selector(toggleLaunchAtLogin))
+        soundsItem = add(to: menu, tr("Звук, когда готово или нужен ответ", "Sound when done or waiting for you"),
+                         "speaker.wave.2", #selector(toggleSounds))
+        rimItem = add(to: menu, tr("Переливающаяся обводка", "Glowing rim"), "sparkles", #selector(toggleRim))
+        aliveItem = add(to: menu, tr("Clawd живёт в чёлке всегда", "Clawd stays in the notch"), "pawprint", #selector(toggleAlive))
 
         let languages = NSMenu()
         for (choice, name) in [(nil, tr("Как в системе", "System")), (Language.en, "English"), (Language.ru, "Русский")] {
@@ -265,16 +270,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             option.state = Language.choice == choice ? .on : .off
             languages.addItem(option)
         }
-        let language = NSMenuItem(title: tr("Язык", "Language"), action: nil, keyEquivalent: "")
+        let language = add(to: menu, tr("Язык", "Language"), "globe", nil)
         language.submenu = languages
-        menu.addItem(language)
 
         menu.addItem(.separator())
-        let remove = NSMenuItem(title: tr("Удалить Claude Notch…", "Remove Claude Notch…"), action: #selector(removeApp), keyEquivalent: "")
-        remove.target = self
-        menu.addItem(remove)
-        menu.addItem(NSMenuItem(title: tr("Выйти", "Quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        add(to: menu, tr("Удалить Claude Notch…", "Remove Claude Notch…"), "trash", #selector(removeApp))
+        let quit = add(to: menu, tr("Выйти", "Quit"), "power", #selector(NSApplication.terminate(_:)), key: "q")
+        quit.target = nil  // goes to NSApp
         statusItem?.menu = menu
+    }
+
+    @discardableResult
+    private func add(to menu: NSMenu, _ title: String, _ symbol: String, _ action: Selector?, key: String = "") -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.target = self
+        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        menu.addItem(item)
+        return item
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -282,6 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
         soundsItem?.state = UserDefaults.standard.bool(forKey: Store.soundsKey) ? .on : .off
         rimItem?.state = UserDefaults.standard.bool(forKey: Store.rimKey) ? .on : .off
+        aliveItem?.state = Store.alive ? .on : .off
     }
 
     @objc private func pickLanguage(_ sender: NSMenuItem) {
@@ -293,6 +306,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleRim() {
         UserDefaults.standard.set(!UserDefaults.standard.bool(forKey: Store.rimKey), forKey: Store.rimKey)
         store.objectWillChange.send()  // redraw the notch with or without it
+    }
+
+    /// On, Clawd floats in under a parachute; off, he leaves once the rest after the last turn is over.
+    @objc private func toggleAlive() {
+        UserDefaults.standard.set(!Store.alive, forKey: Store.aliveKey)
+        if Store.alive { store.moveIn() }
+        store.objectWillChange.send()
     }
 
     @objc private func toggleSounds() {

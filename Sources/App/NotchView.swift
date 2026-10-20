@@ -71,7 +71,7 @@ struct NotchView: View {
         let mode = store.mode
         let session = store.focused
         let others = store.others(than: session?.id)
-        let size = Self.size(of: mode, session: session, others: others.count, notch: notch)
+        let size = Self.size(of: mode, session: session, others: others.count, prompt: store.prompt, notch: notch)
         let isOpen = mode == .expanded || mode == .permission || mode == .details
         let shape = NotchShape(topRadius: ear, bottomRadius: isOpen ? 20 : 10)
 
@@ -125,7 +125,8 @@ struct NotchView: View {
     }
 
     /// Outer size of the black shape (including the small top curves) for `mode`.
-    static func size(of mode: DisplayMode, session: Session?, others: Int = 0, notch: NotchMetrics) -> CGSize {
+    static func size(of mode: DisplayMode, session: Session?, others: Int = 0, prompt: PermissionPrompt? = nil,
+                     notch: NotchMetrics) -> CGSize {
         let body: CGSize
         switch mode {
         case .hidden: body = CGSize(width: notch.width, height: notch.height)
@@ -133,7 +134,7 @@ struct NotchView: View {
         // must clear the cut-out, where the screen has no pixels, with a sliver of black above it.
         case .compact: body = CGSize(width: notch.width + 2 * wing, height: notch.height + NotchRim.width + 2)
         case .expanded: body = CGSize(width: max(notch.width + 2 * wing + 150, 420), height: notch.height + detailHeight)
-        case .permission: body = CGSize(width: max(notch.width + 2 * wing + 190, 470), height: notch.height + permissionHeight)
+        case .permission: body = CGSize(width: max(notch.width + 2 * wing + 190, 470), height: notch.height + promptHeight(prompt))
         case .details:
             body = CGSize(width: max(notch.width + 2 * wing + 190, 470),
                           height: notch.height + (session.map { DetailsLayout.height($0, others: others) } ?? detailHeight))
@@ -143,7 +144,12 @@ struct NotchView: View {
 
     /// Tallest the shape can get, for sizing the window.
     static func maxHeight(notch: NotchMetrics) -> CGFloat {
-        notch.height + max(permissionHeight, DetailsLayout.maxHeight)
+        notch.height + max(permissionHeight, QuestionCard.maxHeight, DetailsLayout.maxHeight)
+    }
+
+    /// The card under the notch for a request: Allow and Deny, or a question's options.
+    static func promptHeight(_ prompt: PermissionPrompt?) -> CGFloat {
+        prompt?.form.map(QuestionCard.height) ?? permissionHeight
     }
 
     private func content(_ s: Session, others: [Session], mode: DisplayMode) -> some View {
@@ -176,7 +182,13 @@ struct NotchView: View {
                 DetailRow(session: s)
                     .frame(height: detailHeight, alignment: .top)
             case .permission:
-                if let prompt = store.prompt {
+                if let prompt = store.prompt, let form = prompt.form {
+                    QuestionCard(form: form, waiting: store.prompts.count - 1,
+                                 choose: { store.choose(prompt, option: $0) },
+                                 submit: { store.submitPicked(prompt) },
+                                 handBack: { store.answer(prompt, .askInApp) })
+                        .frame(height: QuestionCard.height(form), alignment: .top)
+                } else if let prompt = store.prompt {
                     PermissionCard(prompt: prompt, waiting: store.prompts.count - 1) { store.answer(prompt, $0) }
                         .frame(height: Self.permissionHeight, alignment: .top)
                 }
@@ -367,6 +379,127 @@ private struct PermissionCard: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 4)
+    }
+}
+
+/// A question Claude asks you: its options as buttons (⌃⌥⌘1…4), one question at a time. Where it
+/// takes several answers they tick, and Done sends them. An answer of your own is typed in Claude Code.
+private struct QuestionCard: View {
+    let form: QuestionForm
+    let waiting: Int
+    let choose: (Int) -> Void
+    let submit: () -> Void
+    let handBack: () -> Void
+
+    private static let header: CGFloat = 36
+    private static let row: CGFloat = 26
+    private static let rowGap: CGFloat = 5
+    private static let footer: CGFloat = 26
+    private static let gap: CGFloat = 8
+
+    static func height(_ form: QuestionForm) -> CGFloat {
+        let rows = CGFloat(form.current.options.count)
+        return 4 + header + gap + rows * row + (rows - 1) * rowGap + gap + footer + 10
+    }
+
+    static let maxHeight: CGFloat = 4 + header + gap + 4 * row + 3 * rowGap + gap + footer + 10
+
+    var body: some View {
+        let question = form.current
+        VStack(alignment: .leading, spacing: Self.gap) {
+            HStack(alignment: .top, spacing: 10) {
+                IconBadge(symbol: "questionmark.bubble.fill", color: .yellow)
+                Text(question.text)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                if form.questions.count > 1 {
+                    Text(tr("\(form.step + 1) из \(form.questions.count)", "\(form.step + 1) of \(form.questions.count)"))
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.4))
+                        .frame(height: 30)
+                }
+            }
+            .frame(height: Self.header, alignment: .top)
+            VStack(spacing: Self.rowGap) {
+                ForEach(question.options.indices, id: \.self) { i in
+                    Button { choose(i) } label: {
+                        OptionLabel(option: question.options[i], number: i + 1,
+                                    tick: question.multiSelect ? form.picked.contains(i) : nil)
+                    }
+                    .buttonStyle(OptionButtonStyle(picked: form.picked.contains(i)))
+                }
+            }
+            HStack(spacing: 8) {
+                Button(tr("Ответить в приложении", "Answer in app"), action: handBack)
+                    .buttonStyle(NotchButtonStyle(kind: .plain))
+                Spacer(minLength: 6)
+                if waiting > 0 {
+                    Text(tr("ещё \(waiting)", "+\(waiting) more"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+                if question.multiSelect {
+                    Button(action: submit) { ShortcutLabel(title: tr("Готово", "Done"), key: "⌃⌥⌘Y") }
+                        .buttonStyle(NotchButtonStyle(kind: .primary))
+                        .disabled(form.picked.isEmpty)
+                        .opacity(form.picked.isEmpty ? 0.4 : 1)
+                }
+            }
+            .frame(height: Self.footer)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+        .animation(.easeInOut(duration: 0.2), value: form.step)
+    }
+}
+
+/// One answer: a tick where several can be picked, its label, what it means, and its shortcut.
+private struct OptionLabel: View {
+    let option: QuestionForm.Option
+    let number: Int
+    let tick: Bool?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let tick {
+                Image(systemName: tick ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(tick ? claudeOrange : .white.opacity(0.5))
+            }
+            Text(option.label)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .layoutPriority(1)
+            if !option.detail.isEmpty {
+                Text(option.detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            Spacer(minLength: 6)
+            Text("⌃⌥⌘\(number)")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.white.opacity(0.35))
+        }
+        .padding(.horizontal, 11)
+        .frame(height: 26)
+        .help(option.detail)
+    }
+}
+
+private struct OptionButtonStyle: ButtonStyle {
+    let picked: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(picked ? claudeOrange.opacity(0.3) : Color.white.opacity(configuration.isPressed ? 0.2 : 0.1)))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

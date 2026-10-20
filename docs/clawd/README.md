@@ -60,9 +60,24 @@ Then he settles down:
 
 <table>
 <tr>
-<td align="center" valign="top"><img src="sleeping.gif" width="96" alt="Clawd dozing"><br><b>Dozes off</b><br>3 minutes after the task</td>
+<td align="center" valign="top"><img src="sleeping.gif" width="96" alt="Clawd dozing under an open book"><br><b>Dozes off under an open book</b><br>3 minutes after the task</td>
 <td align="center" valign="top"><img src="walking-off.gif" width="96" alt="Clawd walking away"><br><b>Walks off</b><br>At the end of the 15 minutes;<br>then the notch hides</td>
 </tr>
 </table>
 
 When a new task comes in, Clawd stops whatever he's doing and gets back to work.
+
+## Living in the notch for good
+
+Switch on Clawd's menu → **Clawd stays in the notch** and he floats down into it under a parachute, waves, and never walks off: when Claude has nothing going on, he stays in the notch and keeps himself busy. Every few seconds he does something, in no fixed order:
+
+- has a mug of coffee: steam curls up, and now and then he takes a sip with his eyes shut in a smile;
+- puts on headphones and nods to the beat with his eyes shut, notes floating off;
+- puts on a wizard's hat and holds up a wand: sparkles fly off its star, and he winks;
+- puts on a chef's hat and tosses a pancake in a frying pan;
+- stands thinking with a hand on his chin, dots coming and going in a bubble;
+- looks around, sways, dances (once or twice), does the hula, hops twice, gets excited, breakdances (the whole routine, with a windmill and a headspin);
+- sits down for a nap under an open book and gets back up;
+- walks off out of the notch and comes back a few seconds later, walking or under a parachute.
+
+The props are drawn in Claude Notch's code over Clawd's own frames from the Claude app. None of it is what he does at work or when Claude needs you, so it can't be taken for news. The checkmark and the time of the last task still go away after 15 minutes, and a new task still comes first.

@@ -77,8 +77,9 @@ enum Motion: Equatable {
 
 /// A one-off reaction Clawd plays over whatever he is doing: an idea when a task comes in,
 /// joy when you allow something, a facepalm when a tool fails or you say no,
-/// confetti after a big task, a hop and a wave when the app is opened.
-enum Cue: Equatable { case idea, excited, facepalm, celebrate, hello }
+/// confetti after a big task, a hop and a wave when the app is opened, a parachute when he
+/// moves into the notch for good.
+enum Cue: Equatable { case idea, excited, facepalm, celebrate, hello, arrive }
 
 struct Session: Equatable {
     let id: String
@@ -206,6 +207,52 @@ struct Session: Equatable {
     }
 }
 
+/// Claude's questions (AskUserQuestion, up to four), answered one after another in the notch. The
+/// answers go back to Claude Code as the tool's input, the way its own dialog fills them in.
+struct QuestionForm: Equatable {
+    struct Option: Equatable {
+        let label: String
+        let detail: String
+    }
+
+    struct Question: Equatable {
+        let text: String
+        let options: [Option]
+        let multiSelect: Bool
+    }
+
+    let questions: [Question]
+    /// The question shown now.
+    var step = 0
+    /// Question text → the chosen label (several, comma-separated, where more than one may be picked).
+    var answers: [String: String] = [:]
+    /// What's ticked so far on a question that takes several answers.
+    var picked: Set<Int> = []
+
+    var current: Question { questions[step] }
+
+    init?(_ input: [String: Any]) {
+        questions = (input["questions"] as? [[String: Any]] ?? []).compactMap { q in
+            guard let text = q["question"] as? String, !text.isEmpty else { return nil }
+            let options = (q["options"] as? [[String: Any]] ?? []).compactMap { o -> Option? in
+                guard let label = o["label"] as? String, !label.isEmpty else { return nil }
+                return Option(label: label, detail: oneLine(o["description"] as? String ?? ""))
+            }
+            return options.isEmpty ? nil : Question(text: text, options: Array(options.prefix(4)), multiSelect: q["multiSelect"] as? Bool ?? false)
+        }
+        guard !questions.isEmpty else { return nil }
+    }
+
+    /// Answers the current question with these options; true once every question has its answer.
+    mutating func answer(_ options: [Int]) -> Bool {
+        answers[current.text] = options.sorted().map { current.options[$0].label }.joined(separator: ", ")
+        picked = []
+        guard step + 1 < questions.count else { return true }
+        step += 1
+        return false
+    }
+}
+
 /// A PermissionRequest hook that waits for a click in the notch.
 struct PermissionPrompt: Identifiable, Equatable {
     let id = UUID()
@@ -216,6 +263,10 @@ struct PermissionPrompt: Identifiable, Equatable {
     let activity: Activity
     /// Claude Code's `permission_suggestions`: the rules "Allow always" sends back.
     let suggestions: [[String: Any]]
+    /// The tool's input, sent back with the answers to a question.
+    var input: [String: Any] = [:]
+    /// Set when Claude asks you something: its options instead of Allow and Deny.
+    var form: QuestionForm?
     let created = Date()
     let reply: HookReply
 
@@ -241,6 +292,10 @@ final class Store: ObservableObject {
     static let soundsKey = "sounds"
     /// The glowing rim around the island, on unless switched off in the menu.
     static let rimKey = "rim"
+    /// Clawd stays in the notch for good, busy with his own pastimes, instead of walking off after a
+    /// rest. Off unless switched on in the menu.
+    static let aliveKey = "alwaysAlive"
+    static var alive: Bool { UserDefaults.standard.bool(forKey: aliveKey) }
 
     @Published private(set) var sessions: [String: Session] = [:]
     @Published private(set) var expanded = false
@@ -337,7 +392,7 @@ final class Store: ObservableObject {
     func focus(_ id: String) {
         EventLog.append("Focus \(id)")
         if id == Self.greetingID {
-            greeting = nil
+            if !Self.alive { greeting = nil }
             if let app = AppFocus.claudeApp { AppFocus.open(app) }
             return
         }
@@ -357,7 +412,7 @@ final class Store: ObservableObject {
             s.transcriptPath = r.path
             s.entrypoint = r.entrypoint
             s.host = r.entrypoint == "claude-desktop" ? AppFocus.claudeBundleID : AppFocus.lastHost
-            s.task = String(r.task.split(whereSeparator: \.isNewline).joined(separator: " ").prefix(300))
+            s.task = Describe.prompt(r.task).text
             if let tool = r.tool {
                 s.phase = .tool
                 s.activity = Describe.tool(tool.name, tool.input)
@@ -380,16 +435,32 @@ final class Store: ObservableObject {
             update(shown.id) { s, now in s.play(.hello, at: now) }
         }
         if shown == nil {
-            var g = Session(id: Self.greetingID, turnStart: now, lastEvent: now)
-            let app = AppFocus.claudeApp.map { $0.deletingPathExtension().lastPathComponent }
-            g.activity = Activity(symbol: "hand.wave.fill", title: tr("Готов к работе", "Ready to work"),
-                                  detail: app.map { tr("Нажми, чтобы открыть \($0)", "Click to open \($0)") } ?? "")
-            g.play(.hello, at: now)
-            greeting = g
+            greeting = Self.makeGreeting(at: now)
         }
         focusID = shown?.id ?? Self.greetingID
         expanded = true
         scheduleCollapse(after: 5)
+    }
+
+    /// "Stays in the notch" was just switched on: Clawd floats in under a parachute where you can see
+    /// him, a resting session's Clawd too. One at work carries on.
+    func moveIn() {
+        let now = Date()
+        if let shown = working.first ?? resting, !shown.phase.isActive {
+            update(shown.id) { s, now in s.play(.arrive, at: now) }
+        }
+        greeting = Self.makeGreeting(at: now, cue: .arrive)
+    }
+
+    /// Clawd on his own in the notch, hopping and waving hello (or floating in under a parachute):
+    /// "Ready to work", a click opens Claude.
+    private static func makeGreeting(at now: Date, cue: Cue = .hello) -> Session {
+        var g = Session(id: greetingID, turnStart: now, lastEvent: now)
+        let app = AppFocus.claudeApp.map { $0.deletingPathExtension().lastPathComponent }
+        g.activity = Activity(symbol: "hand.wave.fill", title: tr("Готов к работе", "Ready to work"),
+                              detail: app.map { tr("Нажми, чтобы открыть \($0)", "Click to open \($0)") } ?? "")
+        g.play(cue, at: now)
+        return g
     }
 
     /// Called often with where the pointer is; opens the card after a short rest, so passing over the
@@ -461,17 +532,23 @@ final class Store: ObservableObject {
             dropPrompts(for: id) { $0.agentID == agentID }
             s.phase = .waiting
             let activity = Describe.tool(toolName, toolInput)
-            s.activity = Activity(symbol: "hand.raised.fill", title: tr("Ждёт разрешения", "Waiting for permission"),
-                                  detail: activity.detail, monospaced: activity.monospaced)
+            // A question Claude asks you comes through here too: its options become the buttons.
+            let form = toolName == "AskUserQuestion" ? QuestionForm(toolInput) : nil
+            if form != nil, let question = Describe.question(toolName, toolInput) {
+                s.activity = question
+            } else {
+                s.activity = Activity(symbol: "hand.raised.fill", title: tr("Ждёт разрешения", "Waiting for permission"),
+                                      detail: activity.detail, monospaced: activity.monospaced)
+            }
             let prompt = PermissionPrompt(sessionID: id, agentID: agentID,
                                           question: Describe.permissionQuestion(toolName, activity),
                                           activity: activity,
                                           suggestions: json["permission_suggestions"] as? [[String: Any]] ?? [],
-                                          reply: reply)
+                                          input: toolInput, form: form, reply: reply)
             prompts.append(prompt)
             // In a terminal, hand the question back to the usual prompt after a while instead of
-            // holding it for the hook's full ~10 minutes.
-            expire(prompt, after: s.dialogRunsInParallel ? 590 : 20)
+            // holding it for the hook's full ~10 minutes; a question takes longer to read.
+            expire(prompt, after: s.dialogRunsInParallel ? 590 : form == nil ? 20 : 90)
             chime("Tink", for: s)
             commit(s, expandFor: .infinity)
             return
@@ -500,12 +577,18 @@ final class Store: ObservableObject {
         switch event {
         case "UserPromptSubmit":
             dropPrompts(for: id)
-            let prompt = json["prompt"] as? String ?? ""
+            let said = Describe.prompt(json["prompt"] as? String ?? "")
             s.phase = .thinking
             s.startTurn(at: now)
-            s.task = String(prompt.split(whereSeparator: \.isNewline).joined(separator: " ").prefix(300))
-            s.activity = Activity(symbol: "sparkle", title: tr("Взялся за задачу", "New task"), detail: oneLine(prompt), prose: true)
-            s.play(.idea, at: now)
+            if let notice = said.notice {
+                // Claude picks up a background task that finished: the task is still the one you gave it.
+                if s.task.isEmpty { s.task = said.text }
+                s.activity = notice
+            } else {
+                s.task = said.text
+                s.activity = Activity(symbol: "sparkle", title: tr("Взялся за задачу", "New task"), detail: said.text, prose: true)
+                s.play(.idea, at: now)
+            }
             commit(s, expandFor: 3)
 
         case "PreToolUse":
@@ -835,6 +918,46 @@ final class Store: ObservableObject {
         if prompts.isEmpty { scheduleCollapse(after: decision == .askInApp ? 0.3 : 1.2) }
     }
 
+    /// Picks option `index` of the question on show: the answer to it, or a tick where it takes several
+    /// (sent with `submitPicked`). After the last question the answers go to Claude Code.
+    func choose(_ prompt: PermissionPrompt, option index: Int) {
+        guard let at = prompts.firstIndex(of: prompt), var form = prompts[at].form,
+              form.current.options.indices.contains(index) else { return }
+        if form.current.multiSelect {
+            if !form.picked.insert(index).inserted { form.picked.remove(index) }
+            prompts[at].form = form
+        } else {
+            advance(at, form, with: [index])
+        }
+    }
+
+    /// Answers a question that takes several options with the ones ticked.
+    func submitPicked(_ prompt: PermissionPrompt) {
+        guard let at = prompts.firstIndex(of: prompt), let form = prompts[at].form, !form.picked.isEmpty else { return }
+        advance(at, form, with: Array(form.picked))
+    }
+
+    private func advance(_ at: Int, _ form: QuestionForm, with options: [Int]) {
+        var form = form
+        guard form.answer(options) else {
+            prompts[at].form = form
+            return
+        }
+        let prompt = prompts.remove(at: at)
+        var input = prompt.input
+        input["answers"] = form.answers
+        prompt.reply.send(Self.permissionOutput(["behavior": "allow", "updatedInput": input]))
+        EventLog.append("Answered \(form.answers.count) question(s) from the notch")
+        let summary = form.questions.compactMap { form.answers[$0.text] }.joined(separator: " · ")
+        update(prompt.sessionID) { s, now in
+            s.play(.excited, at: now)
+            s.lastEvent = now
+            s.phase = .tool
+            s.activity = Activity(symbol: "checkmark.bubble.fill", title: tr("Ответ отправлен", "Answer sent"), detail: summary, prose: true)
+        }
+        if prompts.isEmpty { scheduleCollapse(after: 1.2) }
+    }
+
     /// Requests that were answered elsewhere (or replaced) quietly close their hook.
     /// `match` narrows it down, e.g. to one agent's requests.
     private func dropPrompts(for sessionID: String, where match: (PermissionPrompt) -> Bool = { _ in true }) {
@@ -939,9 +1062,12 @@ final class Store: ObservableObject {
 
     /// Every second: time-based motions (thinking for a while, a slow command, a burst of tools
     /// ending), and sessions whose rest is over leave the notch — Clawd has walked off by then.
+    /// When he lives in the notch for good, the greeting stays instead, and comes back if it's gone.
     private func tick() {
         let now = Date()
-        if let g = greeting, now.timeIntervalSince(g.lastEvent) > Self.restDuration {
+        if Self.alive {
+            if greeting == nil { greeting = Self.makeGreeting(at: now, cue: .arrive) }
+        } else if let g = greeting, now.timeIntervalSince(g.lastEvent) > Self.restDuration {
             greeting = nil
         }
         for (id, s) in sessions {
@@ -1003,6 +1129,42 @@ enum Describe {
         default:
             return mcp(name, input)
         }
+    }
+
+    /// A prompt in plain words. Claude Code sends some prompts in your place, wrapped in tags: a background
+    /// task that finished (`<task-notification>`, which comes back as `notice`), a slash command
+    /// (`<command-name>`), reminders. The tags come out, so the notch shows words rather than markup.
+    static func prompt(_ text: String) -> (text: String, notice: Activity?) {
+        func tag(_ name: String) -> String? {
+            guard let open = text.range(of: "<\(name)>"),
+                  let close = text.range(of: "</\(name)>", range: open.upperBound..<text.endIndex) else { return nil }
+            return String(text[open.upperBound..<close.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if text.contains("<task-notification>") {
+            // "Background command "Build the app" completed (exit code 0)": what's in quotes is what it was.
+            let summary = tag("summary") ?? ""
+            let what = oneLine(summary.range(of: #""(.+)""#, options: .regularExpression)
+                .map { String(summary[$0].dropFirst().dropLast()) } ?? summary)
+            let title: String
+            switch tag("status") {
+            case "completed": title = tr("Фоновая задача готова", "Background task done")
+            case "failed": title = tr("Фоновая задача не удалась", "Background task failed")
+            case "killed", "stopped": title = tr("Фоновая задача остановлена", "Background task stopped")
+            default: title = tr("Фоновая задача", "Background task")
+            }
+            return (what.isEmpty ? title : "\(title) · \(what)", Activity(symbol: "bell.fill", title: title, detail: what, prose: true))
+        }
+        if let command = tag("command-name") {
+            let args = tag("command-args") ?? ""
+            return (oneLine(args.isEmpty ? command : "\(command) \(args)"), nil)
+        }
+        var plain = text
+        if plain.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<") {
+            // Reminders go whole; other tags leave their words.
+            plain = plain.replacingOccurrences(of: #"<system-reminder>[\s\S]*?</system-reminder>"#, with: " ", options: .regularExpression)
+                .replacingOccurrences(of: #"</?[A-Za-z][\w-]*(\s[^>]*)?>"#, with: " ", options: .regularExpression)
+        }
+        return (String(plain.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(300)), nil)
     }
 
     /// Tools that stop and wait for the user to answer.

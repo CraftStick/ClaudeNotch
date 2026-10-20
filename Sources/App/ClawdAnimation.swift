@@ -37,10 +37,11 @@ enum ClawdAssets {
     static let facepalm = sheet("Facepalm", frames: 34)
     static let confetti = sheet("Confetti", frames: 34)
     static let breakDancing = sheet("BreakDancing", frames: 28)
+    static let pointing = sheet("Pointing", frames: 43)
 
     private static let names = ["Laptop", "Waving", "JumpingHappy", "LookingAround", "Swaying", "DancingHappy",
                                 "Hula", "Meditating", "Disappointed", "Dizzy", "Lightbulb", "Thinking", "Desktop",
-                                "Running", "Walking", "Excited", "Facepalm", "Confetti", "BreakDancing"]
+                                "Running", "Walking", "Excited", "Facepalm", "Confetti", "BreakDancing", "Pointing"]
 
     private static func sheet(_ name: String, frames: Int) -> PixelSheet? {
         sheets[name].flatMap { $0.frames.count >= frames ? $0 : nil }
@@ -184,7 +185,8 @@ private struct Clip {
 
 /// Clawd in the notch. With the Claude app's sprites he turns to a laptop and types while Claude
 /// works, puts it away and waves while Claude waits for you. After a turn he reacts (a happy hop,
-/// a sigh after Esc, dizzy after an error), then idles with the odd fidget and dozes off.
+/// a sigh after Esc, dizzy after an error), then idles with the odd fidget and dozes off; or, when he
+/// lives in the notch for good, keeps busy with his own pastimes.
 struct ClawdView: View {
     let session: Session
 
@@ -215,19 +217,28 @@ private struct ClawdAnimator {
 
     /// One frame to draw; `dozing` is the time asleep (for the floating "z"s), `offsetX` moves
     /// Clawd while he walks off, `rate` is how often the picture changes from here (redraws/s).
+    /// `mirrored` is how Clawd usually faces in the notch, to the left; not, he faces right.
+    /// `offsetY` drops him from above (a parachute); `decals` are props drawn over him.
     struct Frame {
         let sheet: PixelSheet
         let index: Int
         var dozing: TimeInterval?
         var offsetX: CGFloat = 0
+        var offsetY: CGFloat = 0
         var rate: Double = 16
+        var mirrored = true
+        var decals: [Decal] = []
 
-        init(_ sheet: PixelSheet, _ index: Int, rate: Double = 16, dozing: TimeInterval? = nil, offsetX: CGFloat = 0) {
+        init(_ sheet: PixelSheet, _ index: Int, rate: Double = 16, dozing: TimeInterval? = nil, offsetX: CGFloat = 0,
+             offsetY: CGFloat = 0, mirrored: Bool = true, decals: [Decal] = []) {
             self.sheet = sheet
             self.index = index
             self.rate = rate
             self.dozing = dozing
             self.offsetX = offsetX
+            self.offsetY = offsetY
+            self.mirrored = mirrored
+            self.decals = decals
         }
 
         init(_ clip: Clip, at t: TimeInterval) { self.init(clip.sheet, clip.frame(at: t), rate: clip.fps) }
@@ -248,29 +259,23 @@ private struct ClawdAnimator {
 
     func frame(at date: Date) -> Frame {
         let sinceMotion = date.timeIntervalSince(session.motionStart)
-        if let cue = session.cue {
-            let lead = exit(from: session.cueInterrupted)  // put the laptop away first
-            let clips = [lead].compactMap { $0 } + reaction(cue)
-            var t = date.timeIntervalSince(session.cueStart)
-            let total = clips.reduce(0) { $0 + $1.duration }
-            if t < total {
-                for clip in clips {
-                    if t < clip.duration { return Frame(clip, at: t) }
-                    t -= clip.duration
-                }
-            }
-            let cueEnd = session.cueStart.addingTimeInterval(total)
+        if let cue = session.cue,
+           // Put the laptop away first.
+           let play = Pastime.sequence([exit(from: session.cueInterrupted).flatMap { Pastime([$0]) }, reaction(cue)]) {
+            let t = date.timeIntervalSince(session.cueStart)
+            if t < play.duration { return play.frame(t) }
+            let cueEnd = session.cueStart.addingTimeInterval(play.duration)
             if cueEnd > session.motionStart {
                 // The reaction took over the start of what Clawd does now: carry on from its end
                 // with empty hands (nothing to put away, no hop after confetti).
-                return motionFrame(after: nil, t: date.timeIntervalSince(cueEnd), sinceMotion: sinceMotion)
+                return motionFrame(after: nil, t: date.timeIntervalSince(cueEnd), sinceMotion: sinceMotion, at: date)
             }
         }
-        return motionFrame(after: session.previousMotion, t: sinceMotion, sinceMotion: sinceMotion)
+        return motionFrame(after: session.previousMotion, t: sinceMotion, sinceMotion: sinceMotion, at: date)
     }
 
     /// `previous`: what Clawd did before (nil = nothing in hand); `t`: time into this motion.
-    private func motionFrame(after previous: Motion?, t: TimeInterval, sinceMotion: TimeInterval) -> Frame {
+    private func motionFrame(after previous: Motion?, t: TimeInterval, sinceMotion: TimeInterval, at date: Date) -> Frame {
         let motion = session.motion
         var t = max(0, t)
         if let previous, previous != motion, let exit = exit(from: previous) {
@@ -302,7 +307,7 @@ private struct ClawdAnimator {
                 if t < ending.duration { return Frame(ending, at: t) }
                 t -= ending.duration
             }
-            return idle(t, sinceRest: sinceMotion)
+            return Store.alive ? life(at: date, restingSince: date.addingTimeInterval(-t)) : idle(t, sinceRest: sinceMotion)
         }
     }
 
@@ -321,18 +326,18 @@ private struct ClawdAnimator {
 
     /// One-off reactions: an idea when a task comes in, joy when you allow something,
     /// a facepalm when a tool fails or you say no, confetti and a breakdance after a big task,
-    /// a hop and a wave when the app is opened.
-    private func reaction(_ cue: Cue) -> [Clip] {
+    /// a hop and a wave when the app is opened, a parachute and a wave when he moves into the notch.
+    private func reaction(_ cue: Cue) -> Pastime? {
+        let wave = Clip(sheet: waving, frames: 3...16, fps: 12)
         switch cue {
-        case .hello:
-            return [ClawdAssets.jumping.map(Self.hop),
-                    Clip(sheet: waving, frames: 3...16, fps: 12)].compactMap { $0 }
-        case .idea: return [ClawdAssets.lightbulb.map { Clip(sheet: $0, frames: 2...44, fps: 14) }].compactMap { $0 }
-        case .excited: return [ClawdAssets.excited.map { Clip(sheet: $0, frames: 2...21, fps: 14) }].compactMap { $0 }
-        case .facepalm: return [ClawdAssets.facepalm.map { Clip(sheet: $0, frames: 2...33, fps: 12) }].compactMap { $0 }
+        case .hello: return Pastime([ClawdAssets.jumping.map(Self.hop), wave].compactMap { $0 })
+        case .arrive: return Pastime.sequence([Self.parachute, Pastime([wave])])
+        case .idea: return Pastime([ClawdAssets.lightbulb.map { Clip(sheet: $0, frames: 2...44, fps: 14) }].compactMap { $0 })
+        case .excited: return Pastime([ClawdAssets.excited.map { Clip(sheet: $0, frames: 2...21, fps: 14) }].compactMap { $0 })
+        case .facepalm: return Pastime([ClawdAssets.facepalm.map { Clip(sheet: $0, frames: 2...33, fps: 12) }].compactMap { $0 })
         case .celebrate:
-            return [ClawdAssets.confetti.map { Clip(sheet: $0, frames: 2...33, fps: 12) },
-                    ClawdAssets.breakDancing.map { Clip(sheet: $0, frames: 2...27, fps: 12) }].compactMap { $0 }
+            return Pastime([ClawdAssets.confetti.map { Clip(sheet: $0, frames: 2...33, fps: 12) },
+                            ClawdAssets.breakDancing.map { Clip(sheet: $0, frames: 2...27, fps: 12) }].compactMap { $0 })
         }
     }
 
@@ -359,7 +364,9 @@ private struct ClawdAnimator {
             let sitDown = Clip(sheet: meditating, frames: 2...12, fps: 10)
             if asleep < sitDown.duration { return Frame(sitDown, at: asleep) }
             let doze = Clip(sheet: meditating, frames: 12...48, fps: 6)
-            return Frame(meditating, doze.looped(at: asleep - sitDown.duration), rate: 8, dozing: asleep)
+            let index = doze.looped(at: asleep - sitDown.duration)
+            return Frame(meditating, index, rate: 8, dozing: asleep,
+                         decals: [Self.book(on: meditating, index, dropping: asleep - sitDown.duration)])
         }
         let fidgets: [Clip] = [
             ClawdAssets.lookingAround.map { Clip(sheet: $0, frames: 4...30, fps: 12) },
@@ -376,6 +383,270 @@ private struct ClawdAnimator {
             if intoFidget < fidget.duration { return Frame(fidget, at: intoFidget) }
         }
         return standing
+    }
+
+    // MARK: - Living in the notch
+
+    /// Something Clawd does on his own: how long it takes, and what he shows `t` seconds in.
+    private struct Pastime {
+        let duration: TimeInterval
+        let frame: (TimeInterval) -> Frame
+
+        init(duration: TimeInterval, frame: @escaping (TimeInterval) -> Frame) {
+            self.duration = duration
+            self.frame = frame
+        }
+
+        /// Clips played one after another; nil without any.
+        init?(_ clips: [Clip]) {
+            guard let last = clips.last else { return nil }
+            duration = clips.reduce(0) { $0 + $1.duration }
+            frame = { t in
+                var t = t
+                for clip in clips.dropLast() {
+                    if t < clip.duration { return Frame(clip, at: t) }
+                    t -= clip.duration
+                }
+                return Frame(last, at: t)
+            }
+        }
+
+        /// The ones there are, one after another; nil without any.
+        static func sequence(_ parts: [Pastime?]) -> Pastime? {
+            let parts = parts.compactMap { $0 }
+            guard let last = parts.last else { return nil }
+            return Pastime(duration: parts.reduce(0) { $0 + $1.duration }) { t in
+                var t = t
+                for part in parts.dropLast() {
+                    if t < part.duration { return part.frame(t) }
+                    t -= part.duration
+                }
+                return last.frame(t)
+            }
+        }
+    }
+
+    /// Floats down into the notch from above the screen under a parachute, lands and lets it go.
+    private static let parachute: Pastime? = {
+        guard let sheet = ClawdAssets.jumping else { return nil }
+        let fall: TimeInterval = 3.2
+        let land = Clip(sheet: sheet, frames: 13...20, fps: 14)
+        let canopy = Decal(Props.parachute, -1, -10)
+        return Pastime(duration: fall + land.duration) { t in
+            guard t < fall else { return Frame(land, at: t - fall) }
+            let p = t / fall
+            let eased = 1 - (1 - p) * (1 - p)  // slows down before touching down
+            // From out of sight above the screen to his feet on the ground: in this frame he's 10 px up in the air.
+            let drop: Double = -26 + 36 * eased
+            let sway: Double = sin(t * 2.6) * 2 * (1 - p)
+            return Frame(sheet, 8, offsetX: CGFloat(sway.rounded()), offsetY: CGFloat(drop.rounded()), decals: [canopy])
+        }
+    }()
+
+    /// What Clawd gets up to when he lives in the notch for good. None of it is what he does at work
+    /// or when Claude needs you, so it can't be taken for news: when he thinks here he stays on his
+    /// feet, where at work he sits down to.
+    private static let pastimes: [Pastime] = {
+        func clip(_ sheet: PixelSheet?, _ frames: ClosedRange<Int>, fps: Double = 12) -> Clip? {
+            sheet.map { Clip(sheet: $0, frames: frames, fps: fps) }
+        }
+        func pastime(_ clips: Clip?...) -> Pastime? { Pastime(clips.compactMap { $0 }) }
+        let dance = clip(ClawdAssets.dancing, 4...38)
+        let hop = ClawdAssets.jumping.map(Self.hop)
+        // The whole routine (shuffle, windmill, headspin, a pose) where the sheet has it, else the shuffle.
+        let breakdance = ClawdAssets.breakDancing.flatMap { sheet in
+            pastime(Clip(sheet: sheet, frames: sheet.frames.count >= 149 ? 2...148 : 2...27, fps: 12))
+        }
+        // Stands thinking with a hand on his chin while the dots in a bubble come and go.
+        let think = ClawdAssets.thinking.flatMap { sheet in
+            pastime(Clip(sheet: sheet, frames: 2...19, fps: 10), Clip(sheet: sheet, frames: 8...19, fps: 10),
+                    Clip(sheet: sheet, frames: [3], fps: 4))
+        }
+
+        // Sits down, dozes off for a little while under an open book and gets back up.
+        let nap = ClawdAssets.meditating.map { sheet in
+            let sitDown = Clip(sheet: sheet, frames: 2...12, fps: 10)
+            let doze = Clip(sheet: sheet, frames: 12...44, fps: 6)
+            let wakeUp = Clip(sheet: sheet, frames: 45...59, fps: 10)
+            let asleep = 4 * doze.duration
+            return Pastime(duration: sitDown.duration + asleep + wakeUp.duration) { t in
+                if t < sitDown.duration { return Frame(sitDown, at: t) }
+                let dozing = t - sitDown.duration
+                if dozing < asleep {
+                    let index = doze.looped(at: dozing)
+                    return Frame(sheet, index, rate: 8, dozing: dozing, decals: [book(on: sheet, index, dropping: dozing)])
+                }
+                // The book stays on until he's back on his feet.
+                let index = wakeUp.frame(at: dozing - asleep)
+                return Frame(sheet, index, rate: wakeUp.fps, decals: index < 54 ? [book(on: sheet, index, dropping: .infinity)] : [])
+            }
+        }
+
+        // Off to the left out of the notch, a few seconds out of sight, and back: walking in facing
+        // right, or floating down under a parachute.
+        let speed: CGFloat = 14  // as when he walks off at the end of a rest
+        let walk: TimeInterval = 4.5  // far enough to be out of sight
+        let gone = -CGFloat(walk) * speed
+        let walkOff = ClawdAssets.walking.map { sheet in
+            let turn = Clip(sheet: sheet, frames: 2...4, fps: 12)
+            let step = Clip(sheet: sheet, frames: 5...24, fps: 12)
+            return Pastime(duration: turn.duration + walk) { t in
+                guard t >= turn.duration else { return Frame(turn, at: t) }
+                return Frame(sheet, step.looped(at: t - turn.duration), offsetX: -CGFloat(t - turn.duration) * speed)
+            }
+        }
+        func away(_ seconds: TimeInterval) -> Pastime? {
+            ClawdAssets.walking.map { sheet in Pastime(duration: seconds) { _ in Frame(sheet, 0, rate: 2, offsetX: gone) } }
+        }
+        let walkBack = ClawdAssets.walking.map { sheet in
+            let step = Clip(sheet: sheet, frames: 5...24, fps: 12)
+            let face = Clip(sheet: sheet, frames: 25...27, fps: 12)
+            return Pastime(duration: walk + face.duration) { t in
+                guard t >= walk else { return Frame(sheet, step.looped(at: t), offsetX: gone + CGFloat(t) * speed, mirrored: false) }
+                return Frame(face, at: t - walk)
+            }
+        }
+        let stroll = walkOff == nil || walkBack == nil ? nil : Pastime.sequence([walkOff, away(5), walkBack])
+        let skydive = walkOff == nil || parachute == nil ? nil : Pastime.sequence([walkOff, away(3), parachute])
+
+        // Props from ClawdProps.swift, over his own frames: standing, or pointing with an arm out.
+
+        // Three wisps rising from (x, y) and fading.
+        func steam(_ t: TimeInterval, x: Int, y: Int) -> [Decal] {
+            (0..<3).map { i in
+                let p = (t / 1.5 + Double(i) / 3).truncatingRemainder(dividingBy: 1)
+                let rise = Int(p * 6)
+                return Decal(p < 0.6 ? Props.steam : Props.steamFading, x + i % 2 + rise / 2 % 2, y - rise)
+            }
+        }
+
+        // A mug of coffee: steam curls up from it, and twice he takes a sip, eyes shut in a smile.
+        let coffee = ClawdAssets.laptop.map { sheet in
+            Pastime(duration: 8) { t in
+                let sip = (1.6..<3.0).contains(t) || (5.0..<6.4).contains(t)
+                let decals = sip
+                    ? [Decal(Props.mug, 23, 8), Decal(Props.happyEyes, 5, 9)] + steam(t, x: 26, y: 7)
+                    : [Decal(Props.mug, 24, 10)] + steam(t, x: 27, y: 9)
+                return Frame(sheet, 0, rate: 12, decals: decals)
+            }
+        }
+
+        // Headphones on, eyes shut, nodding to the beat while notes float off.
+        let music = ClawdAssets.laptop.map { sheet in
+            Pastime(duration: 9) { t in
+                var decals = [Decal(Props.headphones, 1, 5), Decal(Props.closedEyes, 5, 9)]
+                for i in 0..<2 {
+                    let p = (t / 1.8 + Double(i) / 2).truncatingRemainder(dividingBy: 1)
+                    decals.append(Decal(Props.note, 24 + 5 * i + Int(p * 2), 3 - Int(p * 9)))
+                }
+                let nod = t.truncatingRemainder(dividingBy: 0.5) < 0.16
+                return Frame(sheet, 0, rate: 12, offsetY: nod ? 1 : 0, decals: decals)
+            }
+        }
+
+        // Hat on, he holds up a wand: sparkles fly off its star, and he winks.
+        let wizard = ClawdAssets.pointing.map { sheet in
+            let hat = Decal(Props.wizardHat, 2, -5)
+            let spots = [(34, 0), (33, 4), (29, -2), (35, 3), (32, -3), (36, 1)]
+            return Pastime(duration: 6.5) { t in
+                guard (0.8..<5.6).contains(t) else { return Frame(sheet, 0, rate: 8, decals: [hat]) }
+                let u = t - 0.8
+                guard u >= 0.12 else { return Frame(sheet, 18, decals: [hat]) }  // turning to hold it up
+                var decals = [hat, Decal(Props.wand, 27, 4), Decal(Props.star, 30, 1)]
+                for (i, spot) in spots.enumerated() {
+                    let phase = (u * 3 + Double(i) * 0.5).truncatingRemainder(dividingBy: 3)
+                    if phase < 0.5 {
+                        decals.append(Decal(Props.bigSparkle, spot.0 - 1, spot.1 - 1))
+                    } else if phase < 1.2 {
+                        decals.append(Decal(Props.sparkle, spot.0, spot.1))
+                    }
+                }
+                if (2.0..<2.8).contains(u) { decals.append(Decal(Props.wink, 18, 7)) }
+                return Frame(sheet, 24, rate: 12, decals: decals)
+            }
+        }
+
+        // A chef's hat and a frying pan: he tosses the pancake, it turns over in the air and lands.
+        let chef = ClawdAssets.pointing.map { sheet in
+            let hat = Decal(Props.chefHat, 4, -4)
+            return Pastime(duration: 6.5) { t in
+                guard (0.8..<5.6).contains(t) else { return Frame(sheet, 0, rate: 8, decals: [hat]) }
+                let u = t - 0.8
+                guard u >= 0.12 else { return Frame(sheet, 18, decals: [hat]) }
+                let toss = (u - 0.12).truncatingRemainder(dividingBy: 1.2)
+                var decals = [hat, Decal(Props.pan, 27, toss < 0.12 ? 7 : 8)]  // the pan jerks up to throw
+                if toss < 0.8 {
+                    let p = toss / 0.8
+                    let height = Int(4 * p * (1 - p) * 7)
+                    decals.append(Int(p * 4) % 2 == 0 ? Decal(Props.pancakeFlat, 32, 7 - height)
+                                                      : Decal(Props.pancakeEdge, 33, 6 - height))
+                } else {
+                    decals.append(Decal(Props.pancakeFlat, 32, 7))
+                }
+                return Frame(sheet, 24, rate: 16, decals: decals)
+            }
+        }
+
+        return [pastime(clip(ClawdAssets.lookingAround, 4...30)), pastime(clip(ClawdAssets.swaying, 4...48)),
+                pastime(dance), pastime(dance, dance), pastime(clip(ClawdAssets.hula, 6...53)), pastime(hop, hop),
+                pastime(clip(ClawdAssets.excited, 2...21, fps: 14)), breakdance, think, nap, stroll, skydive,
+                coffee, music, wizard, chef]
+            .compactMap { $0 }
+    }()
+
+    /// The open book over Clawd's head while he dozes, rising and falling as he breathes: it drops onto
+    /// his head in the first moments (`dropping`, time since it started to).
+    private static func book(on sheet: PixelSheet, _ index: Int, dropping: TimeInterval) -> Decal {
+        let pixels = sheet.frames[min(index, sheet.frames.count - 1)]
+        let head = pixels.firstIndex { $0 != 255 }.map { $0 / sheet.width } ?? 0
+        let fall = max(0, 4 - Int(dropping * 16))  // from 4 px up, in a quarter of a second
+        return Decal(Props.book, 2, head - Props.book.height + 1 - fall)
+    }
+
+    /// Pastimes are laid out over each stretch this long of the clock.
+    private static let lifeStretch: TimeInterval = 10 * 60
+
+    /// When Clawd lives in the notch for good: a pause of a few seconds, a pastime, another pause…
+    /// Worked out from the clock, so he carries on unbroken from one session's rest to the next, or
+    /// to the notch with nothing else in it. A pastime already under way when he came to rest
+    /// (`restingSince`) is sat out: he'd show up in the middle of it.
+    private func life(at date: Date, restingSince: Date) -> Frame {
+        let now = date.timeIntervalSinceReferenceDate
+        let stretch = (now / Self.lifeStretch).rounded(.down)
+        var random = SeededRandom(seed: UInt64(stretch))
+        var start = stretch * Self.lifeStretch
+        let end = start + Self.lifeStretch
+        var last = -1
+        while !Self.pastimes.isEmpty {
+            start += Double.random(in: 3...8, using: &random)
+            // Never the same twice in a row.
+            var pick = Int.random(in: 0..<Self.pastimes.count, using: &random)
+            if pick == last { pick = (pick + 1) % Self.pastimes.count }
+            last = pick
+            let pastime = Self.pastimes[pick]
+            guard now >= start, start + pastime.duration <= end else { break }
+            if now < start + pastime.duration {
+                return start >= restingSince.timeIntervalSinceReferenceDate ? pastime.frame(now - start) : standing
+            }
+            start += pastime.duration
+        }
+        return standing
+    }
+}
+
+/// The same seed gives the same numbers: each stretch of the clock always plays out the same way.
+private struct SeededRandom: RandomNumberGenerator {
+    var state: UInt64
+
+    init(seed: UInt64) { state = seed }
+
+    /// SplitMix64.
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
     }
 }
 
@@ -435,17 +706,23 @@ private final class ClawdLayerView: NSView {
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        sprite.contents = SpriteImages.image(sheet, frame.index)
-        // Mirrored, with the sheet's anchor on Clawd's feet.
+        sprite.contents = SpriteImages.image(sheet, frame.index, mirrored: frame.mirrored, decals: frame.decals)
+        // The sheet's anchor on Clawd's feet; props may make the picture bigger than the sheet.
         let feet = ClawdAnimator.feet
-        sprite.frame = CGRect(x: feet.x + sheet.anchor.x - CGFloat(sheet.width) + frame.offsetX,
-                              y: feet.y - sheet.anchor.y,
-                              width: CGFloat(sheet.width), height: CGFloat(sheet.height))
+        let box = SpriteImages.bounds(sheet, frame.decals)
+        let left = frame.mirrored
+            ? feet.x + sheet.anchor.x - CGFloat(box.width + box.minX)
+            : feet.x - sheet.anchor.x + CGFloat(box.minX)
+        sprite.frame = CGRect(x: left + frame.offsetX,
+                              y: feet.y - sheet.anchor.y + CGFloat(box.minY) + frame.offsetY,
+                              width: CGFloat(box.width), height: CGFloat(box.height))
+        // Beside his head, or from above a book on it.
+        let zStart = frame.decals.isEmpty ? feet.y - 14 : sprite.frame.minY - 5
         for (z, offset) in zip(zs, [0.0, 0.5]) {
             z.isHidden = frame.dozing == nil
             guard let dozing = frame.dozing else { continue }
             let p = (dozing / 2.6 + offset).truncatingRemainder(dividingBy: 1)
-            z.position = CGPoint(x: feet.x + 4 + p * 4, y: feet.y - 14 - p * 12)
+            z.position = CGPoint(x: feet.x + 4 + p * 4, y: zStart - p * 12)
             z.opacity = Float(0.75 * (1 - p))
         }
         CATransaction.commit()
@@ -462,25 +739,51 @@ private final class ClawdLayerView: NSView {
 private enum SpriteImages {
     private static let cache: NSCache<NSString, CGImage> = {
         let cache = NSCache<NSString, CGImage>()
-        cache.countLimit = 300  // a few kilobytes each
+        cache.countLimit = 600  // a few kilobytes each
         return cache
     }()
 
-    static func image(_ sheet: PixelSheet, _ index: Int) -> CGImage? {
-        let key = "\(sheet.name)#\(index)" as NSString
+    /// The picture of a frame with its props: where the sheet's own top-left corner is in it (minus),
+    /// and its size.
+    static func bounds(_ sheet: PixelSheet, _ decals: [Decal]) -> (minX: Int, minY: Int, width: Int, height: Int) {
+        let minX = decals.map(\.x).reduce(0, min), minY = decals.map(\.y).reduce(0, min)
+        let maxX = decals.map { $0.x + $0.art.width }.reduce(sheet.width, max)
+        let maxY = decals.map { $0.y + $0.art.height }.reduce(sheet.height, max)
+        return (minX, minY, maxX - minX, maxY - minY)
+    }
+
+    /// `mirrored`: facing left, the way Clawd usually stands in the notch. `decals` are drawn over him.
+    static func image(_ sheet: PixelSheet, _ index: Int, mirrored: Bool = true, decals: [Decal] = []) -> CGImage? {
+        let key = ("\(sheet.name)#\(index)\(mirrored ? "" : ">")" + decals.map { "|\($0.art.name)@\($0.x),\($0.y)" }.joined()) as NSString
         if let image = cache.object(forKey: key) { return image }
+        let box = bounds(sheet, decals)
+        var rgba = [UInt8](repeating: 0, count: box.width * box.height * 4)
+        func offset(_ x: Int, _ y: Int) -> Int {
+            let column = x - box.minX
+            return ((y - box.minY) * box.width + (mirrored ? box.width - 1 - column : column)) * 4
+        }
         let pixels = sheet.frames[min(index, sheet.frames.count - 1)]
         let colors = sheet.palette.map { [UInt8($0.r * 255), UInt8($0.g * 255), UInt8($0.b * 255), 255] }
-        var rgba = [UInt8](repeating: 0, count: sheet.width * sheet.height * 4)
         for y in 0..<sheet.height {
             for x in 0..<sheet.width {
                 let v = pixels[y * sheet.width + x]
                 guard v != 255 else { continue }
-                let at = (y * sheet.width + sheet.width - 1 - x) * 4
+                let at = offset(x, y)
                 rgba.replaceSubrange(at..<(at + 4), with: colors[Int(v)])
             }
         }
-        guard let image = makeImage(rgba, width: sheet.width, height: sheet.height) else { return nil }
+        for decal in decals {
+            let art = decal.art
+            for y in 0..<art.height {
+                for x in 0..<art.width {
+                    let from = (y * art.width + x) * 4
+                    guard art.rgba[from + 3] > 0 else { continue }
+                    let at = offset(decal.x + x, decal.y + y)
+                    rgba.replaceSubrange(at..<(at + 4), with: art.rgba[from..<(from + 4)])
+                }
+            }
+        }
+        guard let image = makeImage(rgba, width: box.width, height: box.height) else { return nil }
         cache.setObject(image, forKey: key)
         return image
     }

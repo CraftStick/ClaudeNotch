@@ -123,11 +123,15 @@ Click the notch to bring forward the app the session runs in (Terminal, iTerm, V
 
 When Claude Code asks for permission, the notch shows **Allow** (⌃⌥⌘Y), **Deny** (⌃⌥⌘N) and **Always** — add the rule Claude Code suggests so it won't ask again. The shortcuts only work while a request is showing, need no macOS permissions, and don't take everyday shortcuts like ⌘N away from other apps. In the Claude app and IDE extensions the usual permission dialog appears too, and whichever answer comes first wins. In the terminal the notch waits 20 seconds, then hands the question back to the usual prompt (or click **In app** right away).
 
+When Claude asks you a question, the notch shows its options as buttons: click one (or press ⌃⌥⌘1…4) and the answer goes straight back to Claude Code, the way its own dialog would send it. Several questions come one after another; where more than one option may be picked, tick them and click **Done** (⌃⌥⌘Y). To type an answer of your own, click **Answer in app**. In the terminal a question waits a minute and a half before going back to the usual prompt.
+
 <p align="center"><img src="docs/permission.png" width="560" alt="A permission request in the notch"></p>
 
 ### Clawd
 
-Clawd lives in the notch and shows what Claude is up to: gets out his laptop and types while Claude works, sits down to think, moves to a desktop computer for long commands, waves when Claude needs you, hops for joy when it's done, and dozes off while he rests.
+Clawd lives in the notch and shows what Claude is up to: gets out his laptop and types while Claude works, sits down to think, moves to a desktop computer for long commands, waves when Claude needs you, hops for joy when it's done, and dozes off under an open book while he rests.
+
+Want him around all the time? Clawd's menu → **Clawd stays in the notch**: he floats in under a parachute and lives in the notch for good, with pastimes of his own: coffee, music in headphones, wizardry, pancakes, dances, a breakdance, a nap, a walk out of the notch and back.
 
 <p align="center">
 <img src="docs/clawd/typing.gif" width="96" alt="Typing">
@@ -156,14 +160,14 @@ Claude Code ──hook (JSON on stdin)──▶ claude-notch-hook ──Unix soc
 - **`Sources/Hook/main.swift`** — a tiny binary Claude Code runs on every event. It forwards the JSON to the app and prints the answer, if there is one. It always exits 0, silently, even when the app isn't running, so it never gets in Claude Code's way.
 - **`Store.swift`** — turns hook events into the notch's state and answers permission requests.
 - **`NotchView.swift`**, **`NotchRim.swift`**, **`DetailsCard.swift`** — the interface: the shape around the notch and its rim, the open states, the cards.
-- **`ClawdAnimation.swift`**, **`Clawd.swift`** — Clawd's animations ([all of them](docs/clawd/README.md)).
+- **`ClawdAnimation.swift`**, **`ClawdProps.swift`**, **`Clawd.swift`** — Clawd's animations and his props ([all of them](docs/clawd/README.md)).
 - **`TranscriptWatcher.swift`** — watches the session file: Claude Code sends no hook on Esc, and token usage lives there too.
 - **`ClaudeHooks.swift`** — connects the app to Claude Code: adds, updates and removes its hooks in `~/.claude/settings.json`, the same ones `install-hooks.sh` writes.
 - **`AppFocus.swift`**, **`HotKeys.swift`**, **`SocketServer.swift`**, **`Language.swift`** — click to focus (the hook tells the app which terminal tab a session runs in, by its tty), ⌃⌥⌘Y/⌃⌥⌘N, the socket, the two languages.
 
 **Privacy.** Everything stays on your Mac, no network. The hook sends events only to the socket `~/Library/Application Support/ClaudeNotch/notch.sock`, which only your user can open. The app reads the session files in `~/.claude/projects` only to notice Esc, to count tokens, to show what Claude is thinking about and, at launch, to find sessions already at work. To bring a Terminal or iTerm tab forward, it asks that terminal over AppleScript for the tab with the session's tty, and does nothing else with it.
 
-**Resources.** About 22 MB of memory. While Claude works, Clawd's animation takes 1–2% of one CPU core (measured on an M2 MacBook); with nothing in the notch the app just waits and wakes up less than once a second. The flowing rim costs the app nothing, but macOS redraws that corner of the menu bar for it (about 7% of a core for WindowServer while Claude works); it holds still otherwise, and you can switch it off.
+**Resources.** About 22 MB of memory. While Claude works, Clawd's animation takes 1–2% of one CPU core (measured on an M2 MacBook); with nothing in the notch the app just waits and wakes up less than once a second (with Clawd staying in the notch for good, his animation never stops). The flowing rim costs the app nothing, but macOS redraws that corner of the menu bar for it (about 7% of a core for WindowServer while Claude works); it holds still otherwise, and you can switch it off.
 
 ## Troubleshooting
 
