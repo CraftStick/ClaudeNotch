@@ -302,8 +302,8 @@ private struct DetailRow: View {
             IconBadge(symbol: shown.symbol, color: phaseColor(session.phase))
             TitleAndDetail(title: shown.title, activity: shown)
             Spacer(minLength: 8)
-            if let label = session.title ?? (session.project.isEmpty ? nil : session.project) {
-                Text(label)
+            if !session.project.isEmpty {
+                Text(session.project)
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.4))
                     .lineLimit(1)

@@ -101,9 +101,6 @@ struct Session: Equatable {
     var activity = Activity.thinking
     /// The message that started this turn.
     var task = ""
-    /// The session's name, if it has one: given by you (`customTitle`) or made up by Claude Code.
-    var title: String?
-    var customTitle = false
     /// Claude's task list for this turn.
     var tasks = TaskList()
     /// What Claude is thinking about: the gist of its thinking or of what it wrote, and when it wrote
@@ -249,12 +246,6 @@ final class Store: ObservableObject {
         transcripts.onInterrupt = { [weak self] id in self?.interrupted(id) }
         transcripts.onUsage = { [weak self] id, usage in self?.recordUsage(id, usage) }
         transcripts.onThought = { [weak self] id, thought, written in self?.recordThought(id, thought, written: written) }
-        transcripts.onTitle = { [weak self] id, title, custom in
-            guard let self, var s = self.sessions[id], custom || !s.customTitle, s.title != title else { return }
-            s.title = title
-            s.customTitle = custom
-            self.sessions[id] = s
-        }
         pruneTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             self?.prune()
         }

@@ -18,8 +18,6 @@ final class TranscriptWatcher {
     var onUsage: (String, TranscriptUsage) -> Void = { _, _ in }
     /// The gist of a thinking block or a message Claude just wrote, and when it was written.
     var onThought: (String, String, Date) -> Void = { _, _, _ in }
-    /// The session's name: one you gave it (`custom` is true), or the one Claude Code made up.
-    var onTitle: (String, String, Bool) -> Void = { _, _, _ in }
     private var watches: [String: Watch] = [:]
 
     private final class Watch {
@@ -36,8 +34,6 @@ final class TranscriptWatcher {
 
     private static let interruptMarker = Data("[Request interrupted by user".utf8)
     private static let usageMarker = Data("\"usage\"".utf8)
-    private static let customTitleMarker = Data("\"custom-title\"".utf8)
-    private static let aiTitleMarker = Data("\"ai-title\"".utf8)
 
     func watch(sessionID: String, path: String) {
         if watches[sessionID]?.path == path { return }
@@ -65,11 +61,6 @@ final class TranscriptWatcher {
         if let usage = Self.lastUsage(path: path, end: end) {
             onUsage(sessionID, usage)
         }
-        // The name can be anywhere in a long transcript: looked for off the main thread.
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            guard let (title, custom) = Self.lastTitle(path: path) else { return }
-            DispatchQueue.main.async { self?.onTitle(sessionID, title, custom) }
-        }
     }
 
     func stop(sessionID: String) {
@@ -94,10 +85,6 @@ final class TranscriptWatcher {
             if line.range(of: Self.usageMarker) != nil, let (message, written) = Self.assistantMessage(line) {
                 if let usage = Self.usage(in: message, initial: false) { onUsage(sessionID, usage) }
                 if let thought = Self.thought(in: message) { onThought(sessionID, thought, written ?? Date()) }
-            }
-            if line.range(of: Self.customTitleMarker) != nil || line.range(of: Self.aiTitleMarker) != nil,
-               let (title, custom) = Self.title(in: line) {
-                onTitle(sessionID, title, custom)
             }
         }
         watch.partialLine = Data(buffer)
@@ -184,33 +171,7 @@ final class TranscriptWatcher {
         return nil
     }
 
-    // MARK: - Names and the last reply
-
-    /// `{"type":"custom-title","customTitle":…}` or `{"type":"ai-title","aiTitle":…}`.
-    private static func title(in line: Data) -> (String, Bool)? {
-        guard let entry = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { return nil }
-        switch entry["type"] as? String {
-        case "custom-title": return (entry["customTitle"] as? String).flatMap { $0.isEmpty ? nil : ($0, true) }
-        case "ai-title": return (entry["aiTitle"] as? String).flatMap { $0.isEmpty ? nil : ($0, false) }
-        default: return nil
-        }
-    }
-
-    /// The latest name in the transcript: the one you gave, else the one Claude Code made up.
-    /// Searched from the end of the mapped file, so even a long transcript is quick.
-    private static func lastTitle(path: String) -> (String, Bool)? {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped) else { return nil }
-        for marker in [customTitleMarker, aiTitleMarker] {
-            var end = data.endIndex
-            while let hit = data.range(of: marker, options: .backwards, in: data.startIndex..<end) {
-                let start = data[..<hit.lowerBound].lastIndex(of: UInt8(ascii: "\n")).map { $0 + 1 } ?? data.startIndex
-                let stop = data[hit.upperBound...].firstIndex(of: UInt8(ascii: "\n")) ?? data.endIndex
-                if let found = title(in: Data(data[start..<stop])) { return found }
-                end = hit.lowerBound
-            }
-        }
-        return nil
-    }
+    // MARK: - The last reply
 
     /// The text of Claude's last message in the transcript: for when a turn ends.
     static func lastReply(path: String) -> String? {

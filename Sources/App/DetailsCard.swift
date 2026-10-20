@@ -323,7 +323,7 @@ private struct SessionRow: View {
                 .fill(phaseColor(session.phase == .tool ? .thinking : session.phase))
                 .frame(width: 7, height: 7)
                 .frame(width: 13)
-            Text(session.title ?? (session.project.isEmpty ? tr("сессия", "session") : session.project))
+            Text(session.project.isEmpty ? tr("сессия", "session") : session.project)
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(.white.opacity(0.85))
                 .lineLimit(1)
