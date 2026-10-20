@@ -10,6 +10,8 @@
     <string>Claude Notch</string>
     <key>CFBundleExecutable</key>
     <string>ClaudeNotch</string>
+    <key>CFBundleIconFile</key>
+    <string>ClaudeNotch</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

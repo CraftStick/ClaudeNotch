@@ -14,10 +14,11 @@ DEST="$HOME/Applications/ClaudeNotch.app"
 FLAGS=(-O -swift-version 5 -target "$(uname -m)-apple-macos14.0")
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc "${FLAGS[@]}" -parse-as-library Sources/App/*.swift -o "$APP/Contents/MacOS/ClaudeNotch"
 swiftc "${FLAGS[@]}" Sources/Hook/main.swift -o "$APP/Contents/MacOS/claude-notch-hook"
 cp Info.plist "$APP/Contents/Info.plist"
+cp Resources/ClaudeNotch.icns "$APP/Contents/Resources/"
 # Folders like ~/Desktop (iCloud) give files extended attributes that codesign rejects.
 xattr -cr "$APP"
 codesign --force --deep --sign - "$APP"
