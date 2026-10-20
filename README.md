@@ -92,7 +92,9 @@ Open the app itself (at login, along with a new Claude Code session, or again fr
 
 Rest the pointer on the notch and a card opens: the task, what's happening now (with the description and the full command), subagents, recent actions with the size of each edit, other sessions, and at the bottom the turn's line changes, tokens and context fill. When Claude asks you a question, its options are there too. And when a session at work has given no sign of life for five minutes, the card says "Now · quiet for 6 min": it may have hung, or a command is taking its time.
 
-Click the notch to bring forward the app the session runs in (Terminal, iTerm, VS Code, Cursor, the Claude app…). In Terminal and iTerm it's the very tab the session runs in; the first time, macOS asks whether Claude Notch may control the terminal.
+To look at another session, click it under "Other sessions": the card switches to it, and the one it showed before moves into the list, so you can go round them all without leaving the notch. Once the pointer leaves, the notch is back on the freshest session.
+
+Click the notch to bring forward the app the session runs in (Terminal, iTerm, VS Code, Cursor, the Claude app…); on the card, the session it shows. In Terminal and iTerm it's the very tab the session runs in; the first time, macOS asks whether Claude Notch may control the terminal.
 
 <p align="center"><img src="docs/card.png" width="560" alt="The card you get on hover"></p>
 

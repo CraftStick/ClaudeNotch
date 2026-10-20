@@ -248,6 +248,8 @@ final class Store: ObservableObject {
     @Published private(set) var prompts: [PermissionPrompt] = []  // oldest first
     /// The pointer rests on the notch: show the details card.
     @Published private(set) var hovering = false
+    /// A session clicked in the card's list of others: the card shows it until the pointer leaves.
+    @Published private(set) var pickedID: String?
     /// Shown when the app is opened and nothing else is in the notch: "Ready to work", a click opens Claude.
     @Published private(set) var greeting: Session?
     static let greetingID = "greeting"
@@ -287,9 +289,16 @@ final class Store: ObservableObject {
 
     var prompt: PermissionPrompt? { prompts.first }
 
-    /// What the hover card shows: the busy session, or else the last one that finished.
+    /// What the hover card shows: the session picked in it, the busy one, or else the last one that finished.
     var detailsSession: Session? {
-        working.first ?? sessions.values.max { $0.lastEvent < $1.lastEvent }
+        if let id = pickedID, let s = sessions[id] { return s }
+        return working.first ?? sessions.values.max { $0.lastEvent < $1.lastEvent }
+    }
+
+    /// Shows another session in the card; a click on the card then opens that one.
+    func pick(_ id: String) {
+        guard sessions[id] != nil else { return }
+        pickedID = id
     }
 
     /// How long Clawd stays in the notch after a turn ends.
@@ -326,6 +335,7 @@ final class Store: ObservableObject {
 
     /// Brings the app the session runs in to the front; the greeting opens Claude and goes away.
     func focus(_ id: String) {
+        EventLog.append("Focus \(id)")
         if id == Self.greetingID {
             greeting = nil
             if let app = AppFocus.claudeApp { AppFocus.open(app) }
@@ -384,7 +394,8 @@ final class Store: ObservableObject {
 
     /// Called often with where the pointer is; opens the card after a short rest, so passing over the
     /// menu bar doesn't flicker, and closes it as soon as the pointer leaves: all the way down, not to
-    /// the row it opened over, which a question would keep up until it's answered.
+    /// the row it opened over, which a question would keep up until it's answered. The next time the
+    /// card opens on the freshest session again.
     func pointer(inside: Bool) {
         let wanted = inside && prompt == nil && (detailsSession ?? greeting) != nil
         guard wanted != hovering else {
@@ -397,7 +408,10 @@ final class Store: ObservableObject {
             guard let self else { return }
             self.hoverWork = nil
             self.hovering = wanted
-            if !wanted { self.collapse() }
+            if !wanted {
+                self.pickedID = nil
+                self.collapse()
+            }
         }
         hoverWork = work
         // Leaving waits one more look at the pointer (it's polled every 0.1 s), for a pointer on the edge.

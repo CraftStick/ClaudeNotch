@@ -71,7 +71,8 @@ enum DetailsLayout {
 struct DetailsCard: View {
     let session: Session
     let others: [Session]
-    let focus: (String) -> Void
+    /// Another session was clicked: show it in the card.
+    let pick: (String) -> Void
 
     /// Between tools Claude is thinking; the last tool has already moved to the history. Unless it
     /// failed: that stays until Claude writes its next thought.
@@ -114,7 +115,7 @@ struct DetailsCard: View {
             if !others.isEmpty {
                 section(tr("Другие сессии", "Other sessions")) {
                     ForEach(others.prefix(DetailsLayout.maxOtherRows), id: \.id) { other in
-                        SessionRow(session: other).onTapGesture { focus(other.id) }
+                        SessionRow(session: other).onTapGesture { pick(other.id) }
                     }
                 }
             }
@@ -350,7 +351,7 @@ private struct HistoryRow: View {
     }
 }
 
-/// Another session: its state, project and what it is doing; a click opens it.
+/// Another session: its state, project and what it is doing; a click shows it in the card.
 private struct SessionRow: View {
     let session: Session
 
@@ -370,8 +371,8 @@ private struct SessionRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 4)
-            Image(systemName: "arrow.up.forward.app")
-                .font(.system(size: 10))
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.35))
         }
         .frame(height: DetailsLayout.row)
