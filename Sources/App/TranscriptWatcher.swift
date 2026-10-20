@@ -11,11 +11,13 @@ struct TranscriptUsage {
 }
 
 /// Tails the transcripts of busy sessions. Claude Code sends no hook event for an Esc interrupt,
-/// it only appends a "[Request interrupted by user]" message; and hooks don't carry token usage,
-/// but every assistant message in the transcript does.
+/// it only appends a "[Request interrupted by user]" message; and hooks carry neither token usage
+/// nor what Claude thinks and says between tools, but the assistant messages in the transcript do.
 final class TranscriptWatcher {
     var onInterrupt: (String) -> Void = { _ in }
     var onUsage: (String, TranscriptUsage) -> Void = { _, _ in }
+    /// The gist of a thinking block or a message Claude just wrote, and when it was written.
+    var onThought: (String, String, Date) -> Void = { _, _, _ in }
     private var watches: [String: Watch] = [:]
 
     private final class Watch {
@@ -80,8 +82,9 @@ final class TranscriptWatcher {
                 onInterrupt(sessionID)
                 return
             }
-            if line.range(of: Self.usageMarker) != nil, let usage = Self.usage(in: line, initial: false) {
-                onUsage(sessionID, usage)
+            if line.range(of: Self.usageMarker) != nil, let (message, written) = Self.assistantMessage(line) {
+                if let usage = Self.usage(in: message, initial: false) { onUsage(sessionID, usage) }
+                if let thought = Self.thought(in: message) { onThought(sessionID, thought, written ?? Date()) }
             }
         }
         watch.partialLine = Data(buffer)
@@ -97,24 +100,65 @@ final class TranscriptWatcher {
         var lines = data.split(separator: UInt8(ascii: "\n"))
         if start > 0, !lines.isEmpty { lines.removeFirst() }  // probably cut in half
         for line in lines.reversed() where line.range(of: usageMarker) != nil {
-            if let usage = usage(in: Data(line), initial: true) { return usage }
+            if let (message, _) = assistantMessage(Data(line)), let usage = usage(in: message, initial: true) { return usage }
         }
         return nil
     }
 
-    /// `{"type":"assistant","isSidechain":false,"message":{"id":…,"usage":{"input_tokens":…,
-    /// "cache_creation_input_tokens":…,"cache_read_input_tokens":…,"output_tokens":…}}}`
-    private static func usage(in line: Data, initial: Bool) -> TranscriptUsage? {
+    private static let timestamps: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    /// The main agent's message in `{"type":"assistant","isSidechain":false,"timestamp":…,"message":{…}}`.
+    private static func assistantMessage(_ line: Data) -> ([String: Any], Date?)? {
         guard let entry = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
               entry["type"] as? String == "assistant",
               entry["isSidechain"] as? Bool != true,
-              let message = entry["message"] as? [String: Any],
-              let usage = message["usage"] as? [String: Any] else { return nil }
+              let message = entry["message"] as? [String: Any] else { return nil }
+        return (message, (entry["timestamp"] as? String).flatMap(timestamps.date(from:)))
+    }
+
+    /// `{"id":…,"usage":{"input_tokens":…,"cache_creation_input_tokens":…,"cache_read_input_tokens":…,"output_tokens":…}}`
+    private static func usage(in message: [String: Any], initial: Bool) -> TranscriptUsage? {
+        guard let usage = message["usage"] as? [String: Any] else { return nil }
         func n(_ key: String) -> Int { (usage[key] as? NSNumber)?.intValue ?? 0 }
         let output = n("output_tokens")
         let context = n("input_tokens") + n("cache_creation_input_tokens") + n("cache_read_input_tokens") + output
         guard context > 0 else { return nil }
         return TranscriptUsage(messageID: message["id"] as? String ?? "", context: context, output: output, initial: initial)
+    }
+
+    /// `"content":[{"type":"thinking","thinking":…}]` or `[{"type":"text","text":…}]`, one block per
+    /// line as Claude Code writes them. A thinking block is often empty: only some models show it.
+    private static func thought(in message: [String: Any]) -> String? {
+        let blocks = message["content"] as? [[String: Any]] ?? []
+        for block in blocks.reversed() {
+            let text: String?
+            switch block["type"] as? String {
+            case "thinking": text = block["thinking"] as? String
+            case "text": text = block["text"] as? String
+            default: text = nil
+            }
+            if let text, let gist = gist(text) { return gist }
+        }
+        return nil
+    }
+
+    /// The first line with words in it, without Markdown marks: a thinking block often starts with
+    /// a bold title ("**Planning the fix**"), a message with what Claude is about to do.
+    private static func gist(_ text: String) -> String? {
+        var inCode = false
+        for raw in text.split(whereSeparator: \.isNewline) {
+            var line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("```") { inCode.toggle() }
+            if inCode || line.hasPrefix("```") || line.hasPrefix("|") { continue }  // code, tables
+            for mark in ["**", "__", "`"] { line = line.replacingOccurrences(of: mark, with: "") }
+            line = String(line.drop { "#>-*• ".contains($0) })
+            if line.contains(where: \.isLetter) { return String(line.prefix(200)) }
+        }
+        return nil
     }
 
     /// Only a user text message counts: the marker can also appear inside tool input or output.

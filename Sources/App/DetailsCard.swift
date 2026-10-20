@@ -24,7 +24,7 @@ enum DetailsLayout {
     }
 
     static func nowHeight(_ a: Activity) -> CGFloat {
-        let lines = 1 + (a.note.isEmpty ? 0 : 1) + detailLines(a)
+        let lines = 1 + (a.aside.isEmpty ? 0 : 1) + detailLines(a)
         return max(30, CGFloat(lines) * line + CGFloat(lines - 1))
     }
 
@@ -64,7 +64,7 @@ struct DetailsCard: View {
 
     /// Between tools Claude is thinking; the last tool has already moved to the history.
     static func now(_ s: Session) -> Activity {
-        s.phase == .thinking ? .thinking : s.activity
+        s.phase == .thinking ? .thinking(about: s.thought) : s.activity
     }
 
     var body: some View {
@@ -182,7 +182,7 @@ private struct NowRow: View {
     var body: some View {
         let detailLines = DetailsLayout.detailLines(activity)
         // Up to two lines fit beside the icon: center them on it. Longer text starts at its top.
-        let lines = 1 + (activity.note.isEmpty ? 0 : 1) + detailLines
+        let lines = 1 + (activity.aside.isEmpty ? 0 : 1) + detailLines
         HStack(alignment: lines <= 2 ? .center : .top, spacing: 10) {
             IconBadge(symbol: activity.symbol, color: phaseColor(phase))
             VStack(alignment: .leading, spacing: 1) {
@@ -194,8 +194,8 @@ private struct NowRow: View {
                     DiffText(added: activity.added, removed: activity.removed)
                 }
                 .frame(height: DetailsLayout.line)
-                if !activity.note.isEmpty {
-                    Text(activity.note)
+                if !activity.aside.isEmpty {
+                    Text(activity.aside)
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.75))
                         .lineLimit(1)
@@ -206,7 +206,7 @@ private struct NowRow: View {
                         .font(activity.monospaced ? .system(size: 11.5, design: .monospaced) : .system(size: 12))
                         .foregroundStyle(.white.opacity(0.55))
                         .lineLimit(detailLines)
-                        .truncationMode(.middle)
+                        .truncationMode(activity.prose ? .tail : .middle)
                         .frame(height: CGFloat(detailLines) * DetailsLayout.line, alignment: .topLeading)
                 }
             }
@@ -307,7 +307,7 @@ private struct SessionRow: View {
 
     private var status: String {
         switch session.phase {
-        case .thinking: return tr("думает", "thinking")
+        case .thinking: return session.thought.isEmpty ? tr("думает", "thinking") : session.thought
         case .tool: return session.activity.headline
         case .waiting: return tr("ждёт тебя", "waiting for you")
         case .done: return tr("готово", "done")

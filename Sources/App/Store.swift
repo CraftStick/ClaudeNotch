@@ -24,8 +24,20 @@ struct Activity: Equatable {
     var command = false
     /// A Task/Agent call: subagents are at work.
     var agent = false
+    /// `detail` is a sentence (a prompt, a thought): cut it at the end, not in the middle like a path.
+    var prose = false
+    /// Why Claude runs this tool, in its own words: what it wrote around the call. Only for tools
+    /// without a note of their own.
+    var reason = ""
 
-    static var thinking: Activity { Activity(symbol: "sparkle", title: tr("Думает…", "Thinking…"), detail: "") }
+    /// The line under the title in the card: the tool's own note, or else Claude's reason.
+    var aside: String { note.isEmpty ? reason : note }
+
+    static var thinking: Activity { thinking(about: "") }
+
+    static func thinking(about thought: String) -> Activity {
+        Activity(symbol: "sparkle", title: tr("Думает…", "Thinking…"), detail: thought, prose: true)
+    }
 
     /// One readable line for lists: "Читает файл · Store.swift", or for a command what it does
     /// ("Собрать и установить приложение") rather than the command itself.
@@ -89,6 +101,10 @@ struct Session: Equatable {
     var activity = Activity.thinking
     /// The message that started this turn.
     var task = ""
+    /// What Claude is thinking about: the gist of its thinking or of what it wrote, and when it wrote
+    /// it. The next tool takes it as its reason.
+    var thought = ""
+    var thoughtWritten = Date.distantPast
     /// Finished actions of this turn, oldest first (the last few only).
     var history: [Activity] = []
     var agents: [SubAgent] = []
@@ -157,6 +173,7 @@ struct Session: Equatable {
         actions = 0
         history = []
         currentTool = nil
+        thought = ""
         linesAdded = 0
         linesRemoved = 0
         turnOutputTokens = 0
@@ -221,6 +238,7 @@ final class Store: ObservableObject {
         UserDefaults.standard.register(defaults: [Self.soundsKey: true])
         transcripts.onInterrupt = { [weak self] id in self?.interrupted(id) }
         transcripts.onUsage = { [weak self] id, usage in self?.recordUsage(id, usage) }
+        transcripts.onThought = { [weak self] id, thought, written in self?.recordThought(id, thought, written: written) }
         pruneTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             self?.prune()
         }
@@ -398,7 +416,7 @@ final class Store: ObservableObject {
             s.phase = .thinking
             s.startTurn(at: now)
             s.task = String(prompt.split(whereSeparator: \.isNewline).joined(separator: " ").prefix(300))
-            s.activity = Activity(symbol: "sparkle", title: tr("Взялся за задачу", "New task"), detail: oneLine(prompt))
+            s.activity = Activity(symbol: "sparkle", title: tr("Взялся за задачу", "New task"), detail: oneLine(prompt), prose: true)
             s.play(.idea, at: now)
             commit(s, expandFor: 3)
 
@@ -408,6 +426,7 @@ final class Store: ObservableObject {
                 s.task = ""
             }
             s.actions += 1
+            let previousTool = s.recentTools.last ?? .distantPast
             s.recentTools = Array((s.recentTools + [now]).suffix(8))
             if toolName == "Task" || toolName == "Agent" {
                 s.pendingAgents.append([toolInput["subagent_type"] as? String ?? "", oneLine(toolInput["description"] as? String ?? "")])
@@ -421,6 +440,12 @@ final class Store: ObservableObject {
             } else {
                 s.phase = .tool
                 s.activity = Describe.tool(toolName, toolInput)
+                // What Claude wrote since its previous tool is why it runs this one. (Written before
+                // that tool, it was about that one and only reached the transcript after it.)
+                if !s.activity.quiet, !s.thought.isEmpty {
+                    if s.activity.note.isEmpty, s.thoughtWritten > previousTool { s.activity.reason = s.thought }
+                    s.thought = ""
+                }
                 s.currentTool = s.activity
                 commit(s, expandFor: s.activity.quiet ? nil : 2.5)
             }
@@ -545,6 +570,26 @@ final class Store: ObservableObject {
         }
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         return s.host == nil || front != s.host
+    }
+
+    /// Claude wrote down a thought or a message: the notch opens on what it thinks about, or on why it
+    /// runs the tool it has just started. Claude Code writes the text out around the time of the call,
+    /// often a moment after the tool's hook.
+    private func recordThought(_ id: String, _ thought: String, written: Date) {
+        guard var s = sessions[id] else { return }
+        switch s.phase {
+        case .thinking:
+            s.thought = thought
+            s.thoughtWritten = written
+            s.lastEvent = Date()
+            s.activity = .thinking(about: thought)
+        case .tool where s.activity.aside.isEmpty && !s.activity.quiet:
+            s.activity.reason = thought
+            if s.currentTool?.aside.isEmpty == true { s.currentTool?.reason = thought }
+        default:
+            return
+        }
+        commit(s, expandFor: 3)
     }
 
     private func recordUsage(_ id: String, _ usage: TranscriptUsage) {

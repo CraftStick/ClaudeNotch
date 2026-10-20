@@ -238,12 +238,14 @@ private struct TitleAndDetail: View {
             Text(title)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
+                .lineLimit(1)
+                .truncationMode(.middle)
             if !activity.detail.isEmpty {
                 Text(activity.detail)
                     .font(activity.monospaced ? .system(size: 11.5, design: .monospaced) : .system(size: 12))
                     .foregroundStyle(.white.opacity(0.6))
                     .lineLimit(1)
-                    .truncationMode(.middle)
+                    .truncationMode(activity.prose ? .tail : .middle)
             }
         }
     }
@@ -252,10 +254,25 @@ private struct TitleAndDetail: View {
 private struct DetailRow: View {
     let session: Session
 
+    /// The line under the title says why, when Claude said so: its reason for the tool (the file or
+    /// pattern then moves up into the title), or a command's description, which reads better than the code.
+    private var shown: Activity {
+        let a = session.activity
+        if !a.reason.isEmpty {
+            let title = a.detail.isEmpty ? a.title : "\(a.title) · \(a.detail)"
+            return Activity(symbol: a.symbol, title: title, detail: a.reason, prose: true)
+        }
+        if a.command, !a.note.isEmpty {
+            return Activity(symbol: a.symbol, title: a.title, detail: a.note, prose: true)
+        }
+        return a
+    }
+
     var body: some View {
         HStack(spacing: 10) {
-            IconBadge(symbol: session.activity.symbol, color: phaseColor(session.phase))
-            TitleAndDetail(title: session.activity.title, activity: session.activity)
+            let shown = shown
+            IconBadge(symbol: shown.symbol, color: phaseColor(session.phase))
+            TitleAndDetail(title: shown.title, activity: shown)
             Spacer(minLength: 8)
             if !session.project.isEmpty {
                 Text(session.project)
