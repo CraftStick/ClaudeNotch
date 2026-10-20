@@ -71,7 +71,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         let server = SocketServer(path: Paths.socket) { [store] data, reply in
-            DispatchQueue.main.async { store.handle(data, reply: reply) }
+            // Parsed here, off the main thread: a payload can carry megabytes of tool output.
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            DispatchQueue.main.async { store.handle(json, reply: reply) }
         }
         do {
             try server.start()
@@ -158,13 +160,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Permission shortcuts
 
-    /// ⌘Y / ⌘N answer the oldest request, only while one is shown.
+    /// ⌃⌥⌘Y / ⌃⌥⌘N answer the oldest request, only while one is shown. System-wide hot keys take
+    /// the keys away from every app, so they must not be everyday shortcuts like ⌘N.
+    static let hotKeyModifiers = cmdKey | optionKey | controlKey
+
     private func updateHotKeys() {
         if store.prompts.isEmpty {
             hotKeys.unregisterAll()
         } else if !hotKeys.isRegistered {
-            hotKeys.register(keyCode: kVK_ANSI_Y, modifiers: cmdKey) { [weak self] in self?.answerPrompt(.allow) }
-            hotKeys.register(keyCode: kVK_ANSI_N, modifiers: cmdKey) { [weak self] in self?.answerPrompt(.deny) }
+            hotKeys.register(keyCode: kVK_ANSI_Y, modifiers: Self.hotKeyModifiers) { [weak self] in self?.answerPrompt(.allow) }
+            hotKeys.register(keyCode: kVK_ANSI_N, modifiers: Self.hotKeyModifiers) { [weak self] in self?.answerPrompt(.deny) }
         }
     }
 
@@ -246,10 +251,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private static let launchAtLoginKey = "launchAtLogin"
 
-    /// On by default. Re-registered on every launch, since a rebuilt app can lose its login item.
+    /// Turned on at the first launch. After that the menu toggle and System Settings decide; the only
+    /// repair is for a rebuilt app whose login item went missing (.notFound) while it's meant to be on.
     private func syncLaunchAtLogin() {
-        UserDefaults.standard.register(defaults: [Self.launchAtLoginKey: true])
-        if UserDefaults.standard.bool(forKey: Self.launchAtLoginKey), SMAppService.mainApp.status != .enabled {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: Self.launchAtLoginKey) == nil {
+            defaults.set(true, forKey: Self.launchAtLoginKey)
+            setLaunchAtLogin(true)
+        } else if defaults.bool(forKey: Self.launchAtLoginKey), SMAppService.mainApp.status == .notFound {
             setLaunchAtLogin(true)
         } else {
             EventLog.append("LaunchAtLogin status=\(SMAppService.mainApp.status.rawValue)")

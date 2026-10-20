@@ -29,10 +29,25 @@ enum AppFocus {
         config.activates = true
         // Open through Launch Services: an app that isn't active itself (we never are) can't
         // reliably activate another one directly on recent macOS.
-        if folderEditors.contains(host), !folder.isEmpty {
-            NSWorkspace.shared.open([URL(fileURLWithPath: folder)], withApplicationAt: app, configuration: config)
+        if folderEditors.contains(host), let root = workspaceRoot(of: folder) {
+            NSWorkspace.shared.open([root], withApplicationAt: app, configuration: config)
         } else {
             NSWorkspace.shared.openApplication(at: app, configuration: config)
         }
+    }
+
+    /// The folder an editor most likely has open for `path`: its git root. Nil (just bring the
+    /// editor forward) when there is none or the path isn't on this Mac (a remote session): opening
+    /// any other folder makes the editor open a new window for it.
+    private static func workspaceRoot(of path: String) -> URL? {
+        let fm = FileManager.default
+        guard !path.isEmpty, fm.fileExists(atPath: path) else { return nil }
+        let home = fm.homeDirectoryForCurrentUser.standardizedFileURL.path
+        var dir = URL(fileURLWithPath: path).standardizedFileURL
+        while dir.path != "/" && dir.path != home {
+            if fm.fileExists(atPath: dir.appendingPathComponent(".git").path) { return dir }
+            dir.deleteLastPathComponent()
+        }
+        return nil
     }
 }

@@ -202,25 +202,42 @@ private struct SheetClawdView: View {
     private static let walkOff: TimeInterval = 4.5
 
     /// One frame to draw; `dozing` is the time asleep (for the floating "z"s), `offsetX` moves
-    /// Clawd while he walks off.
+    /// Clawd while he walks off, `rate` is how often the picture changes from here (redraws/s).
     private struct Frame {
         let sheet: PixelSheet
         let index: Int
         var dozing: TimeInterval?
         var offsetX: CGFloat = 0
+        var rate: Double = 16
 
-        init(_ sheet: PixelSheet, _ index: Int, dozing: TimeInterval? = nil, offsetX: CGFloat = 0) {
+        init(_ sheet: PixelSheet, _ index: Int, rate: Double = 16, dozing: TimeInterval? = nil, offsetX: CGFloat = 0) {
             self.sheet = sheet
             self.index = index
+            self.rate = rate
             self.dozing = dozing
             self.offsetX = offsetX
         }
 
-        init(_ clip: Clip, at t: TimeInterval) { self.init(clip.sheet, clip.frame(at: t)) }
+        init(_ clip: Clip, at t: TimeInterval) { self.init(clip.sheet, clip.frame(at: t), rate: clip.fps) }
+    }
+
+    /// Redraws as often as the current animation changes: 2×/s while Clawd just stands there
+    /// (enough to catch the next fidget in time), at the clip's own fps otherwise.
+    private struct Schedule: TimelineSchedule {
+        let rate: (Date) -> Double
+
+        func entries(from start: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
+            var next = start
+            return AnyIterator {
+                let date = next
+                next = date.addingTimeInterval(1 / min(16, max(1, rate(date))))
+                return date
+            }
+        }
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 16)) { context in
+        TimelineView(Schedule { frame(at: $0).rate }) { context in
             let frame = frame(at: context.date)
             Canvas { ctx, _ in draw(frame, in: ctx) }
                 .frame(width: Self.size.width, height: Self.size.height)
@@ -232,7 +249,7 @@ private struct SheetClawdView: View {
     private var openLaptop: Clip { Clip(sheet: laptop, frames: 2...16, fps: 12) }
     private var typingLoop: Clip { Clip(sheet: laptop, frames: 17...33, fps: 12) }
     private var closeLaptop: Clip { Clip(sheet: laptop, frames: 34...42, fps: 16) }
-    private var standing: Frame { Frame(laptop, 0) }
+    private var standing: Frame { Frame(laptop, 0, rate: 2) }
 
     private func frame(at date: Date) -> Frame {
         let sinceMotion = date.timeIntervalSince(session.motionStart)
@@ -271,7 +288,7 @@ private struct SheetClawdView: View {
                 if t < openLaptop.duration { return Frame(openLaptop, at: t) }
                 t -= openLaptop.duration
             }
-            return Frame(laptop, typingLoop.looped(at: t))
+            return Frame(laptop, typingLoop.looped(at: t), rate: typingLoop.fps)
         case .pondering:
             guard let sheet = ClawdAssets.thinking else { return Frame(laptop, typingLoop.looped(at: t)) }
             // A speech bubble pops up, he sits down, and dots keep coming in the bubble.
@@ -281,10 +298,10 @@ private struct SheetClawdView: View {
             return play(Clip(sheet: sheet, frames: 2...14, fps: 12), then: Clip(sheet: sheet, frames: 15...75, fps: 12), at: t)
         case .running:
             guard let sheet = ClawdAssets.running else { return Frame(laptop, typingLoop.looped(at: t)) }
-            return Frame(sheet, Clip(sheet: sheet, frames: 5...16, fps: 16).looped(at: t))
+            return Frame(sheet, Clip(sheet: sheet, frames: 5...16, fps: 16).looped(at: t), rate: 16)
         case .waving:
             let cycle = Array(3...16) + Array(repeating: 0, count: 10)  // wave, then a short pause
-            return Frame(waving, cycle[Int(t * 12) % cycle.count])
+            return Frame(waving, cycle[Int(t * 12) % cycle.count], rate: 12)
         case .done, .stopped, .failed:
             if previous != nil, let ending = ending(motion) {
                 if t < ending.duration { return Frame(ending, at: t) }
@@ -295,7 +312,7 @@ private struct SheetClawdView: View {
     }
 
     private func play(_ intro: Clip, then loop: Clip, at t: TimeInterval) -> Frame {
-        t < intro.duration ? Frame(intro, at: t) : Frame(loop.sheet, loop.looped(at: t - intro.duration))
+        t < intro.duration ? Frame(intro, at: t) : Frame(loop.sheet, loop.looped(at: t - intro.duration), rate: loop.fps)
     }
 
     /// Putting away what Clawd holds before doing something else.
@@ -336,14 +353,14 @@ private struct SheetClawdView: View {
         let leaveAt = Store.restDuration - Self.walkOff
         if sinceRest >= leaveAt, let walking = ClawdAssets.walking {
             let w = sinceRest - leaveAt
-            return Frame(walking, Clip(sheet: walking, frames: 5...9, fps: 12).looped(at: w), offsetX: -CGFloat(w) * 14)
+            return Frame(walking, Clip(sheet: walking, frames: 5...9, fps: 12).looped(at: w), rate: 16, offsetX: -CGFloat(w) * 14)
         }
         if sinceRest >= Self.sleepAfter, let meditating = ClawdAssets.meditating {
             let asleep = sinceRest - Self.sleepAfter
             let sitDown = Clip(sheet: meditating, frames: 2...12, fps: 10)
             if asleep < sitDown.duration { return Frame(sitDown, at: asleep) }
             let doze = Clip(sheet: meditating, frames: 12...48, fps: 6)
-            return Frame(meditating, doze.looped(at: asleep - sitDown.duration), dozing: asleep)
+            return Frame(meditating, doze.looped(at: asleep - sitDown.duration), rate: 8, dozing: asleep)
         }
         let fidgets: [Clip] = [
             ClawdAssets.lookingAround.map { Clip(sheet: $0, frames: 4...30, fps: 12) },

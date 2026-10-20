@@ -1,6 +1,6 @@
 #!/bin/bash
 # Adds (or with --uninstall removes) the Claude Notch hooks in ~/.claude/settings.json.
-# Other settings and hooks are kept; a backup is written next to the file.
+# Other settings and hooks are kept. The first run saves the original file next to it.
 set -euo pipefail
 
 SETTINGS="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
@@ -16,9 +16,11 @@ if [[ "$MODE" == "install" && ! -x "$HOOK" ]]; then
     exit 1
 fi
 
+BACKUP="$SETTINGS.bak-claudenotch"
 mkdir -p "$(dirname "$SETTINGS")"
 [[ -f "$SETTINGS" ]] || echo '{}' > "$SETTINGS"
-cp "$SETTINGS" "$SETTINGS.bak-claudenotch"
+# Only once: later runs (updates, uninstall) must not overwrite the original with modified settings.
+[[ -e "$BACKUP" ]] || cp "$SETTINGS" "$BACKUP"
 
 python3 -I - "$SETTINGS" "$HOOK" "$MODE" <<'EOF'
 import json, sys
@@ -70,7 +72,7 @@ with open(path, "w", encoding="utf-8") as f:
 EOF
 
 if [[ "$MODE" == "install" ]]; then
-    echo "Hooks installed in $SETTINGS (backup: $SETTINGS.bak-claudenotch)"
+    echo "Hooks installed in $SETTINGS (original settings: $BACKUP)"
 else
-    echo "Hooks removed from $SETTINGS (backup: $SETTINGS.bak-claudenotch)"
+    echo "Hooks removed from $SETTINGS (original settings: $BACKUP)"
 fi
