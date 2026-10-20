@@ -66,8 +66,15 @@ struct Session: Equatable {
     var cwd = ""
     /// Bundle id of the app the session runs in (Terminal, VS Code, Claude…), for click-to-focus.
     var host: String?
+    /// CLAUDE_CODE_ENTRYPOINT: "cli" in a terminal, something else in the desktop app or an IDE.
+    var entrypoint = ""
     var transcriptPath: String?
-    var phase = Phase.thinking
+    /// Not working until an event says so: a session first seen through, say, a manual /compact
+    /// mustn't show Clawd at work.
+    var phase = Phase.done
+    /// The main agent's tool between PreToolUse and PostToolUse, for the history: the shown
+    /// activity changes meanwhile (e.g. to "Waiting for permission").
+    var currentTool: Activity?
     /// Clawd's current and previous motion, so the notch can play the change between them.
     private(set) var motion = Motion.done
     private(set) var previousMotion = Motion.done
@@ -137,11 +144,16 @@ struct Session: Equatable {
         cueInterrupted = motion
     }
 
+    /// The desktop app and IDE extensions show their own permission dialog while the hook runs;
+    /// in a terminal the usual prompt may only come once the hook is done.
+    var dialogRunsInParallel: Bool { !entrypoint.isEmpty && entrypoint != "cli" }
+
     mutating func startTurn(at date: Date) {
         turnStart = date
         turnEnd = nil
         actions = 0
         history = []
+        currentTool = nil
         linesAdded = 0
         linesRemoved = 0
         turnOutputTokens = 0
@@ -153,6 +165,8 @@ struct Session: Equatable {
 struct PermissionPrompt: Identifiable, Equatable {
     let id = UUID()
     let sessionID: String
+    /// Set when a subagent asks: parallel subagents share the session id.
+    let agentID: String?
     let question: String
     let activity: Activity
     /// Claude Code's `permission_suggestions`: the rules "Allow always" sends back.
@@ -272,8 +286,11 @@ final class Store: ObservableObject {
     }
 
     func handle(_ data: Data, reply: HookReply) {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let event = json["hook_event_name"] as? String else {
+        handle((try? JSONSerialization.jsonObject(with: data)) as? [String: Any], reply: reply)
+    }
+
+    func handle(_ json: [String: Any]?, reply: HookReply) {
+        guard let json, let event = json["hook_event_name"] as? String else {
             reply.send(nil)
             return
         }
@@ -282,7 +299,9 @@ final class Store: ObservableObject {
         EventLog.append(toolName.isEmpty ? event : "\(event) \(toolName)")
 
         let id = json["session_id"] as? String ?? "default"
+        let agentID = (json["agent_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let now = Date()
+        let known = sessions[id] != nil
         var s = sessions[id] ?? Session(id: id, turnStart: now, lastEvent: now)
         if let cwd = json["cwd"] as? String, !cwd.isEmpty {
             s.project = (cwd as NSString).lastPathComponent
@@ -294,18 +313,27 @@ final class Store: ObservableObject {
         if let host = AppFocus.host(bundleID: json["notch_host"] as? String ?? "", termProgram: json["notch_term"] as? String ?? "") {
             s.host = host
         }
+        if let entry = json["notch_entry"] as? String, !entry.isEmpty {
+            s.entrypoint = entry
+        }
         s.lastEvent = now
 
         if event == "PermissionRequest" {
-            dropPrompts(for: id)
+            // A newer request from the same agent means its older one was answered elsewhere.
+            dropPrompts(for: id) { $0.agentID == agentID }
             s.phase = .waiting
             let activity = Describe.tool(toolName, toolInput)
             s.activity = Activity(symbol: "hand.raised.fill", title: tr("Ждёт разрешения", "Waiting for permission"),
                                   detail: activity.detail, monospaced: activity.monospaced)
-            prompts.append(PermissionPrompt(sessionID: id, question: Describe.permissionQuestion(toolName, activity),
-                                            activity: activity,
-                                            suggestions: json["permission_suggestions"] as? [[String: Any]] ?? [],
-                                            reply: reply))
+            let prompt = PermissionPrompt(sessionID: id, agentID: agentID,
+                                          question: Describe.permissionQuestion(toolName, activity),
+                                          activity: activity,
+                                          suggestions: json["permission_suggestions"] as? [[String: Any]] ?? [],
+                                          reply: reply)
+            prompts.append(prompt)
+            // In a terminal, hand the question back to the usual prompt after a while instead of
+            // holding it for the hook's full ~10 minutes.
+            expire(prompt, after: s.dialogRunsInParallel ? 590 : 20)
             chime("Tink", for: s)
             commit(s, expandFor: .infinity)
             return
@@ -313,7 +341,19 @@ final class Store: ObservableObject {
         reply.send(nil)
 
         // A subagent's events carry the parent's session id plus its own agent id.
-        if let agentID = json["agent_id"] as? String, !agentID.isEmpty {
+        if let agentID {
+            if !known {
+                guard event != "SubagentStop" else { return }  // a stray stop for a session we never saw
+                s.phase = .tool  // the app started while a subagent was already at work
+                s.activity = Describe.tool("Task", [:])
+            }
+            if event == "PostToolUse" || event == "PostToolUseFailure" {
+                dropPrompts(for: id) { $0.agentID == agentID }  // answered in the app or terminal
+                if s.phase == .waiting, !prompts.contains(where: { $0.sessionID == id }) {
+                    s.phase = .tool  // back to waiting for the subagents
+                    s.activity = s.currentTool ?? Describe.tool("Task", [:])
+                }
+            }
             handleAgent(event, agentID: agentID, type: json["agent_type"] as? String ?? "", tool: toolName, input: toolInput, session: &s)
             commit(s, expandFor: nil)
             return
@@ -343,27 +383,34 @@ final class Store: ObservableObject {
             if let question = Describe.question(toolName, toolInput) {
                 s.phase = .waiting
                 s.activity = question
+                s.currentTool = question
                 chime("Tink", for: s)
                 commit(s, expandFor: .infinity)
             } else {
                 s.phase = .tool
                 s.activity = Describe.tool(toolName, toolInput)
+                s.currentTool = s.activity
                 commit(s, expandFor: s.activity.quiet ? nil : 2.5)
             }
 
         case "PostToolUse", "PostToolUseFailure":
-            dropPrompts(for: id)
+            // The main agent's request was answered elsewhere; a finished Task ends its subagents' too.
+            let endsSubagents = s.currentTool?.agent == true
+            dropPrompts(for: id) { endsSubagents || $0.agentID == nil }
             guard s.phase.isActive else { return }
-            if s.phase == .tool, !s.activity.quiet {
-                s.history = Array((s.history + [s.activity]).suffix(4))
+            // Recorded from currentTool, not the shown activity: a tool approved in the app's own
+            // dialog arrives here while the notch still says "Waiting for permission".
+            if let tool = s.currentTool, !tool.quiet {
+                s.history = Array((s.history + [tool]).suffix(4))
                 if event == "PostToolUse" {
-                    s.linesAdded += s.activity.added
-                    s.linesRemoved += s.activity.removed
+                    s.linesAdded += tool.added
+                    s.linesRemoved += tool.removed
                 } else if now.timeIntervalSince(s.lastFacepalm) > 45 {  // not for every failing grep
                     s.play(.facepalm, at: now)
                     s.lastFacepalm = now
                 }
             }
+            s.currentTool = nil
             s.phase = .thinking
             commit(s, expandFor: nil)
 
@@ -382,6 +429,8 @@ final class Store: ObservableObject {
             commit(s, expandFor: .infinity)
 
         case "PreCompact":
+            // Only mid-turn: a manual /compact between turns isn't Claude at work.
+            guard known, s.phase.isActive else { return }
             s.activity = Activity(symbol: "archivebox", title: tr("Сжимает контекст", "Compacting context"), detail: "")
             commit(s, expandFor: 2.5)
 
@@ -389,6 +438,7 @@ final class Store: ObservableObject {
             dropPrompts(for: id)
             s.phase = .done
             s.turnEnd = now
+            s.currentTool = nil
             s.activity = Activity(symbol: "checkmark.circle.fill", title: tr("Готово", "Done"), detail: summary(s, until: now))
             // A big task (5+ minutes or 150+ changed lines) gets confetti instead of a hop.
             if now.timeIntervalSince(s.turnStart) >= 300 || s.linesAdded + s.linesRemoved >= 150 {
@@ -401,6 +451,7 @@ final class Store: ObservableObject {
             dropPrompts(for: id)
             s.phase = .failed
             s.turnEnd = now
+            s.currentTool = nil
             let error = json["last_assistant_message"] as? String ?? json["error"] as? String ?? ""
             s.activity = Activity(symbol: "exclamationmark.triangle.fill", title: tr("Ошибка", "Error"), detail: oneLine(error))
             commit(s, expandFor: 6)
@@ -491,16 +542,24 @@ final class Store: ObservableObject {
             prompt.reply.send(Self.permissionOutput(output))
             update(id) { s, now in
                 s.play(.excited, at: now)
+                s.lastEvent = now  // the tool starts now, not when it asked
                 s.phase = .tool
-                s.activity = prompt.activity
+                // Back to what the agent was doing: the approved tool, or a Task whose subagent asked.
+                s.activity = s.currentTool ?? prompt.activity
             }
         case .deny:
             prompt.reply.send(Self.permissionOutput(["behavior": "deny", "message": tr("Пользователь отклонил это действие.", "The user denied this action.")]))
             update(id) { s, now in
                 s.play(.facepalm, at: now)
                 s.lastFacepalm = now
-                s.phase = .thinking
-                s.activity = Activity(symbol: "xmark.circle.fill", title: tr("Отклонено", "Denied"), detail: prompt.activity.detail)
+                s.lastEvent = now
+                if prompt.agentID != nil, let task = s.currentTool {
+                    s.phase = .tool  // the subagent carries on without it
+                    s.activity = task
+                } else {
+                    s.phase = .thinking
+                    s.activity = Activity(symbol: "xmark.circle.fill", title: tr("Отклонено", "Denied"), detail: prompt.activity.detail)
+                }
             }
         case .askInApp:
             prompt.reply.send(nil)  // no decision: Claude Code's own dialog takes over
@@ -509,14 +568,21 @@ final class Store: ObservableObject {
     }
 
     /// Requests that were answered elsewhere (or replaced) quietly close their hook.
-    private func dropPrompts(for sessionID: String) {
-        guard prompts.contains(where: { $0.sessionID == sessionID }) else { return }
-        prompts.removeAll { p in
-            guard p.sessionID == sessionID else { return false }
-            p.reply.send(nil)
-            return true
-        }
+    /// `match` narrows it down, e.g. to one agent's requests.
+    private func dropPrompts(for sessionID: String, where match: (PermissionPrompt) -> Bool = { _ in true }) {
+        let stale = prompts.filter { $0.sessionID == sessionID && match($0) }
+        guard !stale.isEmpty else { return }
+        prompts.removeAll { stale.contains($0) }
+        stale.forEach { $0.reply.send(nil) }
         if prompts.isEmpty && expanded && collapseWork == nil { scheduleCollapse(after: 1) }
+    }
+
+    /// Hands a request nobody answered back to Claude Code's own prompt.
+    private func expire(_ prompt: PermissionPrompt, after seconds: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            guard let self, self.prompts.contains(prompt) else { return }
+            self.answer(prompt, .askInApp)
+        }
     }
 
     private static func permissionOutput(_ decision: [String: Any]) -> Data? {
@@ -584,12 +650,9 @@ final class Store: ObservableObject {
         commit(s, expandFor: 3)
     }
 
-    /// Safety net for anything we missed: stale sessions and prompts quietly time out.
+    /// Safety net for anything we missed: stale sessions quietly time out.
     private func prune() {
         let now = Date()
-        for p in prompts where now.timeIntervalSince(p.created) > 600 {
-            answer(p, .askInApp)
-        }
         for (id, s) in sessions {
             let idle = now.timeIntervalSince(s.lastEvent)
             switch s.phase {
@@ -744,22 +807,27 @@ enum Describe {
     private static func host(_ url: String) -> String { URL(string: url)?.host ?? url }
 }
 
-/// Last events, for checking which hooks actually reach the app.
+/// Last events, for checking which hooks actually reach the app. Written on a background queue,
+/// so no file I/O lands on the main thread.
 enum EventLog {
     private static let formatter = ISO8601DateFormatter()
+    private static let queue = DispatchQueue(label: "ClaudeNotch.eventlog", qos: .utility)
 
     static func append(_ line: String) {
-        let path = Paths.eventLog
-        let data = Data("\(formatter.string(from: Date())) \(line)\n".utf8)
-        if let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int, size > 256_000 {
-            try? FileManager.default.removeItem(atPath: path)
-        }
-        if let handle = FileHandle(forWritingAtPath: path) {
-            handle.seekToEndOfFile()
-            handle.write(data)
-            handle.closeFile()
-        } else {
-            FileManager.default.createFile(atPath: path, contents: data)
+        let date = Date()
+        queue.async {
+            let path = Paths.eventLog
+            let data = Data("\(formatter.string(from: date)) \(line)\n".utf8)
+            if let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int, size > 256_000 {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+            if let handle = FileHandle(forWritingAtPath: path) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                handle.closeFile()
+            } else {
+                FileManager.default.createFile(atPath: path, contents: data)
+            }
         }
     }
 }
@@ -772,8 +840,14 @@ func oneLine(_ text: String) -> String {
 /// Lines added and removed going from `old` to `new`: everything between the common first and
 /// last lines counts as changed. Good enough for the small replacements Edit makes.
 func lineDiff(_ old: String, _ new: String) -> (added: Int, removed: Int) {
-    let a = old.isEmpty ? [] : old.components(separatedBy: "\n")
-    let b = new.isEmpty ? [] : new.components(separatedBy: "\n")
+    /// A final "\n" ends the last line; it doesn't start an empty one.
+    func lines(_ text: String) -> [String] {
+        var lines = text.components(separatedBy: "\n")
+        if lines.last == "" { lines.removeLast() }
+        return lines
+    }
+    let a = lines(old)
+    let b = lines(new)
     var prefix = 0
     while prefix < a.count, prefix < b.count, a[prefix] == b[prefix] { prefix += 1 }
     var suffix = 0

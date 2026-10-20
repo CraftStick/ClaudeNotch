@@ -292,13 +292,13 @@ private struct PermissionCard: View {
                 Button(tr("В приложении", "In app")) { answer(.askInApp) }
                     .buttonStyle(NotchButtonStyle(kind: .plain))
                 Spacer(minLength: 6)
-                Button { answer(.deny) } label: { ShortcutLabel(title: tr("Запретить", "Deny"), key: "⌘N") }
+                Button { answer(.deny) } label: { ShortcutLabel(title: tr("Запретить", "Deny"), key: "⌃⌥⌘N") }
                     .buttonStyle(NotchButtonStyle(kind: .secondary))
                 if prompt.ruleSummary != nil {
                     Button(tr("Всегда", "Always")) { answer(.allowAlways) }
                         .buttonStyle(NotchButtonStyle(kind: .secondary))
                 }
-                Button { answer(.allow) } label: { ShortcutLabel(title: tr("Разрешить", "Allow"), key: "⌘Y") }
+                Button { answer(.allow) } label: { ShortcutLabel(title: tr("Разрешить", "Allow"), key: "⌃⌥⌘Y") }
                     .buttonStyle(NotchButtonStyle(kind: .primary))
             }
             Text(prompt.ruleSummary.map { tr("«Всегда» добавит правило ", "“Always” adds the rule ") + $0 } ?? " ")
@@ -318,10 +318,10 @@ private struct ShortcutLabel: View {
     let key: String
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             Text(title)
             Text(key)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.system(size: 10, weight: .medium))
                 .opacity(0.45)
         }
     }
@@ -335,7 +335,7 @@ private struct NotchButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: 12, weight: kind == .plain ? .regular : .semibold))
             .foregroundStyle(kind == .primary ? Color.black : Color.white.opacity(kind == .plain ? 0.5 : 0.9))
-            .padding(.horizontal, kind == .plain ? 2 : 14)
+            .padding(.horizontal, kind == .plain ? 2 : 11)
             .frame(height: 26)
             .background(Capsule().fill(kind == .primary ? Color.white : Color.white.opacity(kind == .secondary ? 0.14 : 0)))
             .contentShape(Capsule())

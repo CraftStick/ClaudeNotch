@@ -6,7 +6,7 @@ import Darwin
 
 signal(SIGPIPE, SIG_IGN)
 signal(SIGALRM) { _ in _exit(0) }
-alarm(3)
+alarm(2)  // under the 3 s timeout in settings.json: exit cleanly before Claude Code kills us
 
 var payload = [UInt8]()
 var chunk = [UInt8](repeating: 0, count: 65536)
@@ -40,7 +40,10 @@ func env(_ name: String) -> String {
 if let close = payload.lastIndex(of: UInt8(ascii: "}")) {
     let before = payload[..<close].last { ![UInt8(ascii: " "), UInt8(ascii: "\n"), UInt8(ascii: "\r"), UInt8(ascii: "\t")].contains($0) }
     let comma = before == UInt8(ascii: "{") ? "" : ","
-    let extra = comma + "\"notch_host\":\"\(env("__CFBundleIdentifier"))\",\"notch_term\":\"\(env("TERM_PROGRAM"))\""
+    // CLAUDE_CODE_ENTRYPOINT tells the terminal ("cli") from the desktop app and IDE extensions,
+    // which show their own permission dialog while the hook runs.
+    let extra = comma + "\"notch_host\":\"\(env("__CFBundleIdentifier"))\",\"notch_term\":\"\(env("TERM_PROGRAM"))\","
+        + "\"notch_entry\":\"\(env("CLAUDE_CODE_ENTRYPOINT"))\""
     payload.insert(contentsOf: Array(extra.utf8), at: close)
 }
 

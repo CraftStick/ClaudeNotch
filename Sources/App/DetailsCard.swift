@@ -43,10 +43,16 @@ enum DetailsLayout {
         return top + bottom + sections.reduce(0, +) + gap * CGFloat(sections.count - 1)
     }
 
+    /// The tallest card, measured with `height` itself so the two can't drift apart: a two-line
+    /// task, a command with a description and a two-line command line, and every list full.
     static let maxHeight: CGFloat = {
-        let lists = maxAgentRows + maxHistoryRows + maxOtherRows
-        return top + bottom + 5 * (caption + captionGap) + 2 * line + 3 * line + 2
-            + CGFloat(lists) * row + footer + 5 * gap
+        var s = Session(id: "", turnStart: .distantPast, lastEvent: .distantPast)
+        s.phase = .tool
+        s.task = String(repeating: "x", count: 300)
+        s.activity = Activity(symbol: "", title: "x", detail: String(repeating: "x", count: 300), monospaced: true, note: "x")
+        s.agents = Array(repeating: SubAgent(id: "", type: "", started: .distantPast), count: maxAgentRows)
+        s.history = Array(repeating: Activity(symbol: "", title: "x", detail: ""), count: maxHistoryRows)
+        return height(s, others: maxOtherRows)
     }()
 }
 

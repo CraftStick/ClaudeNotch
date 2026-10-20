@@ -46,6 +46,8 @@ final class SocketServer {
     let path: String
     let onMessage: (Data, HookReply) -> Void
 
+    private static let permissionMarker = Data("\"PermissionRequest\"".utf8)
+
     init(path: String, onMessage: @escaping (Data, HookReply) -> Void) {
         self.path = path
         self.onMessage = onMessage
@@ -87,7 +89,13 @@ final class SocketServer {
             var chunk = [UInt8](repeating: 0, count: 65536)
             while true {
                 let client = accept(fd, nil, nil)
-                if client < 0 { continue }
+                if client < 0 {
+                    switch errno {
+                    case EINTR, ECONNABORTED: continue
+                    case EBADF, EINVAL, ENOTSOCK: return  // the listening socket is gone
+                    default: usleep(200_000); continue  // e.g. out of file descriptors: don't spin
+                    }
+                }
                 var on: Int32 = 1
                 setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
                 var timeout = timeval(tv_sec: 1, tv_usec: 0)
@@ -99,7 +107,11 @@ final class SocketServer {
                     data.append(chunk, count: n)
                 }
                 let reply = HookReply(fd: client)
-                if data.isEmpty { reply.send(nil) } else { onMessage(data, reply) }
+                // Only a permission request waits for an answer. Every other hook is released right
+                // here, so Claude Code (which waits for PreToolUse before running a tool) never waits
+                // on the app's main thread.
+                if data.range(of: Self.permissionMarker) == nil { reply.send(nil) }
+                if !data.isEmpty { onMessage(data, reply) }
             }
         }
         thread.name = "ClaudeNotch.socket"

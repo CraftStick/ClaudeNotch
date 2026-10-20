@@ -47,7 +47,7 @@ chmod +x *.sh && ./install.sh
 <summary>What <code>install.sh</code> does</summary>
 
 1. Builds the app from source (`build.sh`) into `~/Applications/ClaudeNotch.app` and starts it. It's built on your Mac, so macOS shows no Gatekeeper warnings.
-2. Adds the hooks to `~/.claude/settings.json` (`install-hooks.sh`). Your other settings and hooks stay untouched, a copy is saved as `settings.json.bak-claudenotch`, and running it again adds nothing twice.
+2. Adds the hooks to `~/.claude/settings.json` (`install-hooks.sh`). Your other settings and hooks stay untouched, the first run saves the original as `settings.json.bak-claudenotch` (later runs leave it alone), and running it again adds nothing twice.
 3. The app turns on Open at Login by itself (you can switch it off in the menu).
 
 </details>
@@ -78,7 +78,7 @@ Rest the pointer on the notch and a card opens: the task, what's happening now (
 
 ### Permissions from the notch
 
-When Claude Code asks for permission, the notch shows **Allow** (⌘Y), **Deny** (⌘N) and **Always** — add the rule Claude Code suggests so it won't ask again. The shortcuts only work while a request is showing and need no macOS permissions. In the Claude app the usual permission dialog appears too, and whichever answer comes first wins; in the terminal, **In app** hands the question back to the usual prompt.
+When Claude Code asks for permission, the notch shows **Allow** (⌃⌥⌘Y), **Deny** (⌃⌥⌘N) and **Always** — add the rule Claude Code suggests so it won't ask again. The shortcuts only work while a request is showing, need no macOS permissions, and don't take everyday shortcuts like ⌘N away from other apps. In the Claude app and IDE extensions the usual permission dialog appears too, and whichever answer comes first wins. In the terminal the notch waits 20 seconds, then hands the question back to the usual prompt (or click **In app** right away).
 
 <p align="center"><img src="docs/permission.png" width="560" alt="A permission request in the notch"></p>
 
@@ -115,7 +115,7 @@ Claude Code ──hook (JSON on stdin)──▶ claude-notch-hook ──Unix soc
 - **`NotchView.swift`**, **`DetailsCard.swift`** — the interface: the shape around the notch, the open states, the cards.
 - **`ClawdAnimation.swift`**, **`Clawd.swift`** — Clawd's animations (see below).
 - **`TranscriptWatcher.swift`** — watches the session file: Claude Code sends no hook on Esc, and token usage lives there too.
-- **`AppFocus.swift`**, **`HotKeys.swift`**, **`SocketServer.swift`**, **`Language.swift`** — click to focus, ⌘Y/⌘N, the socket, the two languages.
+- **`AppFocus.swift`**, **`HotKeys.swift`**, **`SocketServer.swift`**, **`Language.swift`** — click to focus, ⌃⌥⌘Y/⌃⌥⌘N, the socket, the two languages.
 
 **Privacy.** Everything stays on your Mac, no network. The hook sends events only to the socket `~/Library/Application Support/ClaudeNotch/notch.sock`, which only your user can open. The app reads the session files in `~/.claude/projects` only to notice Esc and to count tokens.
 
