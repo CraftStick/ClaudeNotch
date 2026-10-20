@@ -16,4 +16,5 @@ swiftc -swift-version 5 -target "$(uname -m)-apple-macos14.0" -parse-as-library 
     "${SOURCES[@]}" Tools/AppIcon.swift -o "$WORK/make-app-icon"
 "$WORK/make-app-icon" "$WORK/ClaudeNotch.iconset"
 iconutil -c icns "$WORK/ClaudeNotch.iconset" -o Resources/ClaudeNotch.icns
+rm -rf "$WORK"
 echo "Wrote Resources/ClaudeNotch.icns"
