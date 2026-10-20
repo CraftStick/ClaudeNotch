@@ -70,6 +70,8 @@ cd ClaudeNotch && ./uninstall.sh
 
 Clawd on the left of the notch, the task's time on the right. On every action the notch opens for a couple of seconds: "Running a command", "Reading file", "Editing", "Searching code", "Browser"… with the details. Several sessions at once are fine: a counter next to the timer shows how many are at work.
 
+Open the app itself (at login, or again from Finder or Spotlight) and Clawd waves from the notch: "Ready to work". Click it to open Claude, or wherever Claude Code ran last.
+
 ### Details on hover
 
 Rest the pointer on the notch and a card opens: the task, what's happening now (with the description and the full command), subagents, recent actions with the size of each edit, other sessions, and at the bottom the turn's line changes, tokens and context fill. Click the notch to bring forward the app the session runs in (Terminal, iTerm, VS Code, Cursor, the Claude app…).

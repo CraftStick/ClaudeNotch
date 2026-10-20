@@ -118,7 +118,7 @@ struct NotchView: View {
     private func content(_ s: Session, others: [Session], mode: DisplayMode) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                ClawdBadge(session: s, showsHint: mode == .compact)
+                ClawdBadge(session: s, showsHint: mode == .compact && !s.isGreeting)
                     .padding(.leading, 8)
                     .frame(width: wing, alignment: .leading)
                 Spacer(minLength: notch.width)
@@ -132,7 +132,7 @@ struct NotchView: View {
                             .background(Capsule().fill(claudeOrange))
                             .help(tr("Сессий в работе: \(busy)", "Sessions at work: \(busy)"))
                     }
-                    ElapsedLabel(session: s)
+                    if !s.isGreeting { ElapsedLabel(session: s) }
                 }
                 .padding(.trailing, 10)
                 .frame(width: wing, alignment: .trailing)

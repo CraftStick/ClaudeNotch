@@ -99,6 +99,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NotificationCenter.default.addObserver(
             self, selector: #selector(layoutPanel),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        store.greet()
+    }
+
+    /// Opened again while running (Finder, Spotlight, Launchpad): there's no window to show, so the notch says hi.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        store.greet()
+        return false
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -138,7 +145,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func trackPointer() {
         guard let screen = notchScreen, let notch else { return }
         let mode = store.mode
-        let zoneMode: DisplayMode = mode == .details || mode == .permission ? mode : .compact
+        // The greeting's row stays open under the pointer, so it can be clicked.
+        let greeting = mode == .expanded && store.focused?.isGreeting == true
+        let zoneMode: DisplayMode = mode == .details || mode == .permission || greeting ? mode : .compact
         let details = store.detailsSession
         let size = NotchView.size(of: zoneMode, session: details,
                                   others: store.others(than: details?.id).count, notch: notch)

@@ -23,17 +23,38 @@ enum AppFocus {
         }
     }
 
+    /// The app Claude Code last ran in, remembered across launches.
+    static var lastHost: String? {
+        get { UserDefaults.standard.string(forKey: "lastHost") }
+        set { UserDefaults.standard.set(newValue, forKey: "lastHost") }
+    }
+
+    /// What the greeting opens: the app Claude Code last ran in, else the Claude app, else Terminal.
+    static var claudeApp: URL? {
+        [lastHost, "com.anthropic.claudefordesktop", "com.apple.Terminal"].lazy
+            .compactMap { $0.flatMap(NSWorkspace.shared.urlForApplication(withBundleIdentifier:)) }
+            .first
+    }
+
     static func show(host: String?, folder: String) {
         guard let host, let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: host) else { return }
+        if folderEditors.contains(host), let root = workspaceRoot(of: folder) {
+            NSWorkspace.shared.open([root], withApplicationAt: app, configuration: activating)
+        } else {
+            open(app)
+        }
+    }
+
+    /// Opened through Launch Services: an app that isn't active itself (we never are) can't
+    /// reliably activate another one directly on recent macOS.
+    static func open(_ app: URL) {
+        NSWorkspace.shared.openApplication(at: app, configuration: activating)
+    }
+
+    private static var activating: NSWorkspace.OpenConfiguration {
         let config = NSWorkspace.OpenConfiguration()
         config.activates = true
-        // Open through Launch Services: an app that isn't active itself (we never are) can't
-        // reliably activate another one directly on recent macOS.
-        if folderEditors.contains(host), let root = workspaceRoot(of: folder) {
-            NSWorkspace.shared.open([root], withApplicationAt: app, configuration: config)
-        } else {
-            NSWorkspace.shared.openApplication(at: app, configuration: config)
-        }
+        return config
     }
 
     /// The folder an editor most likely has open for `path`: its git root. Nil (just bring the

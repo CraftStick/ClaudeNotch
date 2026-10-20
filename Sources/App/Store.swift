@@ -57,8 +57,8 @@ enum Motion: Equatable {
 
 /// A one-off reaction Clawd plays over whatever he is doing: an idea when a task comes in,
 /// joy when you allow something, a facepalm when a tool fails or you say no,
-/// confetti after a big task.
-enum Cue: Equatable { case idea, excited, facepalm, celebrate }
+/// confetti after a big task, a wave when the app is opened.
+enum Cue: Equatable { case idea, excited, facepalm, celebrate, hello }
 
 struct Session: Equatable {
     let id: String
@@ -144,6 +144,9 @@ struct Session: Equatable {
         cueInterrupted = motion
     }
 
+    /// Not a Claude Code session: Clawd saying hi when the app is opened.
+    var isGreeting: Bool { id == Store.greetingID }
+
     /// The desktop app and IDE extensions show their own permission dialog while the hook runs;
     /// in a terminal the usual prompt may only come once the hook is done.
     var dialogRunsInParallel: Bool { !entrypoint.isEmpty && entrypoint != "cli" }
@@ -201,6 +204,9 @@ final class Store: ObservableObject {
     @Published private(set) var prompts: [PermissionPrompt] = []  // oldest first
     /// The pointer rests on the notch: show the details card.
     @Published private(set) var hovering = false
+    /// Shown when the app is opened and nothing else is in the notch: "Ready to work", a click opens Claude.
+    @Published private(set) var greeting: Session?
+    static let greetingID = "greeting"
     private let transcripts = TranscriptWatcher()
     private var collapseWork: DispatchWorkItem?
     private var hoverWork: DispatchWorkItem?
@@ -250,14 +256,16 @@ final class Store: ObservableObject {
         if let p = prompt, let s = sessions[p.sessionID] { return s }
         if hovering, let s = detailsSession { return s }
         if expanded, let id = focusID, let s = sessions[id] { return s }
-        return working.first ?? resting
+        return working.first ?? resting ?? greeting
     }
 
     var mode: DisplayMode {
         if prompt != nil { return .permission }
         if hovering, detailsSession != nil { return .details }
         if expanded, let id = focusID, sessions[id] != nil { return .expanded }
-        return working.isEmpty && resting == nil ? .hidden : .compact
+        if !working.isEmpty || resting != nil { return .compact }
+        guard greeting != nil else { return .hidden }
+        return expanded || hovering ? .expanded : .compact  // the greeting opens while new or under the pointer
     }
 
     /// The other sessions for the hover card, most recent first.
@@ -265,16 +273,39 @@ final class Store: ObservableObject {
         Array(sessions.values.filter { $0.id != id }.sorted { $0.lastEvent > $1.lastEvent }.prefix(DetailsLayout.maxOtherRows))
     }
 
-    /// Brings the app the session runs in to the front.
+    /// Brings the app the session runs in to the front; the greeting opens Claude and goes away.
     func focus(_ id: String) {
+        if id == Self.greetingID {
+            greeting = nil
+            if let app = AppFocus.claudeApp { AppFocus.open(app) }
+            return
+        }
         guard let s = sessions[id] else { return }
         AppFocus.show(host: s.host, folder: s.cwd)
+    }
+
+    /// The app was opened, at launch or again from Finder or Spotlight: show that it runs. With nothing
+    /// in the notch Clawd waves and says he's ready; otherwise the notch opens on Claude for a moment.
+    func greet() {
+        let now = Date()
+        let shown = working.first ?? resting
+        if shown == nil {
+            var g = Session(id: Self.greetingID, turnStart: now, lastEvent: now)
+            let app = AppFocus.claudeApp.map { $0.deletingPathExtension().lastPathComponent }
+            g.activity = Activity(symbol: "hand.wave.fill", title: tr("Готов к работе", "Ready to work"),
+                                  detail: app.map { tr("Нажми, чтобы открыть \($0)", "Click to open \($0)") } ?? "")
+            g.play(.hello, at: now)
+            greeting = g
+        }
+        focusID = shown?.id ?? Self.greetingID
+        expanded = true
+        scheduleCollapse(after: 5)
     }
 
     /// Called often with where the pointer is; opens the card after a short rest, closes it
     /// a moment after the pointer leaves, so passing over the menu bar doesn't flicker.
     func pointer(inside: Bool) {
-        let wanted = inside && prompt == nil && detailsSession != nil
+        let wanted = inside && prompt == nil && (detailsSession ?? greeting) != nil
         guard wanted != hovering else {
             hoverWork?.cancel()
             hoverWork = nil
@@ -312,6 +343,7 @@ final class Store: ObservableObject {
         }
         if let host = AppFocus.host(bundleID: json["notch_host"] as? String ?? "", termProgram: json["notch_term"] as? String ?? "") {
             s.host = host
+            AppFocus.lastHost = host
         }
         if let entry = json["notch_entry"] as? String, !entry.isEmpty {
             s.entrypoint = entry
@@ -609,6 +641,7 @@ final class Store: ObservableObject {
         var s = s
         s.syncMotion(at: Date())
         sessions[s.id] = s
+        greeting = nil  // Claude is here
         if s.phase.isActive, let path = s.transcriptPath {
             transcripts.watch(sessionID: s.id, path: path)
         } else if !s.phase.isActive {
@@ -675,6 +708,9 @@ final class Store: ObservableObject {
     /// ending), and sessions whose rest is over leave the notch — Clawd has walked off by then.
     private func tick() {
         let now = Date()
+        if let g = greeting, now.timeIntervalSince(g.lastEvent) > Self.restDuration {
+            greeting = nil
+        }
         for (id, s) in sessions {
             if !s.phase.isActive, now.timeIntervalSince(s.turnEnd ?? s.lastEvent) > Self.restDuration {
                 sessions[id] = nil

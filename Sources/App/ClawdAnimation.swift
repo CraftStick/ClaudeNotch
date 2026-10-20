@@ -325,9 +325,11 @@ private struct SheetClawdView: View {
     }
 
     /// One-off reactions: an idea when a task comes in, joy when you allow something,
-    /// a facepalm when a tool fails or you say no, confetti and a breakdance after a big task.
+    /// a facepalm when a tool fails or you say no, confetti and a breakdance after a big task,
+    /// waving twice when the app is opened.
     private func reaction(_ cue: Cue) -> [Clip] {
         switch cue {
+        case .hello: return Array(repeating: Clip(sheet: waving, frames: 3...16, fps: 12), count: 2)
         case .idea: return [ClawdAssets.lightbulb.map { Clip(sheet: $0, frames: 2...44, fps: 14) }].compactMap { $0 }
         case .excited: return [ClawdAssets.excited.map { Clip(sheet: $0, frames: 2...21, fps: 14) }].compactMap { $0 }
         case .facepalm: return [ClawdAssets.facepalm.map { Clip(sheet: $0, frames: 2...33, fps: 12) }].compactMap { $0 }
