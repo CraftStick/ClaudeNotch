@@ -32,7 +32,7 @@ That's it. Clawd says hi from the notch and settles in the menu bar, and the not
 
 **Update:** quit Claude Notch (Clawd's menu → Quit), then drag the new one from the next release's .dmg to Applications and replace the old one.
 
-**Uninstall:** Clawd's menu → **Remove Claude Notch…**. The hooks come out of `~/.claude/settings.json`, it stops opening at login, and the app and its data go to the Trash.
+**Uninstall:** in Clawd's menu, uncheck **Connected to Claude Code** (its hooks come out of `~/.claude/settings.json`) and **Open at login**, then **Quit** and drag Claude Notch from Applications to the Trash. Without the first step, Claude Code would complain about the missing hooks on every event.
 
 <details>
 <summary>Or build it from source</summary>

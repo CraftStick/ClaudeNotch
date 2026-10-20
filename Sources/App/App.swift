@@ -281,7 +281,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         language.submenu = languages
 
         menu.addItem(.separator())
-        add(to: menu, tr("Удалить Claude Notch…", "Remove Claude Notch…"), "trash", #selector(removeApp))
         let quit = add(to: menu, tr("Выйти", "Quit"), "power", #selector(NSApplication.terminate(_:)), key: "q")
         quit.target = nil  // goes to NSApp
         statusItem?.menu = menu
@@ -397,32 +396,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             EventLog.append("Hooks disconnected")
         } catch {
             show(error)
-        }
-    }
-
-    /// What uninstall.sh does, for a copy dragged in from the disk image: no hooks left pointing at an app
-    /// that's gone (Claude Code would complain about them on every event), no login item, and the app
-    /// and its data in the Trash.
-    @objc private func removeApp() {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = tr("Удалить Claude Notch?", "Remove Claude Notch?")
-        alert.informativeText = tr(
-            "Хуки уберутся из ~/.claude/settings.json, автозапуск выключится, а приложение и его данные отправятся в Корзину.",
-            "Its hooks come out of ~/.claude/settings.json, it stops opening at login, and the app and its data go to the Trash.")
-        alert.addButton(withTitle: tr("Удалить", "Remove")).hasDestructiveAction = true
-        alert.addButton(withTitle: tr("Отмена", "Cancel"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        do {
-            try ClaudeHooks.disconnect()
-        } catch {
-            return show(error)
-        }
-        try? SMAppService.mainApp.unregister()
-        server?.stop()
-        UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier ?? "local.claudenotch")
-        NSWorkspace.shared.recycle([Bundle.main.bundleURL, URL(fileURLWithPath: Paths.dir)]) { _, _ in
-            DispatchQueue.main.async { NSApp.terminate(nil) }
         }
     }
 
