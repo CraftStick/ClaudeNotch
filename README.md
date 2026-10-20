@@ -27,10 +27,12 @@ xcode-select --install
 **2.** Download and install Claude Notch:
 
 ```bash
-git clone https://github.com/CraftStick/ClaudeNotch.git
-cd ClaudeNotch
+git clone https://github.com/CraftStick/ClaudeNotch.git ~/ClaudeNotch
+cd ~/ClaudeNotch
 ./install.sh
 ```
+
+The project goes into the `ClaudeNotch` folder in your home folder; the update and uninstall commands below work from any folder.
 
 That's it. Clawd says hi from the notch and settles in the menu bar, and the notch comes alive as soon as Claude Code starts a task.
 
@@ -38,10 +40,12 @@ That's it. Clawd says hi from the notch and settles in the menu bar, and the not
 <summary>Without git — download the ZIP</summary>
 
 ```bash
-curl -L -o ClaudeNotch.zip https://github.com/CraftStick/ClaudeNotch/archive/refs/heads/main.zip
-unzip -q ClaudeNotch.zip && cd ClaudeNotch-main
-chmod +x *.sh && ./install.sh
+cd ~ && curl -L -o ClaudeNotch.zip https://github.com/CraftStick/ClaudeNotch/archive/refs/heads/main.zip
+unzip -q ClaudeNotch.zip && mv ClaudeNotch-main ClaudeNotch && rm ClaudeNotch.zip
+cd ~/ClaudeNotch && chmod +x *.sh && ./install.sh
 ```
+
+To update without git, delete `~/ClaudeNotch` and run these again.
 
 </details>
 
@@ -57,13 +61,13 @@ chmod +x *.sh && ./install.sh
 **Update:**
 
 ```bash
-cd ClaudeNotch && git pull && ./install.sh
+cd ~/ClaudeNotch && git pull && ./install.sh
 ```
 
 **Uninstall** (hooks, login item, the app and its data):
 
 ```bash
-cd ClaudeNotch && ./uninstall.sh
+cd ~/ClaudeNotch && ./uninstall.sh
 ```
 
 ## Features

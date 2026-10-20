@@ -27,10 +27,12 @@ xcode-select --install
 **2.** Скачай и установи Claude Notch:
 
 ```bash
-git clone https://github.com/CraftStick/ClaudeNotch.git
-cd ClaudeNotch
+git clone https://github.com/CraftStick/ClaudeNotch.git ~/ClaudeNotch
+cd ~/ClaudeNotch
 ./install.sh
 ```
+
+Проект ляжет в папку `ClaudeNotch` в твоей домашней папке; команды обновления и удаления ниже работают из любой папки.
 
 Всё. Clawd поздоровается из чёлки и устроится в строке меню, а чёлка оживёт, как только Claude Code возьмётся за задачу.
 
@@ -38,10 +40,12 @@ cd ClaudeNotch
 <summary>Без git — скачать ZIP</summary>
 
 ```bash
-curl -L -o ClaudeNotch.zip https://github.com/CraftStick/ClaudeNotch/archive/refs/heads/main.zip
-unzip -q ClaudeNotch.zip && cd ClaudeNotch-main
-chmod +x *.sh && ./install.sh
+cd ~ && curl -L -o ClaudeNotch.zip https://github.com/CraftStick/ClaudeNotch/archive/refs/heads/main.zip
+unzip -q ClaudeNotch.zip && mv ClaudeNotch-main ClaudeNotch && rm ClaudeNotch.zip
+cd ~/ClaudeNotch && chmod +x *.sh && ./install.sh
 ```
+
+Чтобы обновиться без git, удали `~/ClaudeNotch` и выполни эти команды снова.
 
 </details>
 
@@ -57,13 +61,13 @@ chmod +x *.sh && ./install.sh
 **Обновление:**
 
 ```bash
-cd ClaudeNotch && git pull && ./install.sh
+cd ~/ClaudeNotch && git pull && ./install.sh
 ```
 
 **Удаление** (хуки, автозапуск, приложение и его данные):
 
 ```bash
-cd ClaudeNotch && ./uninstall.sh
+cd ~/ClaudeNotch && ./uninstall.sh
 ```
 
 ## Что умеет
