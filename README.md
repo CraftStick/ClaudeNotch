@@ -135,3 +135,10 @@ This project is not affiliated with or endorsed by Anthropic. Claude is a tradem
 ## License
 
 [MIT](LICENSE)
+
+<div align="center">
+
+
+If you found this useful, consider leaving a ⭐ — it helps a lot!
+
+</div>
