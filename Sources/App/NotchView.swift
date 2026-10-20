@@ -122,8 +122,8 @@ struct NotchView: View {
         switch mode {
         case .hidden: body = CGSize(width: notch.width, height: notch.height)
         // A little deeper than the camera housing: the rim along the bottom runs inside the edge and
-        // must stay below the cut-out, where the screen has no pixels.
-        case .compact: body = CGSize(width: notch.width + 2 * wing, height: notch.height + NotchRim.width)
+        // must clear the cut-out, where the screen has no pixels, with a sliver of black above it.
+        case .compact: body = CGSize(width: notch.width + 2 * wing, height: notch.height + NotchRim.width + 2)
         case .expanded: body = CGSize(width: max(notch.width + 2 * wing + 150, 420), height: notch.height + detailHeight)
         case .permission: body = CGSize(width: max(notch.width + 2 * wing + 190, 470), height: notch.height + permissionHeight)
         case .details:
