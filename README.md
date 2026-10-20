@@ -70,7 +70,7 @@ cd ClaudeNotch && ./uninstall.sh
 
 ### Status in the notch
 
-Clawd on the left of the notch, the task's time on the right. On every action the notch opens for a couple of seconds: "Running a command", "Reading file", "Editing", "Searching code", "Browser"… with the details. Several sessions at once are fine: a counter next to the timer shows how many are at work.
+Clawd on the left of the notch, the task's time on the right. On every action the notch opens for a couple of seconds: "Running a command", "Reading file", "Editing", "Searching code", "Browser"… with the details. Several sessions at once are fine: a counter next to the timer shows how many are at work. Sessions that were already running when the app started show up right away.
 
 The notch also says what Claude is thinking about: "Thinking…" with the gist of its thoughts, and under each action why it's doing it ("Editing · auth.ts — Fix the token check"). It takes this from what Claude writes between actions; for a command, its description is shown instead of the command itself.
 
@@ -125,7 +125,9 @@ Claude Code ──hook (JSON on stdin)──▶ claude-notch-hook ──Unix soc
 - **`TranscriptWatcher.swift`** — watches the session file: Claude Code sends no hook on Esc, and token usage lives there too.
 - **`AppFocus.swift`**, **`HotKeys.swift`**, **`SocketServer.swift`**, **`Language.swift`** — click to focus, ⌃⌥⌘Y/⌃⌥⌘N, the socket, the two languages.
 
-**Privacy.** Everything stays on your Mac, no network. The hook sends events only to the socket `~/Library/Application Support/ClaudeNotch/notch.sock`, which only your user can open. The app reads the session files in `~/.claude/projects` only to notice Esc, to count tokens and to show what Claude is thinking about.
+**Privacy.** Everything stays on your Mac, no network. The hook sends events only to the socket `~/Library/Application Support/ClaudeNotch/notch.sock`, which only your user can open. The app reads the session files in `~/.claude/projects` only to notice Esc, to count tokens, to show what Claude is thinking about and, at launch, to find sessions already at work.
+
+**Resources.** About 22 MB of memory. While Claude works, Clawd's animation takes 1–2% of one CPU core (measured on an M2 MacBook); with nothing in the notch the app just waits and wakes up less than once a second.
 
 ## Troubleshooting
 

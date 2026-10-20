@@ -3,6 +3,7 @@ import SwiftUI
 
 /// A pixel animation: `frames[i][y * width + x]` is a palette index, 255 = transparent.
 struct PixelSheet {
+    let name: String
     let width: Int
     let height: Int
     let palette: [(r: Double, g: Double, b: Double)]
@@ -153,22 +154,32 @@ enum ClawdAssets {
             frames.append(pixels)
         }
         guard frames.allSatisfy({ $0.allSatisfy { $0 == 255 || Int($0) < palette.count } }) else { return nil }
-        return PixelSheet(width: width, height: height, palette: palette, frames: frames, anchor: anchor)
+        return PixelSheet(name: name, width: width, height: height, palette: palette, frames: frames, anchor: anchor)
     }
 }
 
-/// Frames `frames` of `sheet`, played at `fps`.
+/// Frames `frames` of `sheet`, in that order, played at `fps`.
 private struct Clip {
     let sheet: PixelSheet
-    let frames: ClosedRange<Int>
+    let frames: [Int]
     let fps: Double
+
+    init(sheet: PixelSheet, frames: [Int], fps: Double) {
+        self.sheet = sheet
+        self.frames = frames
+        self.fps = fps
+    }
+
+    init(sheet: PixelSheet, frames: ClosedRange<Int>, fps: Double) {
+        self.init(sheet: sheet, frames: Array(frames), fps: fps)
+    }
 
     var duration: TimeInterval { Double(frames.count) / fps }
 
     /// Played once: holds the last frame afterwards.
-    func frame(at t: TimeInterval) -> Int { frames.lowerBound + min(frames.count - 1, Int(t * fps)) }
+    func frame(at t: TimeInterval) -> Int { frames[min(frames.count - 1, max(0, Int(t * fps)))] }
 
-    func looped(at t: TimeInterval) -> Int { frames.lowerBound + Int(t * fps) % frames.count }
+    func looped(at t: TimeInterval) -> Int { frames[max(0, Int(t * fps)) % frames.count] }
 }
 
 /// Clawd in the notch. With the Claude app's sprites he turns to a laptop and types while Claude
@@ -179,23 +190,24 @@ struct ClawdView: View {
 
     var body: some View {
         if let laptop = ClawdAssets.laptop, let waving = ClawdAssets.waving {
-            SheetClawdView(session: session, laptop: laptop, waving: waving)
+            ClawdLayer(animator: ClawdAnimator(session: session, laptop: laptop, waving: waving))
+                .frame(width: ClawdAnimator.size.width, height: ClawdAnimator.size.height)
         } else {
             DrawnClawdView(phase: session.phase)
         }
     }
 }
 
-
-private struct SheetClawdView: View {
+/// Which frame of which sheet Clawd shows at a given moment, worked out from the session.
+private struct ClawdAnimator {
     let session: Session
     let laptop: PixelSheet
     let waving: PixelSheet
 
     /// Room for the laptop or desk on the left (sheets are mirrored) and for a light bulb or a
     /// happy hop above the head.
-    private static let size = CGSize(width: 36, height: 32)
-    private static let feet = CGPoint(x: 24, y: 31)
+    static let size = CGSize(width: 36, height: 32)
+    static let feet = CGPoint(x: 24, y: 31)
     /// Idle this long after a turn and Clawd sits down and dozes off.
     private static let sleepAfter: TimeInterval = 3 * 60
     /// At the end of the rest Clawd walks off out of the notch, for this long.
@@ -203,7 +215,7 @@ private struct SheetClawdView: View {
 
     /// One frame to draw; `dozing` is the time asleep (for the floating "z"s), `offsetX` moves
     /// Clawd while he walks off, `rate` is how often the picture changes from here (redraws/s).
-    private struct Frame {
+    struct Frame {
         let sheet: PixelSheet
         let index: Int
         var dozing: TimeInterval?
@@ -221,28 +233,11 @@ private struct SheetClawdView: View {
         init(_ clip: Clip, at t: TimeInterval) { self.init(clip.sheet, clip.frame(at: t), rate: clip.fps) }
     }
 
-    /// Redraws as often as the current animation changes: 2×/s while Clawd just stands there
-    /// (enough to catch the next fidget in time), at the clip's own fps otherwise.
-    private struct Schedule: TimelineSchedule {
-        let rate: (Date) -> Double
 
-        func entries(from start: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
-            var next = start
-            return AnyIterator {
-                let date = next
-                next = date.addingTimeInterval(1 / min(16, max(1, rate(date))))
-                return date
-            }
-        }
-    }
-
-    var body: some View {
-        TimelineView(Schedule { frame(at: $0).rate }) { context in
-            let frame = frame(at: context.date)
-            Canvas { ctx, _ in draw(frame, in: ctx) }
-                .frame(width: Self.size.width, height: Self.size.height)
-                .offset(x: frame.offsetX)
-        }
+    /// The happy hop: crouch, jump, hang at the top (3–9), then straight to the landing (13–20). The sheet
+    /// brings him down over three slow frames (10–12), which looks like he slides down.
+    private static func hop(_ sheet: PixelSheet) -> Clip {
+        Clip(sheet: sheet, frames: Array(3...9) + Array(13...20), fps: 14)
     }
 
     // Laptop: 0–3 standing, 2–16 turn and open the laptop, 17–33 typing loop, 34–42 close it.
@@ -251,7 +246,7 @@ private struct SheetClawdView: View {
     private var closeLaptop: Clip { Clip(sheet: laptop, frames: 34...42, fps: 16) }
     private var standing: Frame { Frame(laptop, 0, rate: 2) }
 
-    private func frame(at date: Date) -> Frame {
+    func frame(at date: Date) -> Frame {
         let sinceMotion = date.timeIntervalSince(session.motionStart)
         if let cue = session.cue {
             let lead = exit(from: session.cueInterrupted)  // put the laptop away first
@@ -330,7 +325,7 @@ private struct SheetClawdView: View {
     private func reaction(_ cue: Cue) -> [Clip] {
         switch cue {
         case .hello:
-            return [ClawdAssets.jumping.map { Clip(sheet: $0, frames: 3...20, fps: 14) },
+            return [ClawdAssets.jumping.map(Self.hop),
                     Clip(sheet: waving, frames: 3...16, fps: 12)].compactMap { $0 }
         case .idea: return [ClawdAssets.lightbulb.map { Clip(sheet: $0, frames: 2...44, fps: 14) }].compactMap { $0 }
         case .excited: return [ClawdAssets.excited.map { Clip(sheet: $0, frames: 2...21, fps: 14) }].compactMap { $0 }
@@ -344,7 +339,7 @@ private struct SheetClawdView: View {
     /// How a turn ended: a happy hop, a sigh after Esc, dizzy after an API error.
     private func ending(_ motion: Motion) -> Clip? {
         switch motion {
-        case .done: return ClawdAssets.jumping.map { Clip(sheet: $0, frames: 3...20, fps: 14) }
+        case .done: return ClawdAssets.jumping.map(Self.hop)
         case .stopped: return ClawdAssets.disappointed.map { Clip(sheet: $0, frames: 2...42, fps: 12) }
         case .failed: return ClawdAssets.dizzy.map { Clip(sheet: $0, frames: 0...40, fps: 12) }
         default: return nil
@@ -382,42 +377,128 @@ private struct SheetClawdView: View {
         }
         return standing
     }
+}
 
-    private func draw(_ frame: Frame, in ctx: GraphicsContext) {
+/// Shows `ClawdAnimator`'s frames with Core Animation: each frame swaps a ready picture into a layer.
+/// Drawn by SwiftUI instead, every frame (12 a second while Claude works) meant a SwiftUI pass over the
+/// whole notch: about 6% of a CPU core, against about 1% this way.
+private struct ClawdLayer: NSViewRepresentable {
+    let animator: ClawdAnimator
+
+    func makeNSView(context: Context) -> ClawdLayerView { ClawdLayerView(animator: animator) }
+    func updateNSView(_ view: ClawdLayerView, context: Context) { view.animator = animator }
+}
+
+private final class ClawdLayerView: NSView {
+    var animator: ClawdAnimator { didSet { showFrame() } }
+    private let sprite = CALayer()
+    /// Two "z"s drifting up and fading from beside the head while Clawd dozes, half a cycle apart.
+    private let zs = [CALayer(), CALayer()]
+    private var timer: Timer?
+
+    init(animator: ClawdAnimator) {
+        self.animator = animator
+        super.init(frame: NSRect(origin: .zero, size: ClawdAnimator.size))
+        // AppKit's own layer, not one set here: AppKit keeps it flipped to match `isFlipped` wherever
+        // SwiftUI puts the view. A layer set by hand is flipped relative to its parent, which changes
+        // with the notch's state, and frames of different heights then stood at different heights.
+        wantsLayer = true
+        layerContentsRedrawPolicy = .never  // nothing to draw: the sublayers show the pictures
+        guard let root = layer else { return }
+        for (layer, glyph) in [(sprite, nil), (zs[0], SpriteImages.smallZ), (zs[1], SpriteImages.bigZ)] {
+            layer.magnificationFilter = .nearest  // crisp pixels
+            if let glyph {
+                layer.contents = glyph
+                layer.bounds = CGRect(x: 0, y: 0, width: glyph.width, height: glyph.height)
+                layer.anchorPoint = .zero
+            }
+            root.addSublayer(layer)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override var isFlipped: Bool { true }  // top-left origin, like the sprite sheets
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        showFrame()
+    }
+
+    /// Shows the frame for now and comes back when the picture changes; stops while out of a window.
+    private func showFrame() {
+        timer?.invalidate()
+        timer = nil
+        guard window != nil else { return }
+        let frame = animator.frame(at: Date())
         let sheet = frame.sheet
-        let pixels = sheet.frames[min(frame.index, sheet.frames.count - 1)]
-        var paths = [Path](repeating: Path(), count: sheet.palette.count)
-        let dy = Self.feet.y - sheet.anchor.y
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        sprite.contents = SpriteImages.image(sheet, frame.index)
+        // Mirrored, with the sheet's anchor on Clawd's feet.
+        let feet = ClawdAnimator.feet
+        sprite.frame = CGRect(x: feet.x + sheet.anchor.x - CGFloat(sheet.width) + frame.offsetX,
+                              y: feet.y - sheet.anchor.y,
+                              width: CGFloat(sheet.width), height: CGFloat(sheet.height))
+        for (z, offset) in zip(zs, [0.0, 0.5]) {
+            z.isHidden = frame.dozing == nil
+            guard let dozing = frame.dozing else { continue }
+            let p = (dozing / 2.6 + offset).truncatingRemainder(dividingBy: 1)
+            z.position = CGPoint(x: feet.x + 4 + p * 4, y: feet.y - 14 - p * 12)
+            z.opacity = Float(0.75 * (1 - p))
+        }
+        CATransaction.commit()
+
+        let delay = 1 / min(16, max(1, frame.rate))
+        let next = Timer(timeInterval: delay, repeats: false) { [weak self] _ in self?.showFrame() }
+        next.tolerance = delay / 10  // lets macOS bundle the wakeup with others
+        RunLoop.main.add(next, forMode: .common)
+        timer = next
+    }
+}
+
+/// Sprite frames turned into pictures once, mirrored the way Clawd faces in the notch.
+private enum SpriteImages {
+    private static let cache: NSCache<NSString, CGImage> = {
+        let cache = NSCache<NSString, CGImage>()
+        cache.countLimit = 300  // a few kilobytes each
+        return cache
+    }()
+
+    static func image(_ sheet: PixelSheet, _ index: Int) -> CGImage? {
+        let key = "\(sheet.name)#\(index)" as NSString
+        if let image = cache.object(forKey: key) { return image }
+        let pixels = sheet.frames[min(index, sheet.frames.count - 1)]
+        let colors = sheet.palette.map { [UInt8($0.r * 255), UInt8($0.g * 255), UInt8($0.b * 255), 255] }
+        var rgba = [UInt8](repeating: 0, count: sheet.width * sheet.height * 4)
         for y in 0..<sheet.height {
             for x in 0..<sheet.width {
                 let v = pixels[y * sheet.width + x]
                 guard v != 255 else { continue }
-                let mirroredX = Self.feet.x - (CGFloat(x) - sheet.anchor.x) - 1
-                paths[Int(v)].addRect(CGRect(x: mirroredX, y: CGFloat(y) + dy, width: 1, height: 1))
+                let at = (y * sheet.width + sheet.width - 1 - x) * 4
+                rgba.replaceSubrange(at..<(at + 4), with: colors[Int(v)])
             }
         }
-        for (i, path) in paths.enumerated() {
-            let c = sheet.palette[i]
-            ctx.fill(path, with: .color(Color(red: c.r, green: c.g, blue: c.b)))
-        }
-        if let dozing = frame.dozing { drawZs(dozing, in: ctx) }
+        guard let image = makeImage(rgba, width: sheet.width, height: sheet.height) else { return nil }
+        cache.setObject(image, forKey: key)
+        return image
     }
 
-    /// Two "z"s drifting up and fading from beside the head, half a cycle apart.
-    private func drawZs(_ t: TimeInterval, in ctx: GraphicsContext) {
-        let small = ["####", "..#.", ".#..", "####"]
-        let big = ["#####", "...#.", "..#..", ".#...", "#####"]
-        for (offset, glyph) in [(0.0, small), (0.5, big)] {
-            let p = (t / 2.6 + offset).truncatingRemainder(dividingBy: 1)
-            let x = Self.feet.x + 4 + CGFloat(p * 4)
-            let y = Self.feet.y - 14 - CGFloat(p * 12)
-            var path = Path()
-            for (row, line) in glyph.enumerated() {
-                for (column, char) in line.enumerated() where char == "#" {
-                    path.addRect(CGRect(x: x + CGFloat(column), y: y + CGFloat(row), width: 1, height: 1))
-                }
-            }
-            ctx.fill(path, with: .color(.white.opacity(0.75 * (1 - p))))
-        }
+    static let smallZ = glyph(["####", "..#.", ".#..", "####"])
+    static let bigZ = glyph(["#####", "...#.", "..#..", ".#...", "#####"])
+
+    private static func glyph(_ rows: [String]) -> CGImage? {
+        let width = rows[0].count
+        let rgba = rows.flatMap { $0.flatMap { $0 == "#" ? [UInt8](repeating: 255, count: 4) : [0, 0, 0, 0] } }
+        return makeImage(rgba, width: width, height: rows.count)
+    }
+
+    private static func makeImage(_ rgba: [UInt8], width: Int, height: Int) -> CGImage? {
+        guard let provider = CGDataProvider(data: Data(rgba) as CFData) else { return nil }
+        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
     }
 }

@@ -205,12 +205,17 @@ private struct ElapsedLabel: View {
     let session: Session
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let end = session.turnEnd ?? context.date
-            Text(formatElapsed(end.timeIntervalSince(session.turnStart)))
-                .font(.system(size: 12, weight: .medium).monospacedDigit())
-                .foregroundStyle(.white.opacity(0.75))
+        if let end = session.turnEnd {  // the turn is over: nothing to tick
+            label(end)
+        } else {
+            TimelineView(.periodic(from: .now, by: 1)) { context in label(context.date) }
         }
+    }
+
+    private func label(_ end: Date) -> some View {
+        Text(formatElapsed(end.timeIntervalSince(session.turnStart)))
+            .font(.system(size: 12, weight: .medium).monospacedDigit())
+            .foregroundStyle(.white.opacity(0.75))
     }
 }
 

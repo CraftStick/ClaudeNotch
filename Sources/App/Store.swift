@@ -247,6 +247,9 @@ final class Store: ObservableObject {
         motionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.tick()
         }
+        // Neither needs to be on time: let macOS bundle their wakeups with others.
+        pruneTimer?.tolerance = 2
+        motionTimer?.tolerance = 0.3
     }
 
     /// Sessions where Claude is busy or waiting, most recent first.
@@ -302,6 +305,30 @@ final class Store: ObservableObject {
         }
         guard let s = sessions[id] else { return }
         AppFocus.show(host: s.host, folder: s.cwd)
+    }
+
+    /// Sessions Claude was already at work in when the app started: shown now rather than at their
+    /// next hook event, which may be a while off if Claude is writing a long answer.
+    func adopt(_ running: [TranscriptWatcher.Running]) {
+        let now = Date()
+        for r in running where sessions[r.id] == nil {
+            var s = Session(id: r.id, turnStart: r.started ?? now, lastEvent: now)
+            s.cwd = r.cwd
+            s.project = (r.cwd as NSString).lastPathComponent
+            s.transcriptPath = r.path
+            s.entrypoint = r.entrypoint
+            s.host = r.entrypoint == "claude-desktop" ? "com.anthropic.claudefordesktop" : AppFocus.lastHost
+            s.task = String(r.task.split(whereSeparator: \.isNewline).joined(separator: " ").prefix(300))
+            if let tool = r.tool {
+                s.phase = .tool
+                s.activity = Describe.tool(tool.name, tool.input)
+                s.currentTool = s.activity
+            } else {
+                s.phase = .thinking
+            }
+            EventLog.append("Adopted running session (transcript)")
+            commit(s, expandFor: nil)
+        }
     }
 
     /// The app was opened, at launch or again from Finder or Spotlight: show that it runs. With nothing
@@ -465,6 +492,7 @@ final class Store: ObservableObject {
             // The main agent's request was answered elsewhere; a finished Task ends its subagents' too.
             let endsSubagents = s.currentTool?.agent == true
             dropPrompts(for: id) { endsSubagents || $0.agentID == nil }
+            if !known { s.phase = .thinking }  // the app started mid-turn: Claude is between tools
             guard s.phase.isActive else { return }
             // Recorded from currentTool, not the shown activity: a tool approved in the app's own
             // dialog arrives here while the notch still says "Waiting for permission".

@@ -20,7 +20,7 @@ func contains(_ haystack: [UInt8], _ needle: String) -> Bool {
     let n = Array(needle.utf8)
     guard !n.isEmpty, haystack.count >= n.count else { return false }
     for i in 0...(haystack.count - n.count) where haystack[i] == n[0] {
-        if Array(haystack[i..<(i + n.count)]) == n { return true }
+        if haystack[i..<(i + n.count)].elementsEqual(n) { return true }
     }
     return false
 }

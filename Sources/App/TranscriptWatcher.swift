@@ -174,4 +174,90 @@ final class TranscriptWatcher {
             $0["type"] as? String == "text" && ($0["text"] as? String ?? "").hasPrefix("[Request interrupted by user")
         }
     }
+
+    // MARK: - Sessions already running
+
+    /// A session whose transcript says Claude is in the middle of a turn.
+    struct Running {
+        let id: String
+        let path: String
+        let cwd: String
+        /// Like CLAUDE_CODE_ENTRYPOINT: "cli" in a terminal, "claude-desktop" in the Claude app…
+        let entrypoint: String
+        /// The message that started the turn, and when.
+        let task: String
+        let started: Date?
+        /// The tool it's running, if it's waiting on one.
+        let tool: (name: String, input: [String: Any])?
+    }
+
+    /// Sessions Claude is at work in, for an app started after Claude got going: hooks only tell about
+    /// what happens next. Looks at transcripts written to in the last `within` seconds whose last
+    /// message isn't a finished answer.
+    static func running(within: TimeInterval = 600) -> [Running] {
+        let fm = FileManager.default
+        let root = fm.homeDirectoryForCurrentUser.appendingPathComponent(".claude/projects")
+        let keys: [URLResourceKey] = [.contentModificationDateKey]
+        guard let projects = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return [] }
+        var found: [Running] = []
+        for project in projects {
+            let files = (try? fm.contentsOfDirectory(at: project, includingPropertiesForKeys: keys)) ?? []
+            for file in files where file.pathExtension == "jsonl" {
+                guard let modified = try? file.resourceValues(forKeys: Set(keys)).contentModificationDate,
+                      Date().timeIntervalSince(modified) < within,
+                      let session = runningSession(file) else { continue }
+                found.append(session)
+            }
+        }
+        return found
+    }
+
+    private static func runningSession(_ file: URL) -> Running? {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return nil }
+        defer { try? handle.close() }
+        let end = (try? handle.seekToEnd()) ?? 0
+        let start = end > 512_000 ? end - 512_000 : 0
+        guard (try? handle.seek(toOffset: start)) != nil, let data = try? handle.readToEnd() else { return nil }
+        var lines = data.split(separator: UInt8(ascii: "\n"))
+        if start > 0, !lines.isEmpty { lines.removeFirst() }  // probably cut in half
+
+        // From the end: the last message decides whether Claude is still at it, the last prompt is the task.
+        var last: [String: Any]?
+        var prompt: [String: Any]?
+        for line in lines.reversed() {
+            guard let entry = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                  let type = entry["type"] as? String, type == "user" || type == "assistant",
+                  entry["isSidechain"] as? Bool != true, entry["isMeta"] as? Bool != true else { continue }
+            if last == nil { last = entry }
+            if type == "user", promptText(entry) != nil { prompt = entry; break }
+        }
+        guard let last, let message = last["message"] as? [String: Any] else { return nil }
+        var tool: (name: String, input: [String: Any])?
+        if last["type"] as? String == "assistant" {
+            let stop = message["stop_reason"] as? String
+            guard stop == nil || stop == "tool_use" else { return nil }  // a finished answer
+            let blocks = message["content"] as? [[String: Any]] ?? []
+            if let call = blocks.last(where: { $0["type"] as? String == "tool_use" }), let name = call["name"] as? String {
+                tool = (name, call["input"] as? [String: Any] ?? [:])
+            }
+        } else if let text = promptText(last), text.hasPrefix("[Request interrupted by user") {
+            return nil  // stopped with Esc
+        }
+        let id = file.deletingPathExtension().lastPathComponent
+        return Running(id: last["sessionId"] as? String ?? id, path: file.path, cwd: last["cwd"] as? String ?? "",
+                       entrypoint: last["entrypoint"] as? String ?? "",
+                       task: prompt.flatMap(promptText) ?? "",
+                       started: (prompt?["timestamp"] as? String).flatMap(timestamps.date(from:)),
+                       tool: tool)
+    }
+
+    /// The text of a message you typed: a string, or text blocks (not tool results).
+    private static func promptText(_ entry: [String: Any]) -> String? {
+        guard let message = entry["message"] as? [String: Any] else { return nil }
+        if let text = message["content"] as? String { return text }
+        let parts = message["content"] as? [[String: Any]] ?? []
+        guard !parts.contains(where: { $0["type"] as? String == "tool_result" }) else { return nil }
+        let text = parts.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(separator: " ")
+        return text.isEmpty ? nil : text
+    }
 }

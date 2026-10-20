@@ -133,7 +133,7 @@ struct DrawnClawdView: View {
     private static let rhythm = [1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 20, paused: !phase.isActive)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 12, paused: !phase.isActive)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let pose = pose(t)
             Canvas { ctx, _ in

@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var loginItem: NSMenuItem?
     private var promptsObserver: AnyCancellable?
+    private var visibilityObserver: AnyCancellable?
     private var hoverTimer: Timer?
     private var notchScreen: NSScreen?
     private var notch: NotchMetrics?
@@ -94,13 +95,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.updateHotKeys()
             }
         }
-        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            self?.trackPointer()
+        visibilityObserver = store.objectWillChange.sink { [weak self] _ in
+            DispatchQueue.main.async { self?.updatePointerTracking() }  // after the change
         }
+        updatePointerTracking()
         NotificationCenter.default.addObserver(
             self, selector: #selector(layoutPanel),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
-        store.greet()
+        // Sessions already under way show up at once; with none, Clawd says hi.
+        DispatchQueue.global(qos: .userInitiated).async { [store] in
+            let running = TranscriptWatcher.running()
+            DispatchQueue.main.async {
+                store.adopt(running)
+                store.greet()
+            }
+        }
     }
 
     /// Opened again while running (Finder, Spotlight, Launchpad): there's no window to show, so the notch says hi.
@@ -140,6 +149,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // MARK: - Hover
+
+    /// The pointer is only watched while there's a notch to hover: no wakeups while it's hidden.
+    private func updatePointerTracking() {
+        let visible = store.mode != .hidden
+        if visible, hoverTimer == nil {
+            let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in self?.trackPointer() }
+            timer.tolerance = 0.02
+            RunLoop.main.add(timer, forMode: .common)
+            hoverTimer = timer
+        } else if !visible, let timer = hoverTimer {
+            timer.invalidate()
+            hoverTimer = nil
+            trackPointer()  // once more, to let go of the hover and the clicks
+        }
+    }
 
     /// The pointer is polled rather than tracked: the panel lets clicks through, so it gets no
     /// mouse events, and polling needs no special permission.
