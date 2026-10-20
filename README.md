@@ -20,7 +20,11 @@ You need **macOS 14 or later** and **Claude Code** (in the terminal or in the Co
 
 **1.** Download **ClaudeNotch-….dmg** from the [latest release](https://github.com/CraftStick/ClaudeNotch/releases/latest), open it and drag Claude Notch to Applications.
 
-**2.** Open Claude Notch from Applications. Apple hasn't notarized it, so the first time macOS won't open it: go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Claude Notch. Only once.
+**2.** Open Claude Notch from Applications. Apple hasn't notarized it, so the first time macOS won't open it. This takes a minute, once:
+
+   1. Double-click **ClaudeNotch** in Applications. macOS says it can't open it: click **Done** (not Move to Trash).
+   2. Open **System Settings → Privacy & Security** and scroll down to **Security**. Next to the line about ClaudeNotch, click **Open Anyway**. The button only shows up after you've tried to open the app.
+   3. Confirm with your password or Touch ID. If macOS asks once more, click **Open Anyway** again.
 
 **3.** Claude Notch asks to connect to Claude Code: click **Connect**. It adds its hooks to `~/.claude/settings.json`; your other settings stay as they are, and the original file is saved next to it as `settings.json.bak-claudenotch`.
 

@@ -28,7 +28,21 @@ struct DmgBackground: View {
                     .foregroundStyle(Color(white: 0.45))
             }
             .frame(width: Self.size.width)
-            .position(x: Self.size.width / 2, y: 318)
+            .position(x: Self.size.width / 2, y: 290)
+            // Apple hasn't notarized the app: the first launch needs a click in System Settings, and few
+            // people read the release notes. Inside the window's 380 points either way.
+            VStack(spacing: 3) {
+                Text("Первый запуск: Настройки → Конфиденциальность и безопасность → «Всё равно открыть»")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color(white: 0.3))
+                Text("First launch: System Settings → Privacy & Security → Open Anyway")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Color(white: 0.45))
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 42)
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color(red: 0.85, green: 0.47, blue: 0.34).opacity(0.1)))
+            .position(x: Self.size.width / 2, y: 344)
         }
         .frame(width: Self.canvas.width, height: Self.canvas.height)
     }
