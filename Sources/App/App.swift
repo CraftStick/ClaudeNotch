@@ -65,7 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var pointerInside = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if SocketServer.isAlive(Paths.socket) {  // already running
+        // Already running, e.g. this is another copy of the app: that one says hi instead.
+        if SocketServer.isAlive(Paths.socket, telling: Store.openedMessage) {
             NSApp.terminate(nil)
             return
         }

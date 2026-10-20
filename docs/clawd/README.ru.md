@@ -17,7 +17,7 @@
 <tr>
 <td align="center" valign="top"><img src="desktop.gif" width="96" alt="Clawd за компьютером"><br><b>Пересаживается за компьютер</b><br>Команда выполняется<br>дольше 8 секунд</td>
 <td align="center" valign="top"><img src="running.gif" width="96" alt="Clawd бежит"><br><b>Бегает</b><br>Работают субагенты,<br>или 6+ действий за 12 секунд</td>
-<td align="center" valign="top"><img src="waving.gif" width="96" alt="Clawd машет"><br><b>Машет тебе</b><br>Claude ждёт тебя:<br>разрешение, вопрос, план.<br>Дважды, когда открываешь приложение</td>
+<td align="center" valign="top"><img src="waving.gif" width="96" alt="Clawd машет"><br><b>Машет тебе</b><br>Claude ждёт тебя:<br>разрешение, вопрос, план.<br>С прыжком, когда открываешь приложение</td>
 </tr>
 </table>
 

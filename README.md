@@ -32,7 +32,7 @@ cd ClaudeNotch
 ./install.sh
 ```
 
-That's it. Clawd waves from the notch and settles in the menu bar, and the notch comes alive as soon as Claude Code starts a task.
+That's it. Clawd says hi from the notch and settles in the menu bar, and the notch comes alive as soon as Claude Code starts a task.
 
 <details>
 <summary>Without git — download the ZIP</summary>
@@ -74,7 +74,7 @@ Clawd on the left of the notch, the task's time on the right. On every action th
 
 The notch also says what Claude is thinking about: "Thinking…" with the gist of its thoughts, and under each action why it's doing it ("Editing · auth.ts — Fix the token check"). It takes this from what Claude writes between actions; for a command, its description is shown instead of the command itself.
 
-Open the app itself (at login, or again from Finder or Spotlight) and Clawd waves from the notch: "Ready to work". Click it to open Claude, or wherever Claude Code ran last.
+Open the app itself (at login, or again from Finder or Spotlight) and Clawd hops and waves from the notch: "Ready to work". Click it to open Claude, or wherever Claude Code ran last.
 
 <p align="center"><img src="docs/greeting.png" width="560" alt="The notch says Ready to work"></p>
 

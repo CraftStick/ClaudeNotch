@@ -50,17 +50,22 @@ final class SocketServer {
         self.onMessage = onMessage
     }
 
-    /// True if another ClaudeNotch instance is already listening on `path`.
-    static func isAlive(_ path: String) -> Bool {
+    /// True if another ClaudeNotch instance is already listening on `path`; `message` goes to it.
+    static func isAlive(_ path: String, telling message: Data? = nil) -> Bool {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return false }
         defer { close(fd) }
         guard var addr = makeAddress(path) else { return false }
-        return withUnsafePointer(to: &addr) {
+        let connected = withUnsafePointer(to: &addr) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                 connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) == 0
             }
         }
+        if connected, let message {
+            _ = message.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+            shutdown(fd, SHUT_WR)
+        }
+        return connected
     }
 
     func start() throws {

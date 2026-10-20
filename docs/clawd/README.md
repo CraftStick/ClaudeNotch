@@ -17,7 +17,7 @@ Every animation Clawd plays in the notch, and when he plays it. Clawd is the mas
 <tr>
 <td align="center" valign="top"><img src="desktop.gif" width="96" alt="Clawd at a desktop computer"><br><b>Moves to a desktop computer</b><br>A command runs<br>longer than 8 seconds</td>
 <td align="center" valign="top"><img src="running.gif" width="96" alt="Clawd running"><br><b>Runs</b><br>Subagents are at work,<br>or 6+ actions in 12 seconds</td>
-<td align="center" valign="top"><img src="waving.gif" width="96" alt="Clawd waving"><br><b>Waves at you</b><br>Claude is waiting for you:<br>a permission, a question, a plan.<br>Twice when you open the app</td>
+<td align="center" valign="top"><img src="waving.gif" width="96" alt="Clawd waving"><br><b>Waves at you</b><br>Claude is waiting for you:<br>a permission, a question, a plan.<br>With a hop when you open the app</td>
 </tr>
 </table>
 

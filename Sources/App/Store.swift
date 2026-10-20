@@ -69,7 +69,7 @@ enum Motion: Equatable {
 
 /// A one-off reaction Clawd plays over whatever he is doing: an idea when a task comes in,
 /// joy when you allow something, a facepalm when a tool fails or you say no,
-/// confetti after a big task, a wave when the app is opened.
+/// confetti after a big task, a hop and a wave when the app is opened.
 enum Cue: Equatable { case idea, excited, facepalm, celebrate, hello }
 
 struct Session: Equatable {
@@ -224,6 +224,8 @@ final class Store: ObservableObject {
     /// Shown when the app is opened and nothing else is in the notch: "Ready to work", a click opens Claude.
     @Published private(set) var greeting: Session?
     static let greetingID = "greeting"
+    /// What a second copy of the app sends before it quits, so this one greets you.
+    static let openedMessage = Data(#"{"hook_event_name":"ClaudeNotchOpened"}"#.utf8)
     private let transcripts = TranscriptWatcher()
     private var collapseWork: DispatchWorkItem?
     private var hoverWork: DispatchWorkItem?
@@ -303,10 +305,14 @@ final class Store: ObservableObject {
     }
 
     /// The app was opened, at launch or again from Finder or Spotlight: show that it runs. With nothing
-    /// in the notch Clawd waves and says he's ready; otherwise the notch opens on Claude for a moment.
+    /// in the notch Clawd hops, waves and says he's ready; otherwise the notch opens on Claude for a
+    /// moment, and a resting Clawd wakes up to say hi.
     func greet() {
         let now = Date()
         let shown = working.first ?? resting
+        if let shown, !shown.phase.isActive {
+            update(shown.id) { s, now in s.play(.hello, at: now) }
+        }
         if shown == nil {
             var g = Session(id: Self.greetingID, turnStart: now, lastEvent: now)
             let app = AppFocus.claudeApp.map { $0.deletingPathExtension().lastPathComponent }
@@ -346,6 +352,11 @@ final class Store: ObservableObject {
         let toolName = json["tool_name"] as? String ?? ""
         let toolInput = json["tool_input"] as? [String: Any] ?? [:]
         EventLog.append(toolName.isEmpty ? event : "\(event) \(toolName)")
+        if event == "ClaudeNotchOpened" {
+            reply.send(nil)
+            greet()
+            return
+        }
 
         let id = json["session_id"] as? String ?? "default"
         let agentID = (json["agent_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
