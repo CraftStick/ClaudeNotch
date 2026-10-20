@@ -69,12 +69,12 @@ When a new task comes in, Clawd stops whatever he's doing and gets back to work.
 
 ## Living in the notch for good
 
-Switch on Clawd's menu → **Clawd stays in the notch** and he floats down into it under a parachute, waves, and never walks off: when Claude has nothing going on, he stays in the notch and keeps himself busy. Every few seconds he does something, in no fixed order:
+Switch on Clawd's menu → **Clawd stays in the notch** and he floats down into it under a parachute, waves, and never walks off: when Claude has nothing going on, he stays in the notch and keeps himself busy. Every few seconds he does something, in no fixed order. Nothing turns up out of thin air: he takes it down from above the screen and puts it back up there when he's done.
 
-- has a mug of coffee: steam curls up, and now and then he takes a sip with his eyes shut in a smile;
-- puts on headphones and nods to the beat with his eyes shut, notes floating off;
-- puts on a wizard's hat and holds up a wand: sparkles fly off its star, and he winks;
-- puts on a chef's hat and tosses a pancake in a frying pan;
+- reaches up past the edge of the screen for a mug of coffee: steam curls up, and now and then he takes a sip with his eyes shut in a smile;
+- takes down headphones, puts them on and nods to the beat with his eyes shut, notes floating off;
+- takes down a wizard's hat and puts it on, holds out his hand, and a wand drops into it: sparkles fly off its star, and he winks;
+- takes down a chef's hat and puts it on, a frying pan drops into his hand, and he tosses a pancake;
 - stands thinking with a hand on his chin, dots coming and going in a bubble;
 - looks around, sways, dances (once or twice), does the hula, hops twice, gets excited, breakdances (the whole routine, with a windmill and a headspin);
 - sits down for a nap under an open book and gets back up;

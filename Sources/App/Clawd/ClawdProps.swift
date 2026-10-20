@@ -55,10 +55,10 @@ enum Props {
     private static let body: UInt32 = 0xd9_77_57_ff
     private static let eye: UInt32 = 0x14_14_13_ff
 
-    // MARK: Standing (Laptop frame 0): head x 4–19 from y 7, eyes at x 6–7 and 16–17, y 9–10,
-    // arms at y 11–14 out to x 0 and x 23.
+    // MARK: Standing (Pointing frame 0): head x 4–19 from y 5, eyes at x 6–7 and 16–17, y 7–8,
+    // arms at y 9–12 out to x 0 and x 23. Raised (7–14), the hands' top row is y 0.
 
-    /// Held by its handle in the hand at x 23: put at (24, 10), or (23, 8) for a sip.
+    /// Held by its handle in the hand at x 23: put at (24, 8), or (23, 6) for a sip; (8, -6) on his raised hands.
     static let mug = PixelArt("mug", [
         "..rkkkkr",
         "hhwwwwww",
@@ -71,19 +71,19 @@ enum Props {
     static let steam = PixelArt("steam", ["s"], ["s": 0xdd_dd_dd_ff])
     static let steamFading = PixelArt("steamFading", ["s"], ["s": 0x80_80_80_ff])
 
-    /// Eyes shut in a smile, "^ ^": at (5, 9).
+    /// Eyes shut in a smile, "^ ^": at (5, 7).
     static let happyEyes = PixelArt("happyEyes", [
         "bxxb......bxxb",
         "xbbx......xbbx",
     ], ["b": body, "x": eye])
 
-    /// Eyes shut, "— —": at (5, 9).
+    /// Eyes shut, "— —": at (5, 7).
     static let closedEyes = PixelArt("closedEyes", [
         ".bb........bb.",
         "xxx........xxx",
     ], ["b": body, "x": eye])
 
-    /// Over the head and on both ears: at (1, 5).
+    /// Over the head and on both ears: at (1, 3); (1, -1), held by the band, on his raised hands.
     static let headphones = PixelArt("headphones", [
         "....BBBBBBBBBBBBBB....",
         "..BB..............BB..",
@@ -105,7 +105,7 @@ enum Props {
     // MARK: Pointing (frame 24): turned, head x 4–19 from y 5, eyes at x 8–9 and 18–19, y 7–8,
     // the near arm out at y 8–11 to x 26.
 
-    /// At (2, -5): the brim rests on the head.
+    /// At (2, -5): the brim rests on the head; (2, -10) on his raised hands.
     static let wizardHat = PixelArt("wizardHat", [
         "............DD......",
         "...........BD.......",
@@ -144,7 +144,7 @@ enum Props {
     /// One eye shut: at (18, 7).
     static let wink = PixelArt("wink", ["bb"], ["b": body])
 
-    /// At (4, -4): sits on the head.
+    /// At (4, -4): sits on the head; (4, -9) on his raised hands.
     static let chefHat = PixelArt("chefHat", [
         "....WW....WW....",
         "..WWWWW..WWWWW..",
