@@ -13,6 +13,8 @@ enum DetailsLayout {
     static let maxAgentRows = 3
     static let maxHistoryRows = 3
     static let maxOtherRows = 3
+    /// The current step's line and the progress bar under it.
+    static let plan: CGFloat = line + 5 + 3
 
     /// Rough wrap estimate for the card's ~390 pt text column.
     static func taskLines(_ s: Session) -> Int {
@@ -36,6 +38,7 @@ enum DetailsLayout {
         let task = taskLines(s)
         if task > 0 { sections.append(caption + captionGap + CGFloat(task) * line) }
         sections.append(caption + captionGap + nowHeight(DetailsCard.now(s)))
+        if !s.tasks.isEmpty { sections.append(caption + captionGap + plan) }
         list(agentRows(s))
         list(min(s.history.count, maxHistoryRows))
         list(min(others, maxOtherRows))
@@ -52,6 +55,7 @@ enum DetailsLayout {
         s.activity = Activity(symbol: "", title: "x", detail: String(repeating: "x", count: 300), monospaced: true, note: "x")
         s.agents = Array(repeating: SubAgent(id: "", type: "", started: .distantPast), count: maxAgentRows)
         s.history = Array(repeating: Activity(symbol: "", title: "x", detail: ""), count: maxHistoryRows)
+        s.tasks.apply("TodoWrite", ["todos": [["content": "x", "status": "pending"]]], useID: nil)
         return height(s, others: maxOtherRows)
     }()
 }
@@ -80,6 +84,9 @@ struct DetailsCard: View {
                 }
             }
             section(nowCaption) { NowRow(activity: Self.now(session), phase: session.phase) }
+            if !session.tasks.isEmpty {
+                section(planCaption) { PlanRow(tasks: session.tasks) }
+            }
             if !session.agents.isEmpty {
                 let running = session.agents.filter { $0.finished == nil }.count
                 section(running > 0 ? tr("Агенты · работают \(running)", "Agents · \(running) running") : tr("Агенты", "Agents")) {
@@ -110,6 +117,12 @@ struct DetailsCard: View {
         .padding(.horizontal, 18)
         .padding(.top, DetailsLayout.top)
         .padding(.bottom, DetailsLayout.bottom)
+    }
+
+    private var planCaption: String {
+        let tasks = session.tasks
+        guard let current = tasks.current else { return tr("План · всё сделано", "Plan · all done") }
+        return tr("План · шаг \(current.step) из \(tasks.count)", "Plan · step \(current.step) of \(tasks.count)")
     }
 
     private var nowCaption: String {
@@ -215,6 +228,29 @@ private struct NowRow: View {
     }
 }
 
+/// The step under way and a bar for how much of the list is done.
+private struct PlanRow: View {
+    let tasks: TaskList
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(tasks.current?.title ?? tasks.items.last?.title ?? "")
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.85))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(height: DetailsLayout.line)
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.12))
+                    Capsule().fill(claudeOrange).frame(width: geometry.size.width * tasks.fraction)
+                }
+            }
+            .frame(height: 3)
+        }
+    }
+}
+
 private struct AgentRow: View {
     let agent: SubAgent
 
@@ -287,7 +323,7 @@ private struct SessionRow: View {
                 .fill(phaseColor(session.phase == .tool ? .thinking : session.phase))
                 .frame(width: 7, height: 7)
                 .frame(width: 13)
-            Text(session.project.isEmpty ? tr("сессия", "session") : session.project)
+            Text(session.title ?? (session.project.isEmpty ? tr("сессия", "session") : session.project))
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(.white.opacity(0.85))
                 .lineLimit(1)

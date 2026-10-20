@@ -31,7 +31,7 @@ enum AppFocus {
 
     /// What the greeting opens: the app Claude Code last ran in, else the Claude app, else Terminal.
     static var claudeApp: URL? {
-        [lastHost, "com.anthropic.claudefordesktop", "com.apple.Terminal"].lazy
+        [lastHost, claudeBundleID, "com.apple.Terminal"].lazy
             .compactMap { $0.flatMap(NSWorkspace.shared.urlForApplication(withBundleIdentifier:)) }
             .first
     }
@@ -49,6 +49,36 @@ enum AppFocus {
     /// reliably activate another one directly on recent macOS.
     static func open(_ app: URL) {
         NSWorkspace.shared.openApplication(at: app, configuration: activating)
+    }
+
+    static let claudeBundleID = "com.anthropic.claudefordesktop"
+
+    /// Opens a session that runs in the Claude app at that very session, not just the app.
+    /// False when the app keeps no record of it.
+    static func openInClaudeApp(_ sessionID: String) -> Bool {
+        guard let local = claudeAppSession(for: sessionID),
+              let url = URL(string: "claude://code/continue?session=\(local)") else { return false }
+        NSWorkspace.shared.open(url, configuration: activating)
+        return true
+    }
+
+    /// The Claude app's own id ("local_…") for a Claude Code session. The app keeps a record per
+    /// session in ~/Library/Application Support/Claude/claude-code-sessions with the Claude Code
+    /// session id in `cliSessionId` (and earlier ones of a resumed session in `priorCliSessionIds`).
+    /// That's the app's own format, so a miss just means bringing the app forward instead.
+    static func claudeAppSession(for sessionID: String) -> String? {
+        let root = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Claude/claude-code-sessions")
+        guard let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else { return nil }
+        let needle = Data(sessionID.utf8)
+        for case let file as URL in files where file.lastPathComponent.hasPrefix("local_") && file.pathExtension == "json" {
+            guard let data = try? Data(contentsOf: file), data.range(of: needle) != nil,
+                  let record = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let local = record["sessionId"] as? String else { continue }
+            let ids = [record["cliSessionId"] as? String] + (record["priorCliSessionIds"] as? [String] ?? []).map(Optional.some)
+            if ids.contains(sessionID) { return local }
+        }
+        return nil
     }
 
     private static var activating: NSWorkspace.OpenConfiguration {

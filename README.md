@@ -80,6 +80,8 @@ A thin rim runs along the island's edge: red, orange and gold, flowing around it
 
 The notch also says what Claude is thinking about: "Thinking…" with the gist of its thoughts, and under each action why it's doing it ("Editing · auth.ts — Fix the token check"). It takes this from what Claude writes between actions; for a command, its description is shown instead of the command itself.
 
+When Claude keeps a task list (TodoWrite, TaskCreate/TaskUpdate, or the Claude app's plan), a green line grows along the bottom of the island as steps get done, and the card says "Plan · step 3 of 5" with the step under way. When it's done, the notch shows the last line of its reply; if that's a question, Clawd waves: "Waiting for your answer". Sessions go by their name (the one in the Claude app's sidebar, or the one Claude Code gave them) rather than their folder.
+
 Open the app itself (at login, along with a new Claude Code session, or again from Finder or Spotlight) and Clawd hops and waves from the notch: "Ready to work". Click it to open Claude, or wherever Claude Code ran last.
 
 <p align="center"><img src="docs/greeting.png" width="560" alt="The notch says Ready to work"></p>

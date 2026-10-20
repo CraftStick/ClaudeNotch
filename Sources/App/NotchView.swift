@@ -95,6 +95,19 @@ struct NotchView: View {
                          working: session?.phase.isActive == true)
             }
         }
+        .overlay(alignment: .bottomLeading) {
+            // How much of Claude's task list is done, as a green line growing along the bottom edge
+            // (white would melt into a light background below the island).
+            if mode != .hidden, let session, session.phase.isActive, session.tasks.current != nil {
+                let corner = isOpen ? 20.0 : 10.0
+                Capsule()
+                    .fill(Color(red: 0.35, green: 0.86, blue: 0.45))
+                    .frame(width: max(0, size.width - 2 * (ear + corner)) * session.tasks.fraction, height: NotchRim.width)
+                    .padding(.leading, ear + corner)
+                    .animation(.easeInOut(duration: 0.5), value: session.tasks.fraction)
+                    .allowsHitTesting(false)
+            }
+        }
         .shadow(color: .black.opacity(isOpen ? 0.35 : 0), radius: 10, y: 4)
         .opacity(mode == .hidden ? 0 : 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -289,8 +302,8 @@ private struct DetailRow: View {
             IconBadge(symbol: shown.symbol, color: phaseColor(session.phase))
             TitleAndDetail(title: shown.title, activity: shown)
             Spacer(minLength: 8)
-            if !session.project.isEmpty {
-                Text(session.project)
+            if let label = session.title ?? (session.project.isEmpty ? nil : session.project) {
+                Text(label)
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.4))
                     .lineLimit(1)

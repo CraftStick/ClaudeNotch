@@ -18,6 +18,8 @@ final class TranscriptWatcher {
     var onUsage: (String, TranscriptUsage) -> Void = { _, _ in }
     /// The gist of a thinking block or a message Claude just wrote, and when it was written.
     var onThought: (String, String, Date) -> Void = { _, _, _ in }
+    /// The session's name: one you gave it (`custom` is true), or the one Claude Code made up.
+    var onTitle: (String, String, Bool) -> Void = { _, _, _ in }
     private var watches: [String: Watch] = [:]
 
     private final class Watch {
@@ -34,6 +36,8 @@ final class TranscriptWatcher {
 
     private static let interruptMarker = Data("[Request interrupted by user".utf8)
     private static let usageMarker = Data("\"usage\"".utf8)
+    private static let customTitleMarker = Data("\"custom-title\"".utf8)
+    private static let aiTitleMarker = Data("\"ai-title\"".utf8)
 
     func watch(sessionID: String, path: String) {
         if watches[sessionID]?.path == path { return }
@@ -61,6 +65,11 @@ final class TranscriptWatcher {
         if let usage = Self.lastUsage(path: path, end: end) {
             onUsage(sessionID, usage)
         }
+        // The name can be anywhere in a long transcript: looked for off the main thread.
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let (title, custom) = Self.lastTitle(path: path) else { return }
+            DispatchQueue.main.async { self?.onTitle(sessionID, title, custom) }
+        }
     }
 
     func stop(sessionID: String) {
@@ -85,6 +94,10 @@ final class TranscriptWatcher {
             if line.range(of: Self.usageMarker) != nil, let (message, written) = Self.assistantMessage(line) {
                 if let usage = Self.usage(in: message, initial: false) { onUsage(sessionID, usage) }
                 if let thought = Self.thought(in: message) { onThought(sessionID, thought, written ?? Date()) }
+            }
+            if line.range(of: Self.customTitleMarker) != nil || line.range(of: Self.aiTitleMarker) != nil,
+               let (title, custom) = Self.title(in: line) {
+                onTitle(sessionID, title, custom)
             }
         }
         watch.partialLine = Data(buffer)
@@ -149,14 +162,67 @@ final class TranscriptWatcher {
     /// The first line with words in it, without Markdown marks: a thinking block often starts with
     /// a bold title ("**Planning the fix**"), a message with what Claude is about to do.
     private static func gist(_ text: String) -> String? {
+        firstPlainLine(text.split(whereSeparator: \.isNewline))
+    }
+
+    /// The last line with words in it, without Markdown marks: how a reply ends, often a question.
+    static func lastLine(_ text: String) -> String? {
+        firstPlainLine(text.split(whereSeparator: \.isNewline).reversed())
+    }
+
+    /// The first of `lines` that is text, skipping code blocks and tables, with Markdown marks removed.
+    private static func firstPlainLine<Lines: Sequence>(_ lines: Lines) -> String? where Lines.Element == Substring {
         var inCode = false
-        for raw in text.split(whereSeparator: \.isNewline) {
+        for raw in lines {
             var line = raw.trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("```") { inCode.toggle() }
             if inCode || line.hasPrefix("```") || line.hasPrefix("|") { continue }  // code, tables
             for mark in ["**", "__", "`"] { line = line.replacingOccurrences(of: mark, with: "") }
             line = String(line.drop { "#>-*• ".contains($0) })
             if line.contains(where: \.isLetter) { return String(line.prefix(200)) }
+        }
+        return nil
+    }
+
+    // MARK: - Names and the last reply
+
+    /// `{"type":"custom-title","customTitle":…}` or `{"type":"ai-title","aiTitle":…}`.
+    private static func title(in line: Data) -> (String, Bool)? {
+        guard let entry = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { return nil }
+        switch entry["type"] as? String {
+        case "custom-title": return (entry["customTitle"] as? String).flatMap { $0.isEmpty ? nil : ($0, true) }
+        case "ai-title": return (entry["aiTitle"] as? String).flatMap { $0.isEmpty ? nil : ($0, false) }
+        default: return nil
+        }
+    }
+
+    /// The latest name in the transcript: the one you gave, else the one Claude Code made up.
+    /// Searched from the end of the mapped file, so even a long transcript is quick.
+    private static func lastTitle(path: String) -> (String, Bool)? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped) else { return nil }
+        for marker in [customTitleMarker, aiTitleMarker] {
+            var end = data.endIndex
+            while let hit = data.range(of: marker, options: .backwards, in: data.startIndex..<end) {
+                let start = data[..<hit.lowerBound].lastIndex(of: UInt8(ascii: "\n")).map { $0 + 1 } ?? data.startIndex
+                let stop = data[hit.upperBound...].firstIndex(of: UInt8(ascii: "\n")) ?? data.endIndex
+                if let found = title(in: Data(data[start..<stop])) { return found }
+                end = hit.lowerBound
+            }
+        }
+        return nil
+    }
+
+    /// The text of Claude's last message in the transcript: for when a turn ends.
+    static func lastReply(path: String) -> String? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        let end = (try? handle.seekToEnd()) ?? 0
+        let start = end > 256_000 ? end - 256_000 : 0
+        guard (try? handle.seek(toOffset: start)) != nil, let data = try? handle.readToEnd() else { return nil }
+        for line in data.split(separator: UInt8(ascii: "\n")).reversed() where line.range(of: usageMarker) != nil {
+            guard let (message, _) = assistantMessage(Data(line)) else { continue }
+            let texts = (message["content"] as? [[String: Any]] ?? []).compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }
+            if let text = texts.last, !text.isEmpty { return text }
         }
         return nil
     }

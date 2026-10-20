@@ -101,6 +101,11 @@ struct Session: Equatable {
     var activity = Activity.thinking
     /// The message that started this turn.
     var task = ""
+    /// The session's name, if it has one: given by you (`customTitle`) or made up by Claude Code.
+    var title: String?
+    var customTitle = false
+    /// Claude's task list for this turn.
+    var tasks = TaskList()
     /// What Claude is thinking about: the gist of its thinking or of what it wrote, and when it wrote
     /// it. The next tool takes it as its reason.
     var thought = ""
@@ -174,6 +179,7 @@ struct Session: Equatable {
         history = []
         currentTool = nil
         thought = ""
+        tasks = TaskList()
         linesAdded = 0
         linesRemoved = 0
         turnOutputTokens = 0
@@ -243,6 +249,12 @@ final class Store: ObservableObject {
         transcripts.onInterrupt = { [weak self] id in self?.interrupted(id) }
         transcripts.onUsage = { [weak self] id, usage in self?.recordUsage(id, usage) }
         transcripts.onThought = { [weak self] id, thought, written in self?.recordThought(id, thought, written: written) }
+        transcripts.onTitle = { [weak self] id, title, custom in
+            guard let self, var s = self.sessions[id], custom || !s.customTitle, s.title != title else { return }
+            s.title = title
+            s.customTitle = custom
+            self.sessions[id] = s
+        }
         pruneTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             self?.prune()
         }
@@ -306,6 +318,7 @@ final class Store: ObservableObject {
             return
         }
         guard let s = sessions[id] else { return }
+        if s.host == AppFocus.claudeBundleID || s.entrypoint == "claude-desktop", AppFocus.openInClaudeApp(id) { return }
         AppFocus.show(host: s.host, folder: s.cwd)
     }
 
@@ -319,7 +332,7 @@ final class Store: ObservableObject {
             s.project = (r.cwd as NSString).lastPathComponent
             s.transcriptPath = r.path
             s.entrypoint = r.entrypoint
-            s.host = r.entrypoint == "claude-desktop" ? "com.anthropic.claudefordesktop" : AppFocus.lastHost
+            s.host = r.entrypoint == "claude-desktop" ? AppFocus.claudeBundleID : AppFocus.lastHost
             s.task = String(r.task.split(whereSeparator: \.isNewline).joined(separator: " ").prefix(300))
             if let tool = r.tool {
                 s.phase = .tool
@@ -466,6 +479,7 @@ final class Store: ObservableObject {
                 s.task = ""
             }
             s.actions += 1
+            if TaskList.handles(toolName) { s.tasks.apply(toolName, toolInput, useID: json["tool_use_id"] as? String) }
             let previousTool = s.recentTools.last ?? .distantPast
             s.recentTools = Array((s.recentTools + [now]).suffix(8))
             if toolName == "Task" || toolName == "Agent" {
@@ -496,6 +510,7 @@ final class Store: ObservableObject {
             dropPrompts(for: id) { endsSubagents || $0.agentID == nil }
             if !known { s.phase = .thinking }  // the app started mid-turn: Claude is between tools
             guard s.phase.isActive else { return }
+            if TaskList.handles(toolName) { s.tasks.finish(toolName, response: json["tool_response"], useID: json["tool_use_id"] as? String) }
             // Recorded from currentTool, not the shown activity: a tool approved in the app's own
             // dialog arrives here while the notch still says "Waiting for permission".
             if let tool = s.currentTool, !tool.quiet {
@@ -534,10 +549,23 @@ final class Store: ObservableObject {
 
         case "Stop":
             dropPrompts(for: id)
-            s.phase = .done
             s.turnEnd = now
             s.currentTool = nil
-            s.activity = Activity(symbol: "checkmark.circle.fill", title: tr("Готово", "Done"), detail: summary(s, until: now))
+            // How the reply ends: its last line, from the hook or else the transcript.
+            let reply = (json["last_assistant_message"] as? String) ?? s.transcriptPath.flatMap(TranscriptWatcher.lastReply)
+            let last = reply.flatMap(TranscriptWatcher.lastLine) ?? ""
+            if last.hasSuffix("?") || last.hasSuffix("？") {
+                // It ended with a question: Claude waits for your answer.
+                s.phase = .waiting
+                s.activity = Activity(symbol: "questionmark.bubble.fill", title: tr("Ждёт ответа", "Waiting for your answer"),
+                                      detail: last, note: summary(s, until: now), prose: true)
+                commit(s, expandFor: chime("Tink", for: s) ? 8 : 4)
+                return
+            }
+            s.phase = .done
+            s.activity = last.isEmpty
+                ? Activity(symbol: "checkmark.circle.fill", title: tr("Готово", "Done"), detail: summary(s, until: now))
+                : Activity(symbol: "checkmark.circle.fill", title: tr("Готово", "Done"), detail: last, note: summary(s, until: now), prose: true)
             // A big task (5+ minutes or 150+ changed lines) gets confetti instead of a hop.
             if now.timeIntervalSince(s.turnStart) >= 300 || s.linesAdded + s.linesRemoved >= 150 {
                 s.play(.celebrate, at: now)
@@ -847,7 +875,7 @@ enum Describe {
         case "Task", "Agent":
             return Activity(symbol: "person.2", title: tr("Запускает агента", "Starting an agent"), detail: oneLine(str("description")),
                             note: str("subagent_type"), agent: true)
-        case "TodoWrite":
+        case "TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet":
             return Activity(symbol: "checklist", title: tr("Обновляет план", "Updating the plan"), detail: "", quiet: true)
         case "Skill":
             return Activity(symbol: "book", title: tr("Читает навык", "Reading a skill"), detail: str("skill"))
