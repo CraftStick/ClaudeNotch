@@ -382,8 +382,9 @@ final class Store: ObservableObject {
         scheduleCollapse(after: 5)
     }
 
-    /// Called often with where the pointer is; opens the card after a short rest, closes it
-    /// a moment after the pointer leaves, so passing over the menu bar doesn't flicker.
+    /// Called often with where the pointer is; opens the card after a short rest, so passing over the
+    /// menu bar doesn't flicker, and closes it as soon as the pointer leaves: all the way down, not to
+    /// the row it opened over, which a question would keep up until it's answered.
     func pointer(inside: Bool) {
         let wanted = inside && prompt == nil && (detailsSession ?? greeting) != nil
         guard wanted != hovering else {
@@ -393,11 +394,14 @@ final class Store: ObservableObject {
         }
         guard hoverWork == nil else { return }
         let work = DispatchWorkItem { [weak self] in
-            self?.hoverWork = nil
-            self?.hovering = wanted
+            guard let self else { return }
+            self.hoverWork = nil
+            self.hovering = wanted
+            if !wanted { self.collapse() }
         }
         hoverWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (wanted ? 0.3 : 0.35), execute: work)
+        // Leaving waits one more look at the pointer (it's polled every 0.1 s), for a pointer on the edge.
+        DispatchQueue.main.asyncAfter(deadline: .now() + (wanted ? 0.3 : 0.1), execute: work)
     }
 
     func handle(_ json: [String: Any]?, reply: HookReply) {
