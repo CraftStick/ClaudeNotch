@@ -50,21 +50,49 @@ if let close = payload.lastIndex(of: UInt8(ascii: "}")) {
 guard !payload.isEmpty, let home = getenv("HOME") else { exit(0) }
 let path = String(cString: home) + "/Library/Application Support/ClaudeNotch/notch.sock"
 
-let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-guard fd >= 0 else { exit(0) }
-
 var addr = sockaddr_un()
 addr.sun_family = sa_family_t(AF_UNIX)
 let pathBytes = Array(path.utf8)
 guard pathBytes.count < MemoryLayout.size(ofValue: addr.sun_path) else { exit(0) }
 withUnsafeMutableBytes(of: &addr.sun_path) { $0.copyBytes(from: pathBytes) }
 
-let connected = withUnsafePointer(to: &addr) {
-    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-        connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+/// A connection to the app, or nil if it isn't running.
+func connectToApp() -> Int32? {
+    let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+    guard fd >= 0 else { return nil }
+    let connected = withUnsafePointer(to: &addr) {
+        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+            connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+        }
+    }
+    if connected == 0 { return fd }
+    close(fd)
+    return nil
+}
+
+/// Starts the app this hook lives in (…/ClaudeNotch.app/Contents/MacOS/claude-notch-hook), in the background.
+func launchApp() -> Bool {
+    let me = CommandLine.arguments[0]
+    let suffix = "/Contents/MacOS/claude-notch-hook"
+    guard me.hasSuffix(".app" + suffix) else { return false }
+    let app = String(me.dropLast(suffix.count))
+    var pid = pid_t()
+    let args = ["/usr/bin/open", "-g", app].map { strdup($0) } + [nil]
+    defer { args.forEach { free($0) } }
+    return posix_spawn(&pid, "/usr/bin/open", nil, nil, args, environ) == 0
+}
+
+var app = connectToApp()
+// A Claude Code session just opened and the app isn't running (quit, or never started since login):
+// bring it along, then hand it this event. Only here: every other event finds it running, or it was
+// quit on purpose mid-session and shouldn't come back by itself.
+if app == nil, contains(payload, "\"SessionStart\""), launchApp() {
+    for _ in 0..<15 where app == nil {  // up to 1.5 s, inside the 2 s alarm
+        usleep(100_000)
+        app = connectToApp()
     }
 }
-guard connected == 0 else { exit(0) }  // app not running: nothing to do
+guard let fd = app else { exit(0) }  // app not running: nothing to do
 
 var offset = 0
 while offset < payload.count {

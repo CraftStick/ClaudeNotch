@@ -50,7 +50,7 @@ chmod +x *.sh && ./install.sh
 
 1. Builds the app from source (`build.sh`) into `~/Applications/ClaudeNotch.app` and starts it. It's built on your Mac, so macOS shows no Gatekeeper warnings.
 2. Adds the hooks to `~/.claude/settings.json` (`install-hooks.sh`). Your other settings and hooks stay untouched, the first run saves the original as `settings.json.bak-claudenotch` (later runs leave it alone), and running it again adds nothing twice.
-3. The app turns on Open at Login by itself (you can switch it off in the menu).
+3. The app turns on Open at Login by itself (you can switch it off in the menu). And if it isn't running when a Claude Code session opens, in the Claude app or a terminal, it starts along with it.
 
 </details>
 
@@ -74,7 +74,7 @@ Clawd on the left of the notch, the task's time on the right. On every action th
 
 The notch also says what Claude is thinking about: "Thinking…" with the gist of its thoughts, and under each action why it's doing it ("Editing · auth.ts — Fix the token check"). It takes this from what Claude writes between actions; for a command, its description is shown instead of the command itself.
 
-Open the app itself (at login, or again from Finder or Spotlight) and Clawd hops and waves from the notch: "Ready to work". Click it to open Claude, or wherever Claude Code ran last.
+Open the app itself (at login, along with a new Claude Code session, or again from Finder or Spotlight) and Clawd hops and waves from the notch: "Ready to work". Click it to open Claude, or wherever Claude Code ran last.
 
 <p align="center"><img src="docs/greeting.png" width="560" alt="The notch says Ready to work"></p>
 
