@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var notch: NotchMetrics?
     private var soundsItem: NSMenuItem?
     private var rimItem: NSMenuItem?
+    private var claudeCodeItem: NSMenuItem?
     private let hotKeys = HotKeys()
     /// The pointer is over the visible notch: take clicks there (to focus a session).
     private var pointerInside = false
@@ -69,6 +70,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Already running, e.g. this is another copy of the app: that one says hi instead.
         if SocketServer.isAlive(Paths.socket, telling: Store.openedMessage) {
+            NSApp.terminate(nil)
+            return
+        }
+        if Self.runsFromDiskImage {
+            askToMoveFirst()
             NSApp.terminate(nil)
             return
         }
@@ -88,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         layoutPanel()
         setUpStatusItem()
         syncLaunchAtLogin()
+        connectToClaudeCodeIfNeeded()
         _ = ClawdAssets.laptop  // read Clawd's sprites from Claude.app now, not on the first event
         promptsObserver = store.$prompts.sink { [weak self] _ in
             DispatchQueue.main.async {  // after `prompts` has its new value
@@ -231,6 +238,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title.isEnabled = false
         menu.addItem(title)
         menu.addItem(.separator())
+        let claudeCode = NSMenuItem(title: tr("Подключено к Claude Code", "Connected to Claude Code"),
+                                    action: #selector(toggleClaudeCode), keyEquivalent: "")
+        claudeCode.target = self
+        menu.addItem(claudeCode)
+        claudeCodeItem = claudeCode
         let login = NSMenuItem(title: tr("Запускать при входе", "Open at login"), action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         login.target = self
         menu.addItem(login)
@@ -258,11 +270,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(language)
 
         menu.addItem(.separator())
+        let remove = NSMenuItem(title: tr("Удалить Claude Notch…", "Remove Claude Notch…"), action: #selector(removeApp), keyEquivalent: "")
+        remove.target = self
+        menu.addItem(remove)
         menu.addItem(NSMenuItem(title: tr("Выйти", "Quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem?.menu = menu
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        claudeCodeItem?.state = ClaudeHooks.state() == .connected ? .on : .off
         loginItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
         soundsItem?.state = UserDefaults.standard.bool(forKey: Store.soundsKey) ? .on : .off
         rimItem?.state = UserDefaults.standard.bool(forKey: Store.rimKey) ? .on : .off
@@ -283,6 +299,109 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let on = !UserDefaults.standard.bool(forKey: Store.soundsKey)
         UserDefaults.standard.set(on, forKey: Store.soundsKey)
         if on { NSSound(named: "Glass")?.play() }
+    }
+
+    // MARK: - Claude Code
+
+    private static let hooksDeclinedKey = "hooksDeclined"
+
+    /// Opened right from the disk image, or from Downloads, which macOS runs from a hidden read-only copy:
+    /// the hooks and the login item would point at a copy that's gone once the image is ejected.
+    private static var runsFromDiskImage: Bool {
+        let app = Bundle.main.bundleURL
+        return app.path.contains("/AppTranslocation/")
+            || (try? app.resourceValues(forKeys: [.volumeIsReadOnlyKey]))?.volumeIsReadOnly == true
+    }
+
+    private func askToMoveFirst() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = tr("Сначала перетащи Claude Notch в «Программы»", "Drag Claude Notch to Applications first")
+        alert.informativeText = tr("Потом открой его оттуда: из образа диска оно работать не сможет, когда тот извлекут.",
+                                   "Then open it from there: run from the disk image, it would stop once the image is ejected.")
+        alert.addButton(withTitle: tr("Понятно", "OK"))
+        alert.runModal()
+    }
+
+    /// Copied in from the disk image, the app connects itself: the first time it asks, and once
+    /// connected it quietly points the hooks at itself again after a move or an update that adds
+    /// events. An install from source has connected it already.
+    private func connectToClaudeCodeIfNeeded() {
+        switch ClaudeHooks.state() {
+        case .connected:
+            return
+        case .outdated:
+            connectToClaudeCode(asked: false)
+        case .missing:
+            guard !UserDefaults.standard.bool(forKey: Self.hooksDeclinedKey) else { return }
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.messageText = tr("Подключить Claude Notch к Claude Code?", "Connect Claude Notch to Claude Code?")
+            alert.informativeText = tr(
+                "Claude Notch добавит свои хуки в ~/.claude/settings.json: так Claude Code будет сообщать ему, что делает. Остальные настройки останутся как были, а исходный файл сохранится рядом. Отключить можно в меню Clawd в строке меню.",
+                "Claude Notch adds its hooks to ~/.claude/settings.json, so Claude Code tells it what it's doing. Your other settings stay as they are, and the original file is saved next to it. You can disconnect in Clawd's menu in the menu bar.")
+            alert.addButton(withTitle: tr("Подключить", "Connect"))
+            alert.addButton(withTitle: tr("Не сейчас", "Not now"))
+            if alert.runModal() == .alertFirstButtonReturn {
+                connectToClaudeCode(asked: true)
+            } else {
+                UserDefaults.standard.set(true, forKey: Self.hooksDeclinedKey)  // the menu can still do it
+            }
+        }
+    }
+
+    /// `asked`: you chose it, so a failure is worth an alert; otherwise it only goes to the log.
+    private func connectToClaudeCode(asked: Bool) {
+        do {
+            try ClaudeHooks.connect()
+            UserDefaults.standard.set(false, forKey: Self.hooksDeclinedKey)
+            EventLog.append("Hooks connected: \(ClaudeHooks.hookPath)")
+        } catch {
+            EventLog.append("Hooks not connected: \(error.localizedDescription)")
+            if asked { show(error) }
+        }
+    }
+
+    @objc private func toggleClaudeCode() {
+        guard ClaudeHooks.state() == .connected else { return connectToClaudeCode(asked: true) }
+        do {
+            try ClaudeHooks.disconnect()
+            UserDefaults.standard.set(true, forKey: Self.hooksDeclinedKey)  // don't ask again at the next launch
+            EventLog.append("Hooks disconnected")
+        } catch {
+            show(error)
+        }
+    }
+
+    /// What uninstall.sh does, for a copy dragged in from the disk image: no hooks left pointing at an app
+    /// that's gone (Claude Code would complain about them on every event), no login item, and the app
+    /// and its data in the Trash.
+    @objc private func removeApp() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = tr("Удалить Claude Notch?", "Remove Claude Notch?")
+        alert.informativeText = tr(
+            "Хуки уберутся из ~/.claude/settings.json, автозапуск выключится, а приложение и его данные отправятся в Корзину.",
+            "Its hooks come out of ~/.claude/settings.json, it stops opening at login, and the app and its data go to the Trash.")
+        alert.addButton(withTitle: tr("Удалить", "Remove")).hasDestructiveAction = true
+        alert.addButton(withTitle: tr("Отмена", "Cancel"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try ClaudeHooks.disconnect()
+        } catch {
+            return show(error)
+        }
+        try? SMAppService.mainApp.unregister()
+        server?.stop()
+        UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier ?? "local.claudenotch")
+        NSWorkspace.shared.recycle([Bundle.main.bundleURL, URL(fileURLWithPath: Paths.dir)]) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
+    }
+
+    private func show(_ error: Error) {
+        NSApp.activate(ignoringOtherApps: true)
+        NSAlert(error: error).runModal()
     }
 
     // MARK: - Launch at login

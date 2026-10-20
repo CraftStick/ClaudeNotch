@@ -11,12 +11,24 @@ fi
 
 APP=build/ClaudeNotch.app
 DEST="$HOME/Applications/ClaudeNotch.app"
-FLAGS=(-O -swift-version 5 -target "$(uname -m)-apple-macos14.0")
+# This Mac's kind by default; ARCHS="arm64 x86_64" makes one app for both (make-dmg.sh does).
+read -r -a ARCHS <<< "${ARCHS:-$(uname -m)}"
+
+# compile <output> <swiftc arguments…>: once per architecture, then glued into one file.
+compile() {
+    local out=$1 parts=()
+    shift
+    for arch in "${ARCHS[@]}"; do
+        swiftc -O -swift-version 5 -target "$arch-apple-macos14.0" "$@" -o "$out-$arch"
+        parts+=("$out-$arch")
+    done
+    if (( ${#parts[@]} == 1 )); then mv "${parts[0]}" "$out"; else lipo -create "${parts[@]}" -output "$out" && rm "${parts[@]}"; fi
+}
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-swiftc "${FLAGS[@]}" -parse-as-library Sources/App/*.swift -o "$APP/Contents/MacOS/ClaudeNotch"
-swiftc "${FLAGS[@]}" Sources/Hook/main.swift -o "$APP/Contents/MacOS/claude-notch-hook"
+compile "$APP/Contents/MacOS/ClaudeNotch" -parse-as-library Sources/App/*.swift
+compile "$APP/Contents/MacOS/claude-notch-hook" Sources/Hook/main.swift
 cp Info.plist "$APP/Contents/Info.plist"
 cp Resources/ClaudeNotch.icns "$APP/Contents/Resources/"
 # Folders like ~/Desktop (iCloud) give files extended attributes that codesign rejects.

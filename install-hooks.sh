@@ -27,7 +27,8 @@ import json, sys
 
 path, hook, mode = sys.argv[1:4]
 
-# event -> (matcher or None, timeout in seconds)
+# event -> (matcher or None, timeout in seconds). The app adds the same ones itself when it's
+# installed from the disk image (Sources/App/ClaudeHooks.swift): keep the two lists alike.
 EVENTS = {
     "SessionStart": (None, 3),  # also starts the app if it isn't running
     "UserPromptSubmit": (None, 3),
@@ -49,7 +50,8 @@ EVENTS = {
 }
 
 def is_ours(group):
-    return any(h.get("command", "").endswith("claude-notch-hook") for h in group.get("hooks", []))
+    # Also a quoted path, as the app writes one with spaces in it.
+    return any("claude-notch-hook" in h.get("command", "") for h in group.get("hooks", []))
 
 with open(path, encoding="utf-8") as f:
     settings = json.load(f)

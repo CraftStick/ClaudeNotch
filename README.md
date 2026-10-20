@@ -18,6 +18,21 @@ Answer permission requests with buttons right in the notch. And Clawd lives ther
 
 You need **macOS 14 or later** and **Claude Code** (in the terminal or in the Code tab of the Claude desktop app).
 
+**1.** Download **ClaudeNotch-….dmg** from the [latest release](https://github.com/CraftStick/ClaudeNotch/releases/latest), open it and drag Claude Notch to Applications.
+
+**2.** Open Claude Notch from Applications. Apple hasn't notarized it, so the first time macOS won't open it: go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Claude Notch. Only once.
+
+**3.** Claude Notch asks to connect to Claude Code: click **Connect**. It adds its hooks to `~/.claude/settings.json`; your other settings stay as they are, and the original file is saved next to it as `settings.json.bak-claudenotch`.
+
+That's it. Clawd says hi from the notch and settles in the menu bar, and the notch comes alive as soon as Claude Code starts a task. Sessions that were already open may only pick it up after a restart.
+
+**Update:** quit Claude Notch (Clawd's menu → Quit), then drag the new one from the next release's .dmg to Applications and replace the old one.
+
+**Uninstall:** Clawd's menu → **Remove Claude Notch…**. The hooks come out of `~/.claude/settings.json`, it stops opening at login, and the app and its data go to the Trash.
+
+<details>
+<summary>Or build it from source</summary>
+
 **1.** Install Apple's command line developer tools if you don't have them yet (an installer window opens; if they're already there, the command says so):
 
 ```bash
@@ -69,6 +84,8 @@ cd ~/ClaudeNotch && git pull && ./install.sh
 ```bash
 cd ~/ClaudeNotch && ./uninstall.sh
 ```
+
+</details>
 
 ## Features
 
@@ -137,6 +154,7 @@ Claude Code ──hook (JSON on stdin)──▶ claude-notch-hook ──Unix soc
 - **`NotchView.swift`**, **`NotchRim.swift`**, **`DetailsCard.swift`** — the interface: the shape around the notch and its rim, the open states, the cards.
 - **`ClawdAnimation.swift`**, **`Clawd.swift`** — Clawd's animations ([all of them](docs/clawd/README.md)).
 - **`TranscriptWatcher.swift`** — watches the session file: Claude Code sends no hook on Esc, and token usage lives there too.
+- **`ClaudeHooks.swift`** — connects the app to Claude Code: adds, updates and removes its hooks in `~/.claude/settings.json`, the same ones `install-hooks.sh` writes.
 - **`AppFocus.swift`**, **`HotKeys.swift`**, **`SocketServer.swift`**, **`Language.swift`** — click to focus (the hook tells the app which terminal tab a session runs in, by its tty), ⌃⌥⌘Y/⌃⌥⌘N, the socket, the two languages.
 
 **Privacy.** Everything stays on your Mac, no network. The hook sends events only to the socket `~/Library/Application Support/ClaudeNotch/notch.sock`, which only your user can open. The app reads the session files in `~/.claude/projects` only to notice Esc, to count tokens, to show what Claude is thinking about and, at launch, to find sessions already at work. To bring a Terminal or iTerm tab forward, it asks that terminal over AppleScript for the tab with the session's tty, and does nothing else with it.
@@ -145,7 +163,7 @@ Claude Code ──hook (JSON on stdin)──▶ claude-notch-hook ──Unix soc
 
 ## Troubleshooting
 
-- **The notch doesn't react.** Check that the app is running (`pgrep -x ClaudeNotch`) and the hooks are in place (`grep -c claude-notch-hook ~/.claude/settings.json`). Claude Code sessions that were already open sometimes pick up new hooks only after a restart.
+- **The notch doesn't react.** Check that the app is running (`pgrep -x ClaudeNotch`) and connected: Clawd's menu shows a check at **Connected to Claude Code** (or `grep -c claude-notch-hook ~/.claude/settings.json` counts the hooks). Claude Code sessions that were already open sometimes pick up new hooks only after a restart.
 - **A click brings Terminal or iTerm forward, but not the session's tab.** Turn Claude Notch on in System Settings → Privacy & Security → Automation. macOS may ask again after an update: the app is built on your Mac, and each build looks new to it.
 - **What reaches the app** is in the log: `tail -f ~/Library/Application\ Support/ClaudeNotch/events.log`.
 - **Context fill** is counted against 200K tokens, or 1M once a session has used more: Claude Code doesn't write the window size into the session file.
