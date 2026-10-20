@@ -1,289 +1,6 @@
 import AppKit
 
-enum Phase: Equatable {
-    case thinking, tool, waiting, done, stopped, failed
-
-    var isActive: Bool { self == .thinking || self == .tool || self == .waiting }
-}
-
 enum DisplayMode: Equatable { case hidden, compact, expanded, permission, details }
-
-struct Activity: Equatable {
-    var symbol: String
-    var title: String
-    var detail: String
-    var monospaced = false
-    /// Extra line for the hover card, e.g. the description Claude gave a shell command.
-    var note = ""
-    /// Bookkeeping (plan updates, loading tools): doesn't pop the notch open or go into history.
-    var quiet = false
-    /// Lines an edit adds and removes.
-    var added = 0
-    var removed = 0
-    /// `detail` is a shell command: lists show its description instead of the code.
-    var command = false
-    /// A Task/Agent call: subagents are at work.
-    var agent = false
-    /// `detail` is a sentence (a prompt, a thought): cut it at the end, not in the middle like a path.
-    var prose = false
-    /// Why Claude runs this tool, in its own words: what it wrote around the call. Only for tools
-    /// without a note of their own.
-    var reason = ""
-    /// The tool failed or was turned down: its icon goes red.
-    var failed = false
-    /// The answers Claude offers to its question.
-    var options: [String] = []
-
-    /// The line under the title in the card: the tool's own note, or else Claude's reason.
-    var aside: String { note.isEmpty ? reason : note }
-
-    static var thinking: Activity { thinking(about: "") }
-
-    static var compacting: Activity {
-        Activity(symbol: "archivebox", title: tr("Сжимает контекст", "Compacting context"), detail: "")
-    }
-
-    static func thinking(about thought: String) -> Activity {
-        Activity(symbol: "sparkle", title: tr("Думает…", "Thinking…"), detail: thought, prose: true)
-    }
-
-    /// One readable line for lists: "Читает файл · Store.swift", or for a command what it does
-    /// ("Собрать и установить приложение") rather than the command itself.
-    var headline: String {
-        if command { return note.isEmpty ? title : note }
-        return detail.isEmpty ? title : "\(title) · \(detail)"
-    }
-}
-
-/// A subagent Claude started with the Task/Agent tool. Its tool calls arrive with the parent's
-/// session id plus an `agent_id`.
-struct SubAgent: Equatable {
-    let id: String
-    var type: String
-    var task = ""
-    var activity: Activity?
-    var actions = 0
-    let started: Date
-    var finished: Date?
-}
-
-/// What Clawd is doing in the notch.
-enum Motion: Equatable {
-    /// At the laptop; thinking hard (a speech bubble); at the desk while a long command runs;
-    /// running while subagents work or tools fly by; waving while waiting for you;
-    /// resting after a turn that ended in one of three ways.
-    case typing, pondering, desktop, running, waving, done, stopped, failed
-}
-
-/// A one-off reaction Clawd plays over whatever he is doing: an idea when a task comes in,
-/// joy when you allow something, a facepalm when a tool fails or you say no,
-/// confetti after a big task, a hop and a wave when the app is opened, a parachute when he
-/// moves into the notch for good.
-enum Cue: Equatable { case idea, excited, facepalm, celebrate, hello, arrive }
-
-struct Session: Equatable {
-    let id: String
-    var project = ""
-    var cwd = ""
-    /// Bundle id of the app the session runs in (Terminal, VS Code, Claude…), for click-to-focus.
-    var host: String?
-    /// The terminal tab's device (/dev/ttys003): a click picks out that very tab in Terminal or iTerm.
-    var tty: String?
-    /// CLAUDE_CODE_ENTRYPOINT: "cli" in a terminal, something else in the desktop app or an IDE.
-    var entrypoint = ""
-    var transcriptPath: String?
-    /// Not working until an event says so: a session first seen through, say, a manual /compact
-    /// mustn't show Clawd at work.
-    var phase = Phase.done
-    /// The main agent's tool between PreToolUse and PostToolUse, for the history: the shown
-    /// activity changes meanwhile (e.g. to "Waiting for permission").
-    var currentTool: Activity?
-    /// Clawd's current and previous motion, so the notch can play the change between them.
-    private(set) var motion = Motion.done
-    private(set) var previousMotion = Motion.done
-    private(set) var motionStart = Date()
-    /// A one-off reaction, and what Clawd was doing when it started (to put the laptop away first).
-    private(set) var cue: Cue?
-    private(set) var cueStart = Date.distantPast
-    private(set) var cueInterrupted = Motion.done
-    var lastFacepalm = Date.distantPast
-    /// When the last few tools started, to notice a burst of them.
-    var recentTools: [Date] = []
-    var activity = Activity.thinking
-    /// The message that started this turn.
-    var task = ""
-    /// Claude's task list for this turn.
-    var tasks = TaskList()
-    /// What Claude is thinking about: the gist of its thinking or of what it wrote, and when it wrote
-    /// it. The next tool takes it as its reason.
-    var thought = ""
-    var thoughtWritten = Date.distantPast
-    /// When the shown failure (a tool that failed or was turned down) happened.
-    var failedAt = Date.distantPast
-    /// Finished actions of this turn, oldest first (the last few only).
-    var history: [Activity] = []
-    var agents: [SubAgent] = []
-    /// Task/Agent calls whose subagent hasn't announced itself yet: (type, description).
-    var pendingAgents: [[String]] = []
-    var turnStart: Date
-    var turnEnd: Date?
-    var lastEvent: Date
-    /// When the transcript last grew: Claude at work between hook events, e.g. on a long reply.
-    var lastWrite = Date.distantPast
-    var actions = 0
-    var linesAdded = 0
-    var linesRemoved = 0
-    /// From the transcript: tokens in the context now, and output tokens written this turn.
-    var contextTokens = 0
-    var contextWindow = 200_000
-    var turnOutputTokens = 0
-    var lastMessage = ""
-    var lastMessageOutput = 0
-
-    /// What Clawd should be doing now. Some of it depends on time: thinking for a while,
-    /// a command that runs long, a burst of tools.
-    func desiredMotion(at now: Date) -> Motion {
-        let quiet = now.timeIntervalSince(lastEvent)
-        switch phase {
-        case .waiting: return .waving
-        case .done: return .done
-        case .stopped: return .stopped
-        case .failed: return .failed
-        case .tool:
-            if activity.agent || isBusy(at: now) { return .running }
-            return activity.command && quiet > 8 ? .desktop : .typing
-        case .thinking:
-            if isBusy(at: now) { return .running }
-            return quiet > 12 ? .pondering : .typing
-        }
-    }
-
-    /// Six or more tools in the last 12 seconds.
-    private func isBusy(at now: Date) -> Bool {
-        recentTools.filter { now.timeIntervalSince($0) < 12 }.count >= 6
-    }
-
-    /// Minutes without a sign of life while Claude should be at work: it hung, or a command runs long.
-    /// Nil under five minutes, and while it waits for you, which is quiet by design.
-    func quietMinutes(at now: Date) -> Int? {
-        guard phase == .thinking || phase == .tool else { return nil }
-        let quiet = now.timeIntervalSince(max(lastEvent, lastWrite))
-        return quiet >= 300 ? Int(quiet / 60) : nil
-    }
-
-    mutating func syncMotion(at now: Date) {
-        let next = desiredMotion(at: now)
-        guard next != motion else { return }
-        previousMotion = motion
-        motion = next
-        motionStart = now
-    }
-
-    mutating func play(_ cue: Cue, at now: Date) {
-        self.cue = cue
-        cueStart = now
-        cueInterrupted = motion
-    }
-
-    /// Not a Claude Code session: Clawd saying hi when the app is opened.
-    var isGreeting: Bool { id == Store.greetingID }
-
-    /// The desktop app and IDE extensions show their own permission dialog while the hook runs;
-    /// in a terminal the usual prompt may only come once the hook is done.
-    var dialogRunsInParallel: Bool { !entrypoint.isEmpty && entrypoint != "cli" }
-
-    mutating func startTurn(at date: Date) {
-        turnStart = date
-        turnEnd = nil
-        actions = 0
-        history = []
-        currentTool = nil
-        thought = ""
-        tasks = TaskList()
-        linesAdded = 0
-        linesRemoved = 0
-        turnOutputTokens = 0
-        agents.removeAll { $0.finished != nil }
-    }
-}
-
-/// Claude's questions (AskUserQuestion, up to four), answered one after another in the notch. The
-/// answers go back to Claude Code as the tool's input, the way its own dialog fills them in.
-struct QuestionForm: Equatable {
-    struct Option: Equatable {
-        let label: String
-        let detail: String
-    }
-
-    struct Question: Equatable {
-        let text: String
-        let options: [Option]
-        let multiSelect: Bool
-    }
-
-    let questions: [Question]
-    /// The question shown now.
-    var step = 0
-    /// Question text → the chosen label (several, comma-separated, where more than one may be picked).
-    var answers: [String: String] = [:]
-    /// What's ticked so far on a question that takes several answers.
-    var picked: Set<Int> = []
-
-    var current: Question { questions[step] }
-
-    init?(_ input: [String: Any]) {
-        questions = (input["questions"] as? [[String: Any]] ?? []).compactMap { q in
-            guard let text = q["question"] as? String, !text.isEmpty else { return nil }
-            let options = (q["options"] as? [[String: Any]] ?? []).compactMap { o -> Option? in
-                guard let label = o["label"] as? String, !label.isEmpty else { return nil }
-                return Option(label: label, detail: oneLine(o["description"] as? String ?? ""))
-            }
-            return options.isEmpty ? nil : Question(text: text, options: Array(options.prefix(4)), multiSelect: q["multiSelect"] as? Bool ?? false)
-        }
-        guard !questions.isEmpty else { return nil }
-    }
-
-    /// Answers the current question with these options; true once every question has its answer.
-    mutating func answer(_ options: [Int]) -> Bool {
-        answers[current.text] = options.sorted().map { current.options[$0].label }.joined(separator: ", ")
-        picked = []
-        guard step + 1 < questions.count else { return true }
-        step += 1
-        return false
-    }
-}
-
-/// A PermissionRequest hook that waits for a click in the notch.
-struct PermissionPrompt: Identifiable, Equatable {
-    let id = UUID()
-    let sessionID: String
-    /// Set when a subagent asks: parallel subagents share the session id.
-    let agentID: String?
-    let question: String
-    let activity: Activity
-    /// Claude Code's `permission_suggestions`: the rules "Allow always" sends back.
-    let suggestions: [[String: Any]]
-    /// The tool's input, sent back with the answers to a question.
-    var input: [String: Any] = [:]
-    /// Set when Claude asks you something: its options instead of Allow and Deny.
-    var form: QuestionForm?
-    let created = Date()
-    let reply: HookReply
-
-    /// What "Allow always" would add, e.g. `Bash(npm run lint:*)`.
-    var ruleSummary: String? {
-        guard let first = suggestions.first else { return nil }
-        if let rule = (first["rules"] as? [[String: Any]])?.first, let tool = rule["toolName"] as? String {
-            let content = rule["ruleContent"] as? String ?? ""
-            return content.isEmpty ? tool : "\(tool)(\(content))"
-        }
-        if let mode = first["mode"] as? String { return tr("режим \(mode)", "mode \(mode)") }
-        if let dir = (first["directories"] as? [String])?.first { return tr("папка ", "folder ") + (dir as NSString).lastPathComponent }
-        return nil
-    }
-
-    static func == (a: PermissionPrompt, b: PermissionPrompt) -> Bool { a.id == b.id }
-}
 
 /// Turns Claude Code hook events into what the notch shows. Main thread only.
 final class Store: ObservableObject {
@@ -320,8 +37,11 @@ final class Store: ObservableObject {
     /// copy has to stay alive until it ends.
     private var playingSounds: [NSSound] = []
 
+    /// Sounds and the rim are on unless switched off in the menu. Registered at launch: tests run
+    /// without them.
+    static let defaults: [String: Any] = [soundsKey: true, rimKey: true]
+
     init() {
-        UserDefaults.standard.register(defaults: [Self.soundsKey: true, Self.rimKey: true])
         transcripts.onInterrupt = { [weak self] id in self?.interrupted(id) }
         transcripts.onUsage = { [weak self] id, usage in self?.recordUsage(id, usage) }
         transcripts.onThought = { [weak self] id, thought, written in self?.recordThought(id, thought, written: written) }
@@ -397,8 +117,11 @@ final class Store: ObservableObject {
             return
         }
         guard let s = sessions[id] else { return }
-        if s.host == AppFocus.claudeBundleID || s.entrypoint == "claude-desktop", AppFocus.openInClaudeApp(id) { return }
-        AppFocus.show(host: s.host, folder: s.cwd, tty: s.tty)
+        if s.host == AppFocus.claudeBundleID || s.entrypoint == "claude-desktop" {
+            AppFocus.openInClaudeApp(id) { AppFocus.show(host: s.host, folder: s.cwd, tty: s.tty) }
+        } else {
+            AppFocus.show(host: s.host, folder: s.cwd, tty: s.tty)
+        }
     }
 
     /// Sessions Claude was already at work in when the app started: shown now rather than at their
@@ -549,7 +272,7 @@ final class Store: ObservableObject {
             // In a terminal, hand the question back to the usual prompt after a while instead of
             // holding it for the hook's full ~10 minutes; a question takes longer to read.
             expire(prompt, after: s.dialogRunsInParallel ? 590 : form == nil ? 20 : 90)
-            chime("Tink", for: s)
+            chime("Tink", for: &s)
             commit(s, expandFor: .infinity)
             return
         }
@@ -607,7 +330,7 @@ final class Store: ObservableObject {
                 s.phase = .waiting
                 s.activity = question
                 s.currentTool = question
-                chime("Tink", for: s)
+                chime("Tink", for: &s)
                 commit(s, expandFor: .infinity)
             } else {
                 s.phase = .tool
@@ -635,13 +358,12 @@ final class Store: ObservableObject {
             // dialog arrives here while the notch still says "Waiting for permission".
             if var tool = s.currentTool, !tool.quiet {
                 tool.failed = failed
-                s.history = Array((s.history + [tool]).suffix(4))
+                s.record(tool)
                 if event == "PostToolUse" {
                     s.linesAdded += tool.added
                     s.linesRemoved += tool.removed
-                } else if failed, now.timeIntervalSince(s.lastFacepalm) > 45 {  // not for every failing grep
-                    s.play(.facepalm, at: now)
-                    s.lastFacepalm = now
+                } else if failed {
+                    s.facepalm(at: now)
                 }
             }
             let tool = s.currentTool ?? Describe.tool(toolName, toolInput)
@@ -663,7 +385,7 @@ final class Store: ObservableObject {
             if !tool.quiet {
                 var denied = tool
                 denied.failed = true
-                s.history = Array((s.history + [denied]).suffix(4))
+                s.record(denied)
             }
             s.currentTool = nil
             s.phase = .thinking
@@ -673,10 +395,7 @@ final class Store: ObservableObject {
                                   detail: tool.command ? tool.detail : tool.headline, monospaced: tool.command,
                                   note: reason, failed: true)
             s.failedAt = now
-            if now.timeIntervalSince(s.lastFacepalm) > 45 {
-                s.play(.facepalm, at: now)
-                s.lastFacepalm = now
-            }
+            s.facepalm(at: now)
             commit(s, expandFor: 4)
 
         case "Elicitation":
@@ -688,7 +407,7 @@ final class Store: ObservableObject {
                                   title: page ? tr("MCP-сервер просит открыть страницу", "An MCP server asks you to open a page")
                                               : tr("MCP-сервер просит данные", "An MCP server needs your input"),
                                   detail: oneLine(json["message"] as? String ?? ""), note: Describe.server(server), prose: true)
-            chime("Tink", for: s)
+            chime("Tink", for: &s)
             commit(s, expandFor: .infinity)
 
         case "ElicitationResult":
@@ -718,7 +437,7 @@ final class Store: ObservableObject {
             s.activity = Activity(symbol: "hand.raised.fill",
                                   title: type == "permission_prompt" ? tr("Ждёт разрешения", "Waiting for permission") : tr("Ждёт тебя", "Waiting for you"),
                                   detail: oneLine(message))
-            chime("Tink", for: s)
+            chime("Tink", for: &s)
             commit(s, expandFor: .infinity)
 
         case "PreCompact":
@@ -745,7 +464,8 @@ final class Store: ObservableObject {
                 s.phase = .waiting
                 s.activity = Activity(symbol: "questionmark.bubble.fill", title: tr("Ждёт ответа", "Waiting for your answer"),
                                       detail: last, note: summary(s, until: now), prose: true)
-                commit(s, expandFor: chime("Tink", for: s) ? 8 : 4)
+                let away = chime("Tink", for: &s)
+                commit(s, expandFor: away ? 8 : 4)
                 return
             }
             s.phase = .done
@@ -757,7 +477,8 @@ final class Store: ObservableObject {
                 s.play(.celebrate, at: now)
             }
             // If you're in another app, the result stays up longer, with a sound.
-            commit(s, expandFor: chime("Glass", for: s) ? 8 : 4)
+            let away = chime("Glass", for: &s)
+            commit(s, expandFor: away ? 8 : 4)
 
         case "StopFailure":
             dropPrompts(for: id)
@@ -815,12 +536,13 @@ final class Store: ObservableObject {
 
     // MARK: - Sound and usage
 
-    /// Plays `sound` every time while sounds are on in the menu. Whether the session's app is in
-    /// front says little (the Claude app has many sessions, a terminal many tabs), so it only
-    /// decides how long the result stays up: returns whether you're in another app.
+    /// Plays `sound` while sounds are on in the menu, once for events that come together. Whether the
+    /// session's app is in front says little (the Claude app has many sessions, a terminal many tabs),
+    /// so it only decides how long the result stays up: returns whether you're in another app.
     @discardableResult
-    private func chime(_ sound: String, for s: Session) -> Bool {
-        if UserDefaults.standard.bool(forKey: Self.soundsKey), let copy = NSSound(named: sound)?.copy() as? NSSound {
+    private func chime(_ sound: String, for s: inout Session) -> Bool {
+        if s.takesChime(at: Date()), UserDefaults.standard.bool(forKey: Self.soundsKey),
+           let copy = NSSound(named: sound)?.copy() as? NSSound {
             playingSounds.removeAll { !$0.isPlaying }
             playingSounds.append(copy)
             copy.play()
@@ -997,7 +719,9 @@ final class Store: ObservableObject {
         var s = s
         s.syncMotion(at: Date())
         sessions[s.id] = s
-        greeting = nil  // Claude is here
+        // Claude is here, and the greeting gives way. Living in the notch for good, Clawd stays on in
+        // it for when the sessions are gone: made again, he'd float in under a parachute every time.
+        if !Self.alive { greeting = nil }
         if s.phase.isActive, let path = s.transcriptPath {
             transcripts.watch(sessionID: s.id, path: path)
         } else if !s.phase.isActive {
@@ -1080,281 +804,8 @@ final class Store: ObservableObject {
     }
 }
 
-// MARK: - Formatting
-
-enum Describe {
-    static func tool(_ name: String, _ input: [String: Any]) -> Activity {
-        func str(_ key: String) -> String { input[key] as? String ?? "" }
-        func file(_ key: String = "file_path") -> String { (str(key) as NSString).lastPathComponent }
-
-        switch name {
-        case "Bash":
-            return Activity(symbol: "terminal", title: tr("Выполняет команду", "Running a command"), detail: flat(str("command")),
-                            monospaced: true, note: oneLine(str("description")), command: true)
-        case "BashOutput":
-            return Activity(symbol: "terminal", title: tr("Смотрит вывод команды", "Reading command output"), detail: "")
-        case "Read":
-            return Activity(symbol: "doc.text", title: tr("Читает файл", "Reading file"), detail: file())
-        case "Edit", "MultiEdit":
-            let edits = name == "Edit" ? [input] : input["edits"] as? [[String: Any]] ?? []
-            let diff = edits.reduce((added: 0, removed: 0)) { sum, edit in
-                let d = lineDiff(edit["old_string"] as? String ?? "", edit["new_string"] as? String ?? "")
-                return (sum.added + d.added, sum.removed + d.removed)
-            }
-            return Activity(symbol: "pencil", title: tr("Редактирует", "Editing"), detail: file(), added: diff.added, removed: diff.removed)
-        case "Write":
-            return Activity(symbol: "doc.badge.plus", title: tr("Пишет файл", "Writing file"), detail: file(),
-                            added: lineDiff("", str("content")).added)
-        case "NotebookEdit":
-            return Activity(symbol: "pencil", title: tr("Редактирует блокнот", "Editing notebook"), detail: file("notebook_path"),
-                            added: lineDiff("", str("new_source")).added)
-        case "Grep":
-            return Activity(symbol: "magnifyingglass", title: tr("Ищет в коде", "Searching code"), detail: oneLine(str("pattern")), monospaced: true,
-                            note: str("path").isEmpty ? "" : tr("в ", "in ") + file("path"))
-        case "Glob":
-            return Activity(symbol: "folder", title: tr("Ищет файлы", "Finding files"), detail: oneLine(str("pattern")), monospaced: true)
-        case "WebSearch":
-            return Activity(symbol: "globe", title: tr("Ищет в интернете", "Searching the web"), detail: oneLine(str("query")))
-        case "WebFetch":
-            return Activity(symbol: "globe", title: tr("Читает страницу", "Reading page"), detail: host(str("url")))
-        case "Task", "Agent":
-            return Activity(symbol: "person.2", title: tr("Запускает агента", "Starting an agent"), detail: oneLine(str("description")),
-                            note: str("subagent_type"), agent: true)
-        case "TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet":
-            return Activity(symbol: "checklist", title: tr("Обновляет план", "Updating the plan"), detail: "", quiet: true)
-        case "Skill":
-            return Activity(symbol: "book", title: tr("Читает навык", "Reading a skill"), detail: str("skill"))
-        case "ToolSearch":
-            return Activity(symbol: "wrench.and.screwdriver", title: tr("Подключает инструменты", "Loading tools"), detail: "", quiet: true)
-        default:
-            return mcp(name, input)
-        }
-    }
-
-    /// A prompt in plain words. Claude Code sends some prompts in your place, wrapped in tags: a background
-    /// task that finished (`<task-notification>`, which comes back as `notice`), a slash command
-    /// (`<command-name>`), reminders. The tags come out, so the notch shows words rather than markup.
-    static func prompt(_ text: String) -> (text: String, notice: Activity?) {
-        func tag(_ name: String) -> String? {
-            guard let open = text.range(of: "<\(name)>"),
-                  let close = text.range(of: "</\(name)>", range: open.upperBound..<text.endIndex) else { return nil }
-            return String(text[open.upperBound..<close.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if text.contains("<task-notification>") {
-            // "Background command "Build the app" completed (exit code 0)": what's in quotes is what it was.
-            let summary = tag("summary") ?? ""
-            let what = oneLine(summary.range(of: #""(.+)""#, options: .regularExpression)
-                .map { String(summary[$0].dropFirst().dropLast()) } ?? summary)
-            let title: String
-            switch tag("status") {
-            case "completed": title = tr("Фоновая задача готова", "Background task done")
-            case "failed": title = tr("Фоновая задача не удалась", "Background task failed")
-            case "killed", "stopped": title = tr("Фоновая задача остановлена", "Background task stopped")
-            default: title = tr("Фоновая задача", "Background task")
-            }
-            return (what.isEmpty ? title : "\(title) · \(what)", Activity(symbol: "bell.fill", title: title, detail: what, prose: true))
-        }
-        if let command = tag("command-name") {
-            let args = tag("command-args") ?? ""
-            return (oneLine(args.isEmpty ? command : "\(command) \(args)"), nil)
-        }
-        var plain = text
-        if plain.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<") {
-            // Reminders go whole; other tags leave their words.
-            plain = plain.replacingOccurrences(of: #"<system-reminder>[\s\S]*?</system-reminder>"#, with: " ", options: .regularExpression)
-                .replacingOccurrences(of: #"</?[A-Za-z][\w-]*(\s[^>]*)?>"#, with: " ", options: .regularExpression)
-        }
-        return (String(plain.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(300)), nil)
-    }
-
-    /// Tools that stop and wait for the user to answer.
-    static func question(_ name: String, _ input: [String: Any]) -> Activity? {
-        switch name {
-        case "AskUserQuestion":
-            // Up to four questions, each with two to four options: the first one, and how many there are.
-            let questions = input["questions"] as? [[String: Any]] ?? []
-            let first = questions.first ?? [:]
-            let options = (first["options"] as? [[String: Any]] ?? []).compactMap { $0["label"] as? String }.map(oneLine)
-            return Activity(symbol: "questionmark.bubble.fill", title: tr("Задаёт тебе вопрос", "Asking you a question"),
-                            detail: oneLine(first["question"] as? String ?? ""),
-                            note: questions.count > 1 ? tr("Вопрос 1 из \(questions.count)", "Question 1 of \(questions.count)") : "",
-                            prose: true, options: Array(options.filter { !$0.isEmpty }.prefix(4)))
-        case "ExitPlanMode":
-            return Activity(symbol: "list.bullet.clipboard", title: tr("Ждёт одобрения плана", "Waiting for plan approval"), detail: "")
-        default:
-            return nil
-        }
-    }
-
-    static func permissionQuestion(_ tool: String, _ activity: Activity) -> String {
-        switch tool {
-        case "Bash": return tr("Разрешить команду?", "Allow this command?")
-        case "Edit", "MultiEdit", "Write", "NotebookEdit": return tr("Разрешить изменить файл?", "Allow editing this file?")
-        case "WebFetch": return tr("Разрешить открыть страницу?", "Allow opening this page?")
-        case "WebSearch": return tr("Разрешить поиск в интернете?", "Allow a web search?")
-        case "Read", "Grep", "Glob": return tr("Разрешить чтение?", "Allow reading?")
-        default: return tr("Разрешить «\(activity.title)»?", "Allow “\(activity.title)”?")
-        }
-    }
-
-    /// A tool that ran and failed: what didn't work, and the error in one line.
-    static func failure(_ name: String, _ tool: Activity, error: String) -> Activity {
-        let title: String
-        let what: String
-        switch name {
-        case "Bash":
-            title = tr("Команда завершилась с ошибкой", "Command failed")
-            what = tool.note.isEmpty ? tool.detail : tool.note
-        case "Edit", "MultiEdit", "Write", "NotebookEdit":
-            title = tr("Не удалось изменить файл", "Couldn't edit the file")
-            what = tool.detail
-        case "Read":
-            title = tr("Не удалось прочитать файл", "Couldn't read the file")
-            what = tool.detail
-        case "WebFetch":
-            title = tr("Страница не открылась", "Couldn't open the page")
-            what = tool.detail
-        default:
-            title = tr("Инструмент вернул ошибку", "The tool returned an error")
-            what = tool.headline
-        }
-        // Cut at the end: the exit code and the start of the message matter most.
-        return Activity(symbol: "xmark.octagon.fill", title: title, detail: errorLine(error), monospaced: name == "Bash",
-                        note: what, prose: true, failed: true)
-    }
-
-    /// A tool error in one line. A command's starts with "Exit code N", then its output: the code and
-    /// the first line it printed.
-    private static func errorLine(_ error: String) -> String {
-        let lines = error.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        guard let first = lines.first else { return "" }
-        guard first.hasPrefix("Exit code ") else { return String(first.prefix(200)) }
-        let code = tr("Код выхода ", "Exit code ") + first.dropFirst("Exit code ".count)
-        return String((lines.count > 1 ? "\(code) · \(lines[1])" : code).prefix(200))
-    }
-
-    /// What a StopFailure's `error` kind means, in plain words: short enough for the notch's title line,
-    /// with Claude Code's own message under it.
-    static func apiError(_ kind: String) -> String {
-        switch kind {
-        case "rate_limit": return tr("Лимит запросов, попробуй позже", "Rate limited, try again soon")
-        case "overloaded": return tr("Claude перегружен, подожди", "Claude is overloaded, wait a bit")
-        case "authentication_failed": return tr("Нужно снова войти в Claude", "Signed out: log in again")
-        case "oauth_org_not_allowed": return tr("Организация запрещает вход", "Login not allowed by your org")
-        case "account_on_hold": return tr("Аккаунт приостановлен", "Your account is on hold")
-        case "billing_error": return tr("Проблема с оплатой", "Billing problem")
-        case "invalid_request": return tr("API отклонил запрос", "The API rejected the request")
-        case "model_not_found": return tr("Эта модель недоступна", "That model isn't available")
-        case "server_error": return tr("Сбой API, попробуй ещё раз", "API server error, try again")
-        case "max_output_tokens": return tr("Ответ упёрся в лимит длины", "The reply hit the length limit")
-        case "cloud_credential_error": return tr("Не подошли облачные ключи", "Cloud credentials failed")
-        default: return tr("Ошибка", "Error")
-        }
-    }
-
-    /// An MCP server's name as the notch shows it; nothing for the long ids some clients give theirs.
-    static func server(_ name: String) -> String {
-        name.count >= 32 && name.allSatisfy({ $0.isHexDigit || $0 == "-" }) ? "" : pretty(name)
-    }
-
-    /// MCP tools are named `mcp__<server>__<tool>`.
-    private static func mcp(_ name: String, _ input: [String: Any]) -> Activity {
-        let parts = name.components(separatedBy: "__")
-        guard parts.count >= 3, parts[0] == "mcp" else {
-            return Activity(symbol: "hammer", title: name, detail: "")
-        }
-        let server = parts[1]
-        let tool = parts[2...].joined(separator: "__")
-        switch tool {
-        case "update_plan": return Activity(symbol: "checklist", title: tr("Обновляет план", "Updating the plan"), detail: "", quiet: true)
-        case "wrap_up": return Activity(symbol: "flag.checkered", title: tr("Подводит итог", "Wrapping up"), detail: "", quiet: true)
-        default: break
-        }
-        if server.localizedCaseInsensitiveContains("browser") || server.localizedCaseInsensitiveContains("chrome") {
-            let url = input["url"] as? String
-            return Activity(symbol: "safari", title: tr("Браузер", "Browser"), detail: url.map(host) ?? pretty(tool))
-        }
-        let shown = Self.server(server)
-        return Activity(symbol: "puzzlepiece.extension", title: shown.isEmpty ? "MCP" : shown, detail: pretty(tool))
-    }
-
-    private static func pretty(_ s: String) -> String { s.replacingOccurrences(of: "_", with: " ") }
-
-    private static func host(_ url: String) -> String { URL(string: url)?.host ?? url }
-}
-
-/// Last events, for checking which hooks actually reach the app. Written on a background queue,
-/// so no file I/O lands on the main thread.
-enum EventLog {
-    private static let formatter = ISO8601DateFormatter()
-    private static let queue = DispatchQueue(label: "ClaudeNotch.eventlog", qos: .utility)
-
-    static func append(_ line: String) {
-        let date = Date()
-        queue.async {
-            let path = Paths.eventLog
-            let data = Data("\(formatter.string(from: date)) \(line)\n".utf8)
-            if let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int, size > 256_000 {
-                try? FileManager.default.removeItem(atPath: path)
-            }
-            if let handle = FileHandle(forWritingAtPath: path) {
-                handle.seekToEndOfFile()
-                handle.write(data)
-                handle.closeFile()
-            } else {
-                FileManager.default.createFile(atPath: path, contents: data)
-            }
-        }
-    }
-}
-
-func oneLine(_ text: String) -> String {
-    let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
-    return String(line.trimmingCharacters(in: .whitespaces).prefix(200))
-}
-
-/// Lines added and removed going from `old` to `new`: everything between the common first and
-/// last lines counts as changed. Good enough for the small replacements Edit makes.
-func lineDiff(_ old: String, _ new: String) -> (added: Int, removed: Int) {
-    /// A final "\n" ends the last line; it doesn't start an empty one.
-    func lines(_ text: String) -> [String] {
-        var lines = text.components(separatedBy: "\n")
-        if lines.last == "" { lines.removeLast() }
-        return lines
-    }
-    let a = lines(old)
-    let b = lines(new)
-    var prefix = 0
-    while prefix < a.count, prefix < b.count, a[prefix] == b[prefix] { prefix += 1 }
-    var suffix = 0
-    while suffix < a.count - prefix, suffix < b.count - prefix, a[a.count - 1 - suffix] == b[b.count - 1 - suffix] {
-        suffix += 1
-    }
-    return (b.count - prefix - suffix, a.count - prefix - suffix)
-}
-
-/// All lines of `text` on one line, for multi-line shell commands.
-func flat(_ text: String) -> String {
-    let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
-    return String(lines.filter { !$0.isEmpty }.joined(separator: " ⏎ ").prefix(300))
-}
-
-func formatElapsed(_ interval: TimeInterval) -> String {
-    let s = max(0, Int(interval))
-    if s < 60 { return tr("\(s)с", "\(s)s") }
-    if s < 3600 { return String(format: "%d:%02d", s / 60, s % 60) }
-    return String(format: "%d:%02d:%02d", s / 3600, s % 3600 / 60, s % 60)
-}
-
 private func summary(_ s: Session, until end: Date) -> String {
     let time = tr("за ", "in ") + formatElapsed(end.timeIntervalSince(s.turnStart))
     guard s.actions > 0 else { return time }
     return time + " · " + actionsText(s.actions)
-}
-
-func plural(_ n: Int, _ one: String, _ few: String, _ many: String) -> String {
-    let n10 = n % 10, n100 = n % 100
-    if n10 == 1 && n100 != 11 { return one }
-    if (2...4).contains(n10) && !(12...14).contains(n100) { return few }
-    return many
 }

@@ -158,12 +158,12 @@ Claude Code ──hook (JSON on stdin)──▶ claude-notch-hook ──Unix soc
 ```
 
 - **`Sources/Hook/main.swift`** — a tiny binary Claude Code runs on every event. It forwards the JSON to the app and prints the answer, if there is one. It always exits 0, silently, even when the app isn't running, so it never gets in Claude Code's way.
-- **`Store.swift`** — turns hook events into the notch's state and answers permission requests.
-- **`NotchView.swift`**, **`NotchRim.swift`**, **`DetailsCard.swift`** — the interface: the shape around the notch and its rim, the open states, the cards.
-- **`ClawdAnimation.swift`**, **`ClawdProps.swift`**, **`Clawd.swift`** — Clawd's animations and his props ([all of them](docs/clawd/README.md)).
-- **`TranscriptWatcher.swift`** — watches the session file: Claude Code sends no hook on Esc, and token usage lives there too.
-- **`ClaudeHooks.swift`** — connects the app to Claude Code: adds, updates and removes its hooks in `~/.claude/settings.json`, the same ones `install-hooks.sh` writes.
-- **`AppFocus.swift`**, **`HotKeys.swift`**, **`SocketServer.swift`**, **`Language.swift`** — click to focus (the hook tells the app which terminal tab a session runs in, by its tty), ⌃⌥⌘Y/⌃⌥⌘N, the socket, the two languages.
+- **`Sources/App/Model/`** — the notch's state. `Store.swift` turns hook events into it and answers permission requests and questions; `Session.swift`, `Prompts.swift` and `TaskList.swift` are what it keeps; `Describe.swift` puts tools and prompts into words.
+- **`Sources/App/Notch/`** — the interface: the panel over the notch, its shape and rim, the open states, the cards.
+- **`Sources/App/Clawd/`** — Clawd: his sprites, read from Claude.app, his animations and props ([all of them](docs/clawd/README.md)), and the Clawd drawn in code for a Mac without Claude.app.
+- **`Sources/App/ClaudeCode/`** — the link to Claude Code: the socket the hook talks to; the hooks in `~/.claude/settings.json`, the same ones `install-hooks.sh` writes; and the session files, watched because Claude Code sends no hook on Esc, and token usage lives there too.
+- **`Sources/App/Support/`** — click to focus (the hook tells the app which terminal tab a session runs in, by its tty), ⌃⌥⌘Y/⌃⌥⌘N, the two languages, the event log.
+- **`Tests/`** — tests for everything that needs no screen: hook events, questions, the hooks in the settings, the transcripts, Clawd's frames. Run them with `swift test`.
 
 **Privacy.** Everything stays on your Mac, no network. The hook sends events only to the socket `~/Library/Application Support/ClaudeNotch/notch.sock`, which only your user can open. The app reads the session files in `~/.claude/projects` only to notice Esc, to count tokens, to show what Claude is thinking about and, at launch, to find sessions already at work. To bring a Terminal or iTerm tab forward, it asks that terminal over AppleScript for the tab with the session's tty, and does nothing else with it.
 

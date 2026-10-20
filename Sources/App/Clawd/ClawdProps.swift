@@ -10,8 +10,10 @@ struct PixelArt: Hashable {
     let rgba: [UInt8]
 
     init(_ name: String, _ rows: [String], _ colors: [Character: UInt32]) {
+        let width = rows.map(\.count).max() ?? 0
+        assert(rows.allSatisfy { $0.count == width }, "\(name): rows of different lengths")
         self.name = name
-        width = rows.map(\.count).max() ?? 0
+        self.width = width
         height = rows.count
         var rgba = [UInt8](repeating: 0, count: width * height * 4)
         for (y, row) in rows.enumerated() {

@@ -1,13 +1,6 @@
 import Darwin
 import Foundation
 
-enum Paths {
-    static let home = getenv("HOME").map { String(cString: $0) } ?? NSHomeDirectory()
-    static let dir = home + "/Library/Application Support/ClaudeNotch"
-    static let socket = dir + "/notch.sock"
-    static let eventLog = dir + "/events.log"
-}
-
 /// The open connection of one hook call. The hook waits until `send` is called and prints
 /// what it receives as its output to Claude Code; `send(nil)` lets it exit with no output.
 final class HookReply {

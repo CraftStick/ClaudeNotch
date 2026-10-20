@@ -94,13 +94,5 @@ private final class ConfettiView: NSView {
         return cell
     }
 
-    private static let square: CGImage? = {
-        let side = 3
-        let pixels = [UInt8](repeating: 255, count: side * side * 4)
-        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
-        return CGImage(width: side, height: side, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: side * 4,
-                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-                       provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
-    }()
+    private static let square = CGImage.pixels([UInt8](repeating: 255, count: 3 * 3 * 4), width: 3, height: 3)
 }

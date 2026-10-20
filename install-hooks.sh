@@ -28,7 +28,7 @@ import json, sys
 path, hook, mode = sys.argv[1:4]
 
 # event -> (matcher or None, timeout in seconds). The app adds the same ones itself when it's
-# installed from the disk image (Sources/App/ClaudeHooks.swift): keep the two lists alike.
+# installed from the disk image (Sources/App/ClaudeCode/ClaudeHooks.swift): keep the two lists alike (a test checks).
 EVENTS = {
     "SessionStart": (None, 3),  # also starts the app if it isn't running
     "UserPromptSubmit": (None, 3),

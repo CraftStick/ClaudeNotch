@@ -1,0 +1,208 @@
+import Darwin
+import Foundation
+import Testing
+@testable import ClaudeNotch
+
+/// A hook's connection to the app, whose answer can be read back once the app has given it.
+private final class Hook {
+    let reply: HookReply
+    private let output: Int32
+
+    init() {
+        signal(SIGPIPE, SIG_IGN)  // as in the app: a hook may be gone before it's answered
+        var fds: [Int32] = [0, 0]
+        precondition(pipe(&fds) == 0)
+        output = fds[0]
+        reply = HookReply(fd: fds[1])
+    }
+
+    deinit { close(output) }
+
+    /// The decision sent back, or nil when the hook was let go without one.
+    func decision() -> [String: Any]? {
+        var data = Data()
+        var chunk = [UInt8](repeating: 0, count: 4096)
+        while true {
+            let n = read(output, &chunk, chunk.count)
+            if n <= 0 { break }
+            data.append(chunk, count: n)
+        }
+        guard !data.isEmpty, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let output = json["hookSpecificOutput"] as? [String: Any] else { return nil }
+        #expect(output["hookEventName"] as? String == "PermissionRequest")
+        return output["decision"] as? [String: Any]
+    }
+}
+
+/// Hook events through the store, as Claude Code sends them. On the main actor, like the app: the
+/// store schedules work on the main queue.
+@MainActor
+struct StoreTests {
+    private let store = Store()
+
+    @discardableResult
+    private func send(_ event: String, _ fields: [String: Any] = [:]) -> Hook {
+        let hook = Hook()
+        var json: [String: Any] = ["hook_event_name": event, "session_id": "s1", "cwd": "/tmp/notch-project"]
+        json.merge(fields) { $1 }
+        store.handle(json, reply: hook.reply)
+        return hook
+    }
+
+    private var session: Session? { store.sessions["s1"] }
+
+    static let questions: [String: Any] = ["questions": [
+        ["question": "Which animation?", "multiSelect": false, "options": [["label": "Wizard"], ["label": "Chef"]]],
+        ["question": "Which props?", "multiSelect": true, "options": [["label": "Mug"], ["label": "Book"], ["label": "Pan"]]],
+    ]]
+
+    @Test func aQuestionIsAnsweredFromTheNotch() throws {
+        send("PreToolUse", ["tool_name": "AskUserQuestion", "tool_input": Self.questions])
+        #expect(session?.phase == .waiting)
+        let hook = send("PermissionRequest", ["tool_name": "AskUserQuestion", "tool_input": Self.questions])
+        let prompt = try #require(store.prompt)
+        #expect(prompt.form?.questions.count == 2)
+
+        store.choose(prompt, option: 0)
+        #expect(store.prompt?.form?.step == 1)
+        store.choose(prompt, option: 2)
+        store.choose(prompt, option: 1)
+        store.choose(prompt, option: 1)  // ticked off again
+        #expect(store.prompt?.form?.picked == [2])
+        store.choose(prompt, option: 0)
+        store.submitPicked(prompt)
+        #expect(store.prompts.isEmpty)
+
+        let decision = try #require(hook.decision())
+        #expect(decision["behavior"] as? String == "allow")
+        let input = try #require(decision["updatedInput"] as? [String: Any])
+        #expect(input["answers"] as? [String: String] == ["Which animation?": "Wizard", "Which props?": "Mug, Pan"])
+        #expect((input["questions"] as? [Any])?.count == 2)
+        #expect(session?.activity.title == tr("Ответ отправлен", "Answer sent"))
+    }
+
+    @Test func nothingIsSentWithoutATick() throws {
+        let hook = send("PermissionRequest", ["tool_name": "AskUserQuestion", "tool_input": ["questions": [
+            ["question": "Which?", "multiSelect": true, "options": [["label": "A"], ["label": "B"]]],
+        ]]])
+        let prompt = try #require(store.prompt)
+        store.submitPicked(prompt)
+        #expect(store.prompts.count == 1)
+        store.answer(prompt, .askInApp)  // Claude Code's own dialog takes over
+        #expect(hook.decision() == nil)
+    }
+
+    @Test func allowAlwaysSendsTheRules() throws {
+        let rules: [[String: Any]] = [["type": "addRules", "rules": [["toolName": "Bash", "ruleContent": "make:*"]],
+                                       "behavior": "allow", "destination": "localSettings"]]
+        send("PreToolUse", ["tool_name": "Bash", "tool_input": ["command": "make"]])
+        let hook = send("PermissionRequest", ["tool_name": "Bash", "tool_input": ["command": "make"],
+                                              "permission_suggestions": rules])
+        let prompt = try #require(store.prompt)
+        #expect(prompt.ruleSummary == "Bash(make:*)")
+        store.answer(prompt, .allowAlways)
+
+        let decision = try #require(hook.decision())
+        #expect(decision["behavior"] as? String == "allow")
+        #expect((decision["updatedPermissions"] as? [[String: Any]])?.count == 1)
+        #expect(session?.phase == .tool)
+        #expect(session?.cue == .excited)
+    }
+
+    @Test func denyTellsClaudeWhy() throws {
+        let hook = send("PermissionRequest", ["tool_name": "Write", "tool_input": ["file_path": "/tmp/x"]])
+        store.answer(try #require(store.prompt), .deny)
+        let decision = try #require(hook.decision())
+        #expect(decision["behavior"] as? String == "deny")
+        #expect(!(decision["message"] as? String ?? "").isEmpty)
+        #expect(session?.phase == .thinking)
+        #expect(session?.cue == .facepalm)
+    }
+
+    @Test func aNewerRequestReplacesTheOlderOne() {
+        let first = send("PermissionRequest", ["tool_name": "Bash", "tool_input": ["command": "one"]])
+        send("PermissionRequest", ["tool_name": "Bash", "tool_input": ["command": "two"]])
+        #expect(store.prompts.count == 1)
+        #expect(store.prompt?.activity.detail == "two")
+        #expect(first.decision() == nil)  // let go: it was answered elsewhere
+    }
+
+    @Test func aRequestAnsweredInTheTerminalGoesAway() {
+        let hook = send("PermissionRequest", ["tool_name": "Bash", "tool_input": ["command": "make"]])
+        send("PostToolUse", ["tool_name": "Bash"])
+        #expect(store.prompts.isEmpty)
+        #expect(hook.decision() == nil)
+    }
+
+    @Test func aBackgroundTaskKeepsTheTask() {
+        send("UserPromptSubmit", ["prompt": "Fix the build"])
+        #expect(session?.task == "Fix the build")
+        #expect(session?.cue == .idea)
+        send("Stop", ["last_assistant_message": "Started it in the background."])
+        send("UserPromptSubmit", ["prompt": "<task-notification><status>completed</status><summary>Background command \"Build\" completed</summary></task-notification>"])
+        #expect(session?.task == "Fix the build")
+        #expect(session?.activity.title == tr("Фоновая задача готова", "Background task done"))
+        #expect(session?.phase == .thinking)
+    }
+
+    @Test func aReplyEndingInAQuestionWaitsForYou() {
+        send("UserPromptSubmit", ["prompt": "Go"])
+        send("Stop", ["last_assistant_message": "All done.\n\n```\nnot this?\n```\n**Should I commit?**"])
+        #expect(session?.phase == .waiting)
+        #expect(session?.activity.detail == "Should I commit?")
+
+        send("UserPromptSubmit", ["prompt": "No"])
+        send("Stop", ["last_assistant_message": "Okay, left it."])
+        #expect(session?.phase == .done)
+        #expect(session?.turnEnd != nil)
+    }
+
+    @Test func aFailedToolShowsTheError() {
+        send("UserPromptSubmit", ["prompt": "Build it"])
+        send("PreToolUse", ["tool_name": "Bash", "tool_input": ["command": "make", "description": "Build"]])
+        #expect(session?.phase == .tool)
+        send("PostToolUseFailure", ["tool_name": "Bash", "error": "Exit code 2\nboom"])
+        #expect(session?.phase == .thinking)
+        #expect(session?.activity.failed == true)
+        #expect(session?.history.last?.failed == true)
+        #expect(session?.cue == .facepalm)
+    }
+
+    @Test func editsAddUpTheirLines() {
+        send("UserPromptSubmit", ["prompt": "Edit"])
+        for _ in 0..<2 {
+            send("PreToolUse", ["tool_name": "Edit", "tool_input": ["file_path": "/a.swift", "old_string": "a", "new_string": "b\nc"]])
+            send("PostToolUse", ["tool_name": "Edit"])
+        }
+        #expect(session?.linesAdded == 4)
+        #expect(session?.linesRemoved == 2)
+        #expect(session?.actions == 2)
+    }
+
+    @Test func subagentsAreMatchedToTheirTasks() {
+        send("UserPromptSubmit", ["prompt": "Look around"])
+        send("PreToolUse", ["tool_name": "Task", "tool_input": ["subagent_type": "Explore", "description": "Find the files"]])
+        send("PreToolUse", ["tool_name": "Read", "tool_input": ["file_path": "/a/b.swift"], "agent_id": "a1", "agent_type": "Explore"])
+        #expect(session?.agents.first?.task == "Find the files")
+        #expect(session?.agents.first?.actions == 1)
+        #expect(session?.agents.first?.activity?.detail == "b.swift")
+        send("SubagentStop", ["agent_id": "a1", "agent_type": "Explore"])
+        #expect(session?.agents.first?.finished != nil)
+    }
+
+    @Test func theEndOfASessionTakesItAway() {
+        send("UserPromptSubmit", ["prompt": "Hi"])
+        #expect(session != nil)
+        send("SessionEnd")
+        #expect(session == nil)
+        #expect(store.mode == .hidden)
+    }
+
+    @Test func theCardShowsTheBusySession() {
+        send("UserPromptSubmit", ["prompt": "One"])
+        send("Stop", ["last_assistant_message": "Done."])
+        store.handle(["hook_event_name": "UserPromptSubmit", "session_id": "s2", "prompt": "Two"], reply: Hook().reply)
+        #expect(store.detailsSession?.id == "s2")
+        #expect(store.others(than: "s2").map(\.id) == ["s1"])
+    }
+}

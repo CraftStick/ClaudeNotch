@@ -13,40 +13,13 @@ enum ClaudeNotchMain {
             return
         }
         signal(SIGPIPE, SIG_IGN)  // a hook may hang up before we answer
+        UserDefaults.standard.register(defaults: Store.defaults)
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
         app.setActivationPolicy(.accessory)  // no Dock icon
         app.run()
     }
-}
-
-/// Borderless window that sits over the notch, above the menu bar. Click-through,
-/// except while a permission prompt shows its buttons.
-final class NotchPanel: NSPanel {
-    init() {
-        super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
-                   backing: .buffered, defer: false)
-        isOpaque = false
-        backgroundColor = .clear
-        hasShadow = false
-        level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 8)
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
-        ignoresMouseEvents = true
-        isMovable = false
-        hidesOnDeactivate = false
-    }
-
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
-
-    // Allow the frame to overlap the menu bar.
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
-}
-
-/// Buttons must react to the first click: the panel never becomes key.
-final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -65,8 +38,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var aliveItem: NSMenuItem?
     private var claudeCodeItem: NSMenuItem?
     private let hotKeys = HotKeys()
+    private var shortcuts = Shortcuts.none
     /// The pointer is over the visible notch: take clicks there (to focus a session).
     private var pointerInside = false
+    /// Where the pointer was at the last look, and whether the notch changed since: with neither,
+    /// there's nothing to work out.
+    private var lastPointer: NSPoint?
+    private var notchChanged = true
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Already running, e.g. this is another copy of the app: that one says hi instead.
@@ -96,7 +74,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setUpStatusItem()
         syncLaunchAtLogin()
         connectToClaudeCodeIfNeeded()
-        _ = ClawdAssets.laptop  // read Clawd's sprites from Claude.app now, not on the first event
         promptsObserver = store.$prompts.sink { [weak self] _ in
             DispatchQueue.main.async {  // after `prompts` has its new value
                 self?.resizePanel()
@@ -105,14 +82,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         visibilityObserver = store.objectWillChange.sink { [weak self] _ in
-            DispatchQueue.main.async { self?.updatePointerTracking() }  // after the change
+            DispatchQueue.main.async {  // after the change
+                self?.notchChanged = true
+                self?.updatePointerTracking()
+            }
         }
         updatePointerTracking()
         NotificationCenter.default.addObserver(
             self, selector: #selector(layoutPanel),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
-        // Sessions already under way show up at once; with none, Clawd says hi.
+        // Sessions already under way show up at once; with none, Clawd says hi. Clawd's sprites are read
+        // from Claude.app here too, off the main thread, rather than on the first event.
         DispatchQueue.global(qos: .userInitiated).async { [store] in
+            _ = ClawdAssets.laptop
             let running = TranscriptWatcher.running()
             DispatchQueue.main.async {
                 store.adopt(running)
@@ -137,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let notch = NotchMetrics(screen: screen)
         notchScreen = screen
         self.notch = notch
+        notchChanged = true
 
         let hosting = FirstClickHostingView(rootView: NotchView(store: store, notch: notch))
         hosting.sizingOptions = []
@@ -175,9 +158,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// The pointer is polled rather than tracked: the panel lets clicks through, so it gets no
-    /// mouse events, and polling needs no special permission.
+    /// mouse events, and polling needs no special permission. A look finds nothing new unless the
+    /// pointer moved or the notch changed.
     private func trackPointer() {
         guard let screen = notchScreen, let notch else { return }
+        let location = NSEvent.mouseLocation
+        guard location != lastPointer || notchChanged else { return }
+        lastPointer = location
+        notchChanged = false
         let mode = store.mode
         // The greeting's row stays open under the pointer, so it can be clicked.
         let greeting = mode == .expanded && store.focused?.isGreeting == true
@@ -187,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                   others: store.others(than: details?.id).count, prompt: store.prompt, notch: notch)
         let zone = NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
                           width: size.width, height: size.height).insetBy(dx: -4, dy: -4)
-        let inside = zone.contains(NSEvent.mouseLocation)
+        let inside = zone.contains(location)
         store.pointer(inside: inside)
         let visible = inside && mode != .hidden
         if visible != pointerInside {
@@ -203,36 +191,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Permission shortcuts
 
-    /// ⌃⌥⌘Y / ⌃⌥⌘N answer the oldest request (⌃⌥⌘1…4 a question), only while one is shown. System-wide hot keys take
-    /// the keys away from every app, so they must not be everyday shortcuts like ⌘N.
+    /// ⌃⌥⌘Y / ⌃⌥⌘N answer the oldest request, ⌃⌥⌘1…4 pick an answer to a question (and ⌃⌥⌘Y sends the
+    /// ones ticked). System-wide hot keys take the keys away from every app, so they must not be
+    /// everyday shortcuts like ⌘N, and only the ones the card on show uses are taken.
     static let hotKeyModifiers = cmdKey | optionKey | controlKey
 
+    /// The shortcuts the card on show answers to.
+    private enum Shortcuts: Equatable {
+        case none, permission
+        case question(options: Int, multiSelect: Bool)
+    }
+
     private func updateHotKeys() {
-        if store.prompts.isEmpty {
-            hotKeys.unregisterAll()
-        } else if !hotKeys.isRegistered {
-            hotKeys.register(keyCode: kVK_ANSI_Y, modifiers: Self.hotKeyModifiers) { [weak self] in self?.answerPrompt(.allow) }
-            hotKeys.register(keyCode: kVK_ANSI_N, modifiers: Self.hotKeyModifiers) { [weak self] in self?.answerPrompt(.deny) }
-            for (i, key) in [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4].enumerated() {
-                hotKeys.register(keyCode: key, modifiers: Self.hotKeyModifiers) { [weak self] in self?.chooseOption(i) }
+        let wanted = store.prompt.map { prompt in
+            prompt.form.map { Shortcuts.question(options: $0.current.options.count, multiSelect: $0.current.multiSelect) }
+                ?? .permission
+        } ?? .none
+        guard wanted != shortcuts else { return }
+        shortcuts = wanted
+        hotKeys.unregisterAll()
+        let modifiers = Self.hotKeyModifiers
+        switch wanted {
+        case .none:
+            break
+        case .permission:
+            hotKeys.register(keyCode: kVK_ANSI_Y, modifiers: modifiers) { [weak self] in self?.answerPrompt(.allow) }
+            hotKeys.register(keyCode: kVK_ANSI_N, modifiers: modifiers) { [weak self] in self?.answerPrompt(.deny) }
+        case .question(let options, let multiSelect):
+            for (i, key) in [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4].prefix(options).enumerated() {
+                hotKeys.register(keyCode: key, modifiers: modifiers) { [weak self] in self?.chooseOption(i) }
+            }
+            if multiSelect {
+                hotKeys.register(keyCode: kVK_ANSI_Y, modifiers: modifiers) { [weak self] in self?.submitAnswers() }
             }
         }
     }
 
-    /// For a question, ⌃⌥⌘Y sends the ticked answers and ⌃⌥⌘N does nothing.
     private func answerPrompt(_ decision: Store.Decision) {
-        guard let prompt = store.prompt else { return }
-        guard prompt.form == nil else {
-            if decision == .allow { store.submitPicked(prompt) }
-            return
-        }
+        guard let prompt = store.prompt, prompt.form == nil else { return }
         store.answer(prompt, decision)
     }
 
-    /// ⌃⌥⌘1…4 pick an answer to a question.
     private func chooseOption(_ index: Int) {
-        guard let prompt = store.prompt, prompt.form != nil else { return }
+        guard let prompt = store.prompt else { return }
         store.choose(prompt, option: index)
+    }
+
+    private func submitAnswers() {
+        guard let prompt = store.prompt else { return }
+        store.submitPicked(prompt)
     }
 
     // MARK: - Menu bar

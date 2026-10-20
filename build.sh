@@ -11,7 +11,7 @@ fi
 
 APP=build/ClaudeNotch.app
 DEST="$HOME/Applications/ClaudeNotch.app"
-# This Mac's kind by default; ARCHS="arm64 x86_64" makes one app for both (make-dmg.sh does).
+# This Mac's kind by default; ARCHS="arm64 x86_64" makes one app for both (Tools/make-dmg.sh does).
 read -r -a ARCHS <<< "${ARCHS:-$(uname -m)}"
 
 # compile <output> <swiftc arguments…>: once per architecture, then glued into one file.
@@ -25,9 +25,12 @@ compile() {
     if (( ${#parts[@]} == 1 )); then mv "${parts[0]}" "$out"; else lipo -create "${parts[@]}" -output "$out" && rm "${parts[@]}"; fi
 }
 
+APP_SOURCES=()
+while IFS= read -r -d '' file; do APP_SOURCES+=("$file"); done < <(find Sources/App -name '*.swift' -print0)
+
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-compile "$APP/Contents/MacOS/ClaudeNotch" -parse-as-library Sources/App/*.swift
+compile "$APP/Contents/MacOS/ClaudeNotch" -parse-as-library "${APP_SOURCES[@]}"
 compile "$APP/Contents/MacOS/claude-notch-hook" Sources/Hook/main.swift
 cp Info.plist "$APP/Contents/Info.plist"
 cp Resources/ClaudeNotch.icns "$APP/Contents/Resources/"

@@ -9,9 +9,7 @@ rm -rf "$WORK"
 mkdir -p "$WORK" Resources
 # The app's sources minus its entry point, for ClawdSprite.
 SOURCES=()
-for file in Sources/App/*.swift; do
-    [[ "$file" == */App.swift ]] || SOURCES+=("$file")
-done
+while IFS= read -r -d '' file; do SOURCES+=("$file"); done < <(find Sources/App -name '*.swift' ! -path Sources/App/App.swift -print0)
 swiftc -swift-version 5 -target "$(uname -m)-apple-macos14.0" -parse-as-library \
     "${SOURCES[@]}" Tools/AppIcon.swift -o "$WORK/make-app-icon"
 "$WORK/make-app-icon" "$WORK/ClaudeNotch.iconset"

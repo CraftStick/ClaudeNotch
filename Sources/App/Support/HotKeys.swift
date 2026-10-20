@@ -20,8 +20,6 @@ final class HotKeys {
         }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), &handler)
     }
 
-    var isRegistered: Bool { !refs.isEmpty }
-
     /// `keyCode` is a kVK_ constant, `modifiers` Carbon flags such as `cmdKey`.
     func register(keyCode: Int, modifiers: Int, action: @escaping () -> Void) {
         let id = UInt32(actions.count + 1)

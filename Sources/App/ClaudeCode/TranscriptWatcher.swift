@@ -13,6 +13,9 @@ struct TranscriptUsage {
 /// Tails the transcripts of busy sessions. Claude Code sends no hook event for an Esc interrupt,
 /// it only appends a "[Request interrupted by user]" message; and hooks carry neither token usage
 /// nor what Claude thinks and says between tools, but the assistant messages in the transcript do.
+///
+/// The files are read on a queue of their own and the callbacks come on the main thread: one line can
+/// carry megabytes of tool output, too much to read and search through on the main thread.
 final class TranscriptWatcher {
     var onInterrupt: (String) -> Void = { _ in }
     var onUsage: (String, TranscriptUsage) -> Void = { _, _ in }
@@ -20,6 +23,8 @@ final class TranscriptWatcher {
     var onThought: (String, String, Date) -> Void = { _, _, _ in }
     /// Anything at all was written: the session is alive.
     var onWrite: (String) -> Void = { _ in }
+    private let queue = DispatchQueue(label: "ClaudeNotch.transcripts", qos: .utility)
+    /// Only touched on `queue`.
     private var watches: [String: Watch] = [:]
 
     private final class Watch {
@@ -38,19 +43,27 @@ final class TranscriptWatcher {
     private static let usageMarker = Data("\"usage\"".utf8)
 
     func watch(sessionID: String, path: String) {
+        queue.async { [weak self] in self?.start(sessionID, path: path) }
+    }
+
+    func stop(sessionID: String) {
+        queue.async { [weak self] in self?.cancel(sessionID) }
+    }
+
+    private func start(_ sessionID: String, path: String) {
         if watches[sessionID]?.path == path { return }
-        stop(sessionID: sessionID)
+        cancel(sessionID)
 
         let fd = open(path, O_EVTONLY)
         guard fd >= 0 else { return }
         let end = UInt64(max(0, lseek(fd, 0, SEEK_END)))
         let watch = Watch(path: path, offset: end)
         let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd, eventMask: [.extend, .write, .delete, .rename], queue: .main)
+            fileDescriptor: fd, eventMask: [.extend, .write, .delete, .rename], queue: queue)
         source.setEventHandler { [weak self, weak watch, weak source] in
             guard let self, let watch, let source else { return }
             if !source.data.isDisjoint(with: [.delete, .rename]) {
-                self.stop(sessionID: sessionID)
+                self.cancel(sessionID)
             } else {
                 self.readAppended(watch, sessionID: sessionID)
             }
@@ -61,12 +74,18 @@ final class TranscriptWatcher {
         source.resume()
 
         if let usage = Self.lastUsage(path: path, end: end) {
-            onUsage(sessionID, usage)
+            onMain { $0.onUsage(sessionID, usage) }
         }
     }
 
-    func stop(sessionID: String) {
+    private func cancel(_ sessionID: String) {
         watches.removeValue(forKey: sessionID)?.source?.cancel()
+    }
+
+    private func onMain(_ call: @escaping (TranscriptWatcher) -> Void) {
+        DispatchQueue.main.async { [weak self] in
+            if let self { call(self) }
+        }
     }
 
     private func readAppended(_ watch: Watch, sessionID: String) {
@@ -75,19 +94,22 @@ final class TranscriptWatcher {
         guard (try? handle.seek(toOffset: watch.offset)) != nil,
               let data = try? handle.readToEnd(), !data.isEmpty else { return }
         watch.offset += UInt64(data.count)
-        onWrite(sessionID)
+        onMain { $0.onWrite(sessionID) }
 
         var buffer = watch.partialLine + data
         while let newline = buffer.firstIndex(of: UInt8(ascii: "\n")) {
             let line = Data(buffer[buffer.startIndex..<newline])
             buffer = buffer[(newline + 1)...]
             if line.range(of: Self.interruptMarker) != nil, Self.isInterrupt(line) {
-                onInterrupt(sessionID)
+                onMain { $0.onInterrupt(sessionID) }
                 return
             }
             if line.range(of: Self.usageMarker) != nil, let (message, written) = Self.assistantMessage(line) {
-                if let usage = Self.usage(in: message, initial: false) { onUsage(sessionID, usage) }
-                if let thought = Self.thought(in: message) { onThought(sessionID, thought, written ?? Date()) }
+                if let usage = Self.usage(in: message, initial: false) { onMain { $0.onUsage(sessionID, usage) } }
+                if let thought = Self.thought(in: message) {
+                    let written = written ?? Date()
+                    onMain { $0.onThought(sessionID, thought, written) }
+                }
             }
         }
         watch.partialLine = Data(buffer)
@@ -242,7 +264,7 @@ final class TranscriptWatcher {
         return found
     }
 
-    private static func runningSession(_ file: URL) -> Running? {
+    static func runningSession(_ file: URL) -> Running? {
         guard let handle = try? FileHandle(forReadingFrom: file) else { return nil }
         defer { try? handle.close() }
         let end = (try? handle.seekToEnd()) ?? 0

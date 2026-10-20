@@ -117,13 +117,16 @@ enum AppFocus {
 
     static let claudeBundleID = "com.anthropic.claudefordesktop"
 
-    /// Opens a session that runs in the Claude app at that very session, not just the app.
-    /// False when the app keeps no record of it.
-    static func openInClaudeApp(_ sessionID: String) -> Bool {
-        guard let local = claudeAppSession(for: sessionID),
-              let url = URL(string: "claude://code/continue?session=\(local)") else { return false }
-        NSWorkspace.shared.open(url, configuration: activating)
-        return true
+    /// Opens a session that runs in the Claude app at that very session, not just the app; `otherwise`
+    /// runs when the app keeps no record of it. Looked up off the main thread: it reads a file per session.
+    static func openInClaudeApp(_ sessionID: String, otherwise: @escaping () -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let local = claudeAppSession(for: sessionID)
+            DispatchQueue.main.async {
+                guard let local, let url = URL(string: "claude://code/continue?session=\(local)") else { return otherwise() }
+                NSWorkspace.shared.open(url, configuration: activating)
+            }
+        }
     }
 
     /// The Claude app's own id ("local_…") for a Claude Code session. The app keeps a record per

@@ -178,14 +178,6 @@ struct DetailsCard: View {
     }
 }
 
-/// 950 → "950", 12_400 → "12k", 1_000_000 → "1M".
-func tokens(_ n: Int) -> String {
-    if n >= 1_000_000 { return n % 1_000_000 == 0 ? "\(n / 1_000_000)M" : String(format: "%.1fM", Double(n) / 1_000_000) }
-    if n >= 10_000 { return "\(n / 1000)k" }
-    if n >= 1000 { return String(format: "%.1fk", Double(n) / 1000) }
-    return "\(n)"
-}
-
 /// "+12 −3" in green and red, or nothing.
 private struct DiffText: View {
     let added: Int

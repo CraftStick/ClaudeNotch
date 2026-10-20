@@ -3,7 +3,7 @@
 # and Intel next to a link to Applications, on a background with an arrow from one to the other.
 # Finder lays the window out, so the first run asks whether this terminal may control Finder.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)
 VOLUME="Claude Notch"

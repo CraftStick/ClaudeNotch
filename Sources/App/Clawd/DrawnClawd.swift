@@ -127,7 +127,8 @@ enum ClawdSprite {
 /// turns to you and hops while it waits for you, blinks now and then.
 struct DrawnClawdView: View {
     let phase: Phase
-    var unit: CGFloat = 1
+    /// A sprite pixel per point, like the sheets from Claude.app.
+    private let unit: CGFloat = 1
 
     /// Irregular rhythm of which hand hits the keys: 1 = near hand, 0 = far hand.
     private static let rhythm = [1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1]

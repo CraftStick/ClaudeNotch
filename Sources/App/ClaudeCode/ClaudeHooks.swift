@@ -2,7 +2,7 @@ import Foundation
 
 /// The hooks in ~/.claude/settings.json that make Claude Code tell the app what it does. The app adds
 /// them itself when it's installed from the disk image; install-hooks.sh adds the same ones for an
-/// install from source. Keep the two lists alike.
+/// install from source. Keep the two lists alike (a test checks).
 enum ClaudeHooks {
     /// event → (matcher, timeout in seconds)
     static let events: [String: (matcher: String?, timeout: Int)] = [

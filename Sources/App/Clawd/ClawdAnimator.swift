@@ -1,166 +1,7 @@
-import AppKit
-import SwiftUI
-
-/// A pixel animation: `frames[i][y * width + x]` is a palette index, 255 = transparent.
-struct PixelSheet {
-    let name: String
-    let width: Int
-    let height: Int
-    let palette: [(r: Double, g: Double, b: Double)]
-    let frames: [[UInt8]]
-    /// Where the feet are: the point that stays put when switching sheets.
-    let anchor: CGPoint
-}
-
-/// Clawd's own animations, read at launch from the Claude desktop app installed on this Mac:
-/// its "Clawd Quest" easter egg keeps them as pixel maps in a JS bundle inside app.asar.
-/// None of Anthropic's artwork ships with this project; without Claude.app (or if the
-/// format changes) the hand-drawn `DrawnClawdView` is used instead.
-enum ClawdAssets {
-    // Each with the frame count the clips below expect; a sheet that changed shape is skipped.
-    static let laptop = sheet("Laptop", frames: 43)
-    static let waving = sheet("Waving", frames: 17)
-    static let jumping = sheet("JumpingHappy", frames: 21)
-    static let lookingAround = sheet("LookingAround", frames: 31)
-    static let swaying = sheet("Swaying", frames: 49)
-    static let dancing = sheet("DancingHappy", frames: 39)
-    static let hula = sheet("Hula", frames: 54)
-    static let meditating = sheet("Meditating", frames: 60)
-    static let disappointed = sheet("Disappointed", frames: 43)
-    static let dizzy = sheet("Dizzy", frames: 41)
-    static let lightbulb = sheet("Lightbulb", frames: 45)
-    static let thinking = sheet("Thinking", frames: 37)
-    static let desktop = sheet("Desktop", frames: 88)
-    static let running = sheet("Running", frames: 17)
-    static let walking = sheet("Walking", frames: 10)
-    static let excited = sheet("Excited", frames: 22)
-    static let facepalm = sheet("Facepalm", frames: 34)
-    static let confetti = sheet("Confetti", frames: 34)
-    static let breakDancing = sheet("BreakDancing", frames: 28)
-    static let pointing = sheet("Pointing", frames: 43)
-
-    private static let names = ["Laptop", "Waving", "JumpingHappy", "LookingAround", "Swaying", "DancingHappy",
-                                "Hula", "Meditating", "Disappointed", "Dizzy", "Lightbulb", "Thinking", "Desktop",
-                                "Running", "Walking", "Excited", "Facepalm", "Confetti", "BreakDancing", "Pointing"]
-
-    private static func sheet(_ name: String, frames: Int) -> PixelSheet? {
-        sheets[name].flatMap { $0.frames.count >= frames ? $0 : nil }
-    }
-
-    private static let sheets: [String: PixelSheet] = {
-        guard let source = engineSource() else {
-            EventLog.append("Clawd sprites: Claude.app not found, using the drawn Clawd")
-            return [:]
-        }
-        var result: [String: PixelSheet] = [:]
-        for name in names {
-            result[name] = parse(name, in: source)
-        }
-        EventLog.append("Clawd sprites from Claude.app: " + result.map { "\($0.key) (\($0.value.frames.count))" }.sorted().joined(separator: ", "))
-        return result
-    }()
-
-    // MARK: - app.asar
-
-    private static func engineSource() -> String? {
-        let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.anthropic.claudefordesktop")
-            ?? URL(fileURLWithPath: "/Applications/Claude.app")
-        guard let handle = try? FileHandle(forReadingFrom: app.appendingPathComponent("Contents/Resources/app.asar")) else { return nil }
-        defer { try? handle.close() }
-
-        // Layout: a 16-byte prefix, the JSON index, then the files' contents.
-        guard let prefix = try? handle.read(upToCount: 16).map(Array.init), prefix.count == 16 else { return nil }
-        func u32(_ at: Int) -> Int {
-            Int(prefix[at]) | Int(prefix[at + 1]) << 8 | Int(prefix[at + 2]) << 16 | Int(prefix[at + 3]) << 24
-        }
-        let headerSize = u32(4), jsonLength = u32(12)
-        guard jsonLength > 0, jsonLength < 64_000_000,
-              let json = try? handle.read(upToCount: jsonLength),
-              let index = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
-              let entry = findEngine(in: index),
-              (try? handle.seek(toOffset: UInt64(8 + headerSize + entry.offset))) != nil,
-              let data = try? handle.read(upToCount: entry.size) else { return nil }
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    /// The bundle is named clawdQuestEngine-<hash>.js; its folder may move between versions.
-    private static func findEngine(in node: [String: Any]) -> (offset: Int, size: Int)? {
-        guard let files = node["files"] as? [String: Any] else { return nil }
-        for (name, value) in files {
-            guard let child = value as? [String: Any] else { continue }
-            if child["files"] != nil {
-                if let hit = findEngine(in: child) { return hit }
-            } else if name.hasPrefix("clawdQuestEngine-"), name.hasSuffix(".js"),
-                      let size = child["size"] as? Int,
-                      let offset = (child["offset"] as? String).flatMap({ Int($0) }) ?? child["offset"] as? Int {
-                return (offset, size)
-            }
-        }
-        return nil
-    }
-
-    // MARK: - Sprite data
-
-    /// `Name:{cat:"…",w:W,h:H,fps:F,palette:["#rrggbb",…],base:"<pixels>",deltas:<frames>,a0:[x,y,w,h]…}`
-    /// Pixels are base-36 palette indices ("." = transparent); each delta lists `<index><value>`
-    /// changes from the previous frame. Deltas are either an array of strings or one string
-    /// split on "(".
-    private static func parse(_ name: String, in source: String) -> PixelSheet? {
-        let pattern = "[{,]" + name + #":\{cat:"\w+",w:(\d+),h:(\d+),fps:\d+,palette:\[([^\]]*)\],base:"([^"]*)",deltas:"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
-              let matchRange = Range(match.range, in: source) else { return nil }
-        func group(_ i: Int) -> String { Range(match.range(at: i), in: source).map { String(source[$0]) } ?? "" }
-        guard let width = Int(group(1)), let height = Int(group(2)) else { return nil }
-
-        let palette: [(r: Double, g: Double, b: Double)] = group(3).components(separatedBy: "\"").compactMap { hex in
-            guard hex.hasPrefix("#"), hex.count == 7, let v = Int(hex.dropFirst(), radix: 16) else { return nil }
-            return (Double(v >> 16 & 0xff) / 255, Double(v >> 8 & 0xff) / 255, Double(v & 0xff) / 255)
-        }
-
-        var rest = source[matchRange.upperBound...]
-        let deltas: [String]
-        if rest.first == "\"" {
-            rest = rest.dropFirst()
-            guard let close = rest.firstIndex(of: "\"") else { return nil }
-            deltas = rest[..<close].components(separatedBy: "(")
-            rest = rest[close...]
-        } else if rest.first == "[", let close = rest.firstIndex(of: "]") {
-            // ["…","…"]: the quoted parts are every other piece between quotes.
-            let pieces = rest[rest.index(after: rest.startIndex)..<close].components(separatedBy: "\"")
-            deltas = stride(from: 1, to: pieces.count, by: 2).map { pieces[$0] }
-            rest = rest[close...]
-        } else {
-            return nil
-        }
-
-        var anchor = CGPoint(x: CGFloat(width) / 2, y: CGFloat(height))
-        if let a0 = try? NSRegularExpression(pattern: #"a0:\[(\d+),(\d+),(\d+),(\d+)\]"#),
-           let m = a0.firstMatch(in: String(rest.prefix(300)), range: NSRange(location: 0, length: min(300, rest.utf16.count))) {
-            let text = String(rest.prefix(300)) as NSString
-            let v = (1...4).map { Int(text.substring(with: m.range(at: $0))) ?? 0 }
-            if v[2] > 0 { anchor = CGPoint(x: CGFloat(v[0]) + CGFloat(v[2]) / 2, y: CGFloat(v[1] + v[3])) }
-        }
-
-        func value(_ c: Character) -> UInt8? { c == "." ? 255 : Int(String(c), radix: 36).map(UInt8.init) }
-        var pixels = group(4).compactMap(value)
-        guard pixels.count == width * height else { return nil }
-        var frames = [pixels]
-        for delta in deltas {
-            for token in delta.split(separator: ",") {
-                guard let last = token.last, let v = value(last),
-                      let index = Int(token.dropLast(), radix: 36), index < pixels.count else { return nil }
-                pixels[index] = v
-            }
-            frames.append(pixels)
-        }
-        guard frames.allSatisfy({ $0.allSatisfy { $0 == 255 || Int($0) < palette.count } }) else { return nil }
-        return PixelSheet(name: name, width: width, height: height, palette: palette, frames: frames, anchor: anchor)
-    }
-}
+import Foundation
 
 /// Frames `frames` of `sheet`, in that order, played at `fps`.
-private struct Clip {
+struct Clip {
     let sheet: PixelSheet
     let frames: [Int]
     let fps: Double
@@ -183,25 +24,8 @@ private struct Clip {
     func looped(at t: TimeInterval) -> Int { frames[max(0, Int(t * fps)) % frames.count] }
 }
 
-/// Clawd in the notch. With the Claude app's sprites he turns to a laptop and types while Claude
-/// works, puts it away and waves while Claude waits for you. After a turn he reacts (a happy hop,
-/// a sigh after Esc, dizzy after an error), then idles with the odd fidget and dozes off; or, when he
-/// lives in the notch for good, keeps busy with his own pastimes.
-struct ClawdView: View {
-    let session: Session
-
-    var body: some View {
-        if let laptop = ClawdAssets.laptop, let waving = ClawdAssets.waving {
-            ClawdLayer(animator: ClawdAnimator(session: session, laptop: laptop, waving: waving))
-                .frame(width: ClawdAnimator.size.width, height: ClawdAnimator.size.height)
-        } else {
-            DrawnClawdView(phase: session.phase)
-        }
-    }
-}
-
 /// Which frame of which sheet Clawd shows at a given moment, worked out from the session.
-private struct ClawdAnimator {
+struct ClawdAnimator {
     let session: Session
     let laptop: PixelSheet
     let waving: PixelSheet
@@ -259,12 +83,14 @@ private struct ClawdAnimator {
 
     func frame(at date: Date) -> Frame {
         let sinceMotion = date.timeIntervalSince(session.motionStart)
-        if let cue = session.cue,
-           // Put the laptop away first.
-           let play = Pastime.sequence([exit(from: session.cueInterrupted).flatMap { Pastime([$0]) }, reaction(cue)]) {
+        if let cue = session.cue, let reaction = Self.reactions[cue] {
+            // Put the laptop away first.
+            let putAway = exit(from: session.cueInterrupted)
+            let lead = putAway?.duration ?? 0
             let t = date.timeIntervalSince(session.cueStart)
-            if t < play.duration { return play.frame(t) }
-            let cueEnd = session.cueStart.addingTimeInterval(play.duration)
+            if let putAway, t < lead { return Frame(putAway, at: t) }
+            if t < lead + reaction.duration { return reaction.frame(t - lead) }
+            let cueEnd = session.cueStart.addingTimeInterval(lead + reaction.duration)
             if cueEnd > session.motionStart {
                 // The reaction took over the start of what Clawd does now: carry on from its end
                 // with empty hands (nothing to put away, no hop after confetti).
@@ -327,19 +153,24 @@ private struct ClawdAnimator {
     /// One-off reactions: an idea when a task comes in, joy when you allow something,
     /// a facepalm when a tool fails or you say no, confetti and a breakdance after a big task,
     /// a hop and a wave when the app is opened, a parachute and a wave when he moves into the notch.
-    private func reaction(_ cue: Cue) -> Pastime? {
-        let wave = Clip(sheet: waving, frames: 3...16, fps: 12)
-        switch cue {
-        case .hello: return Pastime([ClawdAssets.jumping.map(Self.hop), wave].compactMap { $0 })
-        case .arrive: return Pastime.sequence([Self.parachute, Pastime([wave])])
-        case .idea: return Pastime([ClawdAssets.lightbulb.map { Clip(sheet: $0, frames: 2...44, fps: 14) }].compactMap { $0 })
-        case .excited: return Pastime([ClawdAssets.excited.map { Clip(sheet: $0, frames: 2...21, fps: 14) }].compactMap { $0 })
-        case .facepalm: return Pastime([ClawdAssets.facepalm.map { Clip(sheet: $0, frames: 2...33, fps: 12) }].compactMap { $0 })
-        case .celebrate:
-            return Pastime([ClawdAssets.confetti.map { Clip(sheet: $0, frames: 2...33, fps: 12) },
-                            ClawdAssets.breakDancing.map { Clip(sheet: $0, frames: 2...27, fps: 12) }].compactMap { $0 })
+    /// Made once: Clawd's frame is worked out many times a second, and a session keeps its last cue
+    /// long after it has played.
+    static let reactions: [Cue: Pastime] = {
+        func clip(_ sheet: PixelSheet?, _ frames: ClosedRange<Int>, fps: Double) -> Clip? {
+            sheet.map { Clip(sheet: $0, frames: frames, fps: fps) }
         }
-    }
+        let wave = clip(ClawdAssets.waving, 3...16, fps: 12)
+        let all: [Cue: Pastime?] = [
+            .hello: Pastime([ClawdAssets.jumping.map(hop), wave].compactMap { $0 }),
+            .arrive: Pastime.sequence([parachute, Pastime([wave].compactMap { $0 })]),
+            .idea: Pastime([clip(ClawdAssets.lightbulb, 2...44, fps: 14)].compactMap { $0 }),
+            .excited: Pastime([clip(ClawdAssets.excited, 2...21, fps: 14)].compactMap { $0 }),
+            .facepalm: Pastime([clip(ClawdAssets.facepalm, 2...33, fps: 12)].compactMap { $0 }),
+            .celebrate: Pastime([clip(ClawdAssets.confetti, 2...33, fps: 12), clip(ClawdAssets.breakDancing, 2...27, fps: 12)]
+                .compactMap { $0 }),
+        ]
+        return all.compactMapValues { $0 }
+    }()
 
     /// How a turn ended: a happy hop, a sigh after Esc, dizzy after an API error.
     private func ending(_ motion: Motion) -> Clip? {
@@ -368,27 +199,28 @@ private struct ClawdAnimator {
             return Frame(meditating, index, rate: 8, dozing: asleep,
                          decals: [Self.book(on: meditating, index, dropping: asleep - sitDown.duration)])
         }
-        let fidgets: [Clip] = [
-            ClawdAssets.lookingAround.map { Clip(sheet: $0, frames: 4...30, fps: 12) },
-            ClawdAssets.swaying.map { Clip(sheet: $0, frames: 4...48, fps: 12) },
-            ClawdAssets.lookingAround.map { Clip(sheet: $0, frames: 4...30, fps: 12) },
-            ClawdAssets.dancing.map { Clip(sheet: $0, frames: 4...38, fps: 12) },
-            ClawdAssets.hula.map { Clip(sheet: $0, frames: 6...53, fps: 12) },
-        ].compactMap { $0 }
         let window: TimeInterval = 30
         let n = Int(t / window)
         let intoFidget = t - Double(n) * window - 10  // starts 10 s into each window
-        if !fidgets.isEmpty, intoFidget >= 0 {
-            let fidget = fidgets[n % fidgets.count]
+        if !Self.fidgets.isEmpty, intoFidget >= 0 {
+            let fidget = Self.fidgets[n % Self.fidgets.count]
             if intoFidget < fidget.duration { return Frame(fidget, at: intoFidget) }
         }
         return standing
     }
 
+    private static let fidgets: [Clip] = [
+        ClawdAssets.lookingAround.map { Clip(sheet: $0, frames: 4...30, fps: 12) },
+        ClawdAssets.swaying.map { Clip(sheet: $0, frames: 4...48, fps: 12) },
+        ClawdAssets.lookingAround.map { Clip(sheet: $0, frames: 4...30, fps: 12) },
+        ClawdAssets.dancing.map { Clip(sheet: $0, frames: 4...38, fps: 12) },
+        ClawdAssets.hula.map { Clip(sheet: $0, frames: 6...53, fps: 12) },
+    ].compactMap { $0 }
+
     // MARK: - Living in the notch
 
     /// Something Clawd does on his own: how long it takes, and what he shows `t` seconds in.
-    private struct Pastime {
+    struct Pastime {
         let duration: TimeInterval
         let frame: (TimeInterval) -> Frame
 
@@ -446,7 +278,7 @@ private struct ClawdAnimator {
     /// What Clawd gets up to when he lives in the notch for good. None of it is what he does at work
     /// or when Claude needs you, so it can't be taken for news: when he thinks here he stays on his
     /// feet, where at work he sits down to.
-    private static let pastimes: [Pastime] = {
+    static let pastimes: [Pastime] = {
         func clip(_ sheet: PixelSheet?, _ frames: ClosedRange<Int>, fps: Double = 12) -> Clip? {
             sheet.map { Clip(sheet: $0, frames: frames, fps: fps) }
         }
@@ -599,7 +431,8 @@ private struct ClawdAnimator {
     private static func book(on sheet: PixelSheet, _ index: Int, dropping: TimeInterval) -> Decal {
         let pixels = sheet.frames[min(index, sheet.frames.count - 1)]
         let head = pixels.firstIndex { $0 != 255 }.map { $0 / sheet.width } ?? 0
-        let fall = max(0, 4 - Int(dropping * 16))  // from 4 px up, in a quarter of a second
+        // From 4 px up, in a quarter of a second. (`dropping` may be infinite, which Int can't hold.)
+        let fall = dropping < 0.25 ? 4 - Int(dropping * 16) : 0
         return Decal(Props.book, 2, head - Props.book.height + 1 - fall)
     }
 
@@ -624,18 +457,26 @@ private struct ClawdAnimator {
             if pick == last { pick = (pick + 1) % Self.pastimes.count }
             last = pick
             let pastime = Self.pastimes[pick]
-            guard now >= start, start + pastime.duration <= end else { break }
+            guard start + pastime.duration <= end else { break }
+            if now < start { return standing(until: start, now) }
             if now < start + pastime.duration {
-                return start >= restingSince.timeIntervalSinceReferenceDate ? pastime.frame(now - start) : standing
+                return start >= restingSince.timeIntervalSinceReferenceDate
+                    ? pastime.frame(now - start) : standing(until: start + pastime.duration, now)
             }
             start += pastime.duration
         }
-        return standing
+        return standing(until: end, now)
+    }
+
+    /// Standing still until `until`, in seconds of the clock as `now` is: the next look comes right
+    /// then, so a pastime starts on time rather than up to half a second into it.
+    private func standing(until: TimeInterval, _ now: TimeInterval) -> Frame {
+        Frame(laptop, 0, rate: 1 / max(until - now, 1.0 / 16))
     }
 }
 
 /// The same seed gives the same numbers: each stretch of the clock always plays out the same way.
-private struct SeededRandom: RandomNumberGenerator {
+struct SeededRandom: RandomNumberGenerator {
     var state: UInt64
 
     init(seed: UInt64) { state = seed }
@@ -647,161 +488,5 @@ private struct SeededRandom: RandomNumberGenerator {
         z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
         z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
         return z ^ (z >> 31)
-    }
-}
-
-/// Shows `ClawdAnimator`'s frames with Core Animation: each frame swaps a ready picture into a layer.
-/// Drawn by SwiftUI instead, every frame (12 a second while Claude works) meant a SwiftUI pass over the
-/// whole notch: about 6% of a CPU core, against about 1% this way.
-private struct ClawdLayer: NSViewRepresentable {
-    let animator: ClawdAnimator
-
-    func makeNSView(context: Context) -> ClawdLayerView { ClawdLayerView(animator: animator) }
-    func updateNSView(_ view: ClawdLayerView, context: Context) { view.animator = animator }
-}
-
-private final class ClawdLayerView: NSView {
-    var animator: ClawdAnimator { didSet { showFrame() } }
-    private let sprite = CALayer()
-    /// Two "z"s drifting up and fading from beside the head while Clawd dozes, half a cycle apart.
-    private let zs = [CALayer(), CALayer()]
-    private var timer: Timer?
-
-    init(animator: ClawdAnimator) {
-        self.animator = animator
-        super.init(frame: NSRect(origin: .zero, size: ClawdAnimator.size))
-        // AppKit's own layer, not one set here: AppKit keeps it flipped to match `isFlipped` wherever
-        // SwiftUI puts the view. A layer set by hand is flipped relative to its parent, which changes
-        // with the notch's state, and frames of different heights then stood at different heights.
-        wantsLayer = true
-        layerContentsRedrawPolicy = .never  // nothing to draw: the sublayers show the pictures
-        guard let root = layer else { return }
-        for (layer, glyph) in [(sprite, nil), (zs[0], SpriteImages.smallZ), (zs[1], SpriteImages.bigZ)] {
-            layer.magnificationFilter = .nearest  // crisp pixels
-            if let glyph {
-                layer.contents = glyph
-                layer.bounds = CGRect(x: 0, y: 0, width: glyph.width, height: glyph.height)
-                layer.anchorPoint = .zero
-            }
-            root.addSublayer(layer)
-        }
-    }
-
-    required init?(coder: NSCoder) { fatalError("not used") }
-
-    override var isFlipped: Bool { true }  // top-left origin, like the sprite sheets
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        showFrame()
-    }
-
-    /// Shows the frame for now and comes back when the picture changes; stops while out of a window.
-    private func showFrame() {
-        timer?.invalidate()
-        timer = nil
-        guard window != nil else { return }
-        let frame = animator.frame(at: Date())
-        let sheet = frame.sheet
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        sprite.contents = SpriteImages.image(sheet, frame.index, mirrored: frame.mirrored, decals: frame.decals)
-        // The sheet's anchor on Clawd's feet; props may make the picture bigger than the sheet.
-        let feet = ClawdAnimator.feet
-        let box = SpriteImages.bounds(sheet, frame.decals)
-        let left = frame.mirrored
-            ? feet.x + sheet.anchor.x - CGFloat(box.width + box.minX)
-            : feet.x - sheet.anchor.x + CGFloat(box.minX)
-        sprite.frame = CGRect(x: left + frame.offsetX,
-                              y: feet.y - sheet.anchor.y + CGFloat(box.minY) + frame.offsetY,
-                              width: CGFloat(box.width), height: CGFloat(box.height))
-        // Beside his head, or from above a book on it.
-        let zStart = frame.decals.isEmpty ? feet.y - 14 : sprite.frame.minY - 5
-        for (z, offset) in zip(zs, [0.0, 0.5]) {
-            z.isHidden = frame.dozing == nil
-            guard let dozing = frame.dozing else { continue }
-            let p = (dozing / 2.6 + offset).truncatingRemainder(dividingBy: 1)
-            z.position = CGPoint(x: feet.x + 4 + p * 4, y: zStart - p * 12)
-            z.opacity = Float(0.75 * (1 - p))
-        }
-        CATransaction.commit()
-
-        let delay = 1 / min(16, max(1, frame.rate))
-        let next = Timer(timeInterval: delay, repeats: false) { [weak self] _ in self?.showFrame() }
-        next.tolerance = delay / 10  // lets macOS bundle the wakeup with others
-        RunLoop.main.add(next, forMode: .common)
-        timer = next
-    }
-}
-
-/// Sprite frames turned into pictures once, mirrored the way Clawd faces in the notch.
-private enum SpriteImages {
-    private static let cache: NSCache<NSString, CGImage> = {
-        let cache = NSCache<NSString, CGImage>()
-        cache.countLimit = 600  // a few kilobytes each
-        return cache
-    }()
-
-    /// The picture of a frame with its props: where the sheet's own top-left corner is in it (minus),
-    /// and its size.
-    static func bounds(_ sheet: PixelSheet, _ decals: [Decal]) -> (minX: Int, minY: Int, width: Int, height: Int) {
-        let minX = decals.map(\.x).reduce(0, min), minY = decals.map(\.y).reduce(0, min)
-        let maxX = decals.map { $0.x + $0.art.width }.reduce(sheet.width, max)
-        let maxY = decals.map { $0.y + $0.art.height }.reduce(sheet.height, max)
-        return (minX, minY, maxX - minX, maxY - minY)
-    }
-
-    /// `mirrored`: facing left, the way Clawd usually stands in the notch. `decals` are drawn over him.
-    static func image(_ sheet: PixelSheet, _ index: Int, mirrored: Bool = true, decals: [Decal] = []) -> CGImage? {
-        let key = ("\(sheet.name)#\(index)\(mirrored ? "" : ">")" + decals.map { "|\($0.art.name)@\($0.x),\($0.y)" }.joined()) as NSString
-        if let image = cache.object(forKey: key) { return image }
-        let box = bounds(sheet, decals)
-        var rgba = [UInt8](repeating: 0, count: box.width * box.height * 4)
-        func offset(_ x: Int, _ y: Int) -> Int {
-            let column = x - box.minX
-            return ((y - box.minY) * box.width + (mirrored ? box.width - 1 - column : column)) * 4
-        }
-        let pixels = sheet.frames[min(index, sheet.frames.count - 1)]
-        let colors = sheet.palette.map { [UInt8($0.r * 255), UInt8($0.g * 255), UInt8($0.b * 255), 255] }
-        for y in 0..<sheet.height {
-            for x in 0..<sheet.width {
-                let v = pixels[y * sheet.width + x]
-                guard v != 255 else { continue }
-                let at = offset(x, y)
-                rgba.replaceSubrange(at..<(at + 4), with: colors[Int(v)])
-            }
-        }
-        for decal in decals {
-            let art = decal.art
-            for y in 0..<art.height {
-                for x in 0..<art.width {
-                    let from = (y * art.width + x) * 4
-                    guard art.rgba[from + 3] > 0 else { continue }
-                    let at = offset(decal.x + x, decal.y + y)
-                    rgba.replaceSubrange(at..<(at + 4), with: art.rgba[from..<(from + 4)])
-                }
-            }
-        }
-        guard let image = makeImage(rgba, width: box.width, height: box.height) else { return nil }
-        cache.setObject(image, forKey: key)
-        return image
-    }
-
-    static let smallZ = glyph(["####", "..#.", ".#..", "####"])
-    static let bigZ = glyph(["#####", "...#.", "..#..", ".#...", "#####"])
-
-    private static func glyph(_ rows: [String]) -> CGImage? {
-        let width = rows[0].count
-        let rgba = rows.flatMap { $0.flatMap { $0 == "#" ? [UInt8](repeating: 255, count: 4) : [0, 0, 0, 0] } }
-        return makeImage(rgba, width: width, height: rows.count)
-    }
-
-    private static func makeImage(_ rgba: [UInt8], width: Int, height: Int) -> CGImage? {
-        guard let provider = CGDataProvider(data: Data(rgba) as CFData) else { return nil }
-        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
-                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-                       provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
     }
 }
