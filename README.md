@@ -30,7 +30,7 @@ cd ClaudeNotch
 ./install.sh
 ```
 
-That's it. Clawd shows up in the menu bar, and the notch comes alive as soon as Claude Code starts a task. To try it right away without Claude: Clawd's menu bar icon → **Show demo**.
+That's it. Clawd shows up in the menu bar, and the notch comes alive as soon as Claude Code starts a task.
 
 <details>
 <summary>Without git — download the ZIP</summary>

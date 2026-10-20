@@ -196,9 +196,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title.isEnabled = false
         menu.addItem(title)
         menu.addItem(.separator())
-        let demo = NSMenuItem(title: tr("Показать демо", "Show demo"), action: #selector(runDemo), keyEquivalent: "")
-        demo.target = self
-        menu.addItem(demo)
         let login = NSMenuItem(title: tr("Запускать при входе", "Open at login"), action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         login.target = self
         menu.addItem(login)
@@ -241,10 +238,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let on = !UserDefaults.standard.bool(forKey: Store.soundsKey)
         UserDefaults.standard.set(on, forKey: Store.soundsKey)
         if on { NSSound(named: "Glass")?.play() }
-    }
-
-    @objc private func runDemo() {
-        store.runDemo()
     }
 
     // MARK: - Launch at login
