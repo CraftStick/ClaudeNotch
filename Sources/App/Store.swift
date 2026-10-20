@@ -214,6 +214,8 @@ final class Store: ObservableObject {
     enum Decision { case allow, allowAlways, deny, askInApp }
 
     static let soundsKey = "sounds"
+    /// The glowing rim around the island, on unless switched off in the menu.
+    static let rimKey = "rim"
 
     @Published private(set) var sessions: [String: Session] = [:]
     @Published private(set) var expanded = false
@@ -237,7 +239,7 @@ final class Store: ObservableObject {
     private var playingSounds: [NSSound] = []
 
     init() {
-        UserDefaults.standard.register(defaults: [Self.soundsKey: true])
+        UserDefaults.standard.register(defaults: [Self.soundsKey: true, Self.rimKey: true])
         transcripts.onInterrupt = { [weak self] id in self?.interrupted(id) }
         transcripts.onUsage = { [weak self] id, usage in self?.recordUsage(id, usage) }
         transcripts.onThought = { [weak self] id, thought, written in self?.recordThought(id, thought, written: written) }

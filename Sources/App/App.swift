@@ -61,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var notchScreen: NSScreen?
     private var notch: NotchMetrics?
     private var soundsItem: NSMenuItem?
+    private var rimItem: NSMenuItem?
     private let hotKeys = HotKeys()
     /// The pointer is over the visible notch: take clicks there (to focus a session).
     private var pointerInside = false
@@ -239,6 +240,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sounds.target = self
         menu.addItem(sounds)
         soundsItem = sounds
+        let rim = NSMenuItem(title: tr("Переливающаяся обводка", "Glowing rim"), action: #selector(toggleRim), keyEquivalent: "")
+        rim.target = self
+        menu.addItem(rim)
+        rimItem = rim
 
         let languages = NSMenu()
         for (choice, name) in [(nil, tr("Как в системе", "System")), (Language.en, "English"), (Language.ru, "Русский")] {
@@ -260,12 +265,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         loginItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
         soundsItem?.state = UserDefaults.standard.bool(forKey: Store.soundsKey) ? .on : .off
+        rimItem?.state = UserDefaults.standard.bool(forKey: Store.rimKey) ? .on : .off
     }
 
     @objc private func pickLanguage(_ sender: NSMenuItem) {
         Language.choice = (sender.representedObject as? String).flatMap(Language.init(rawValue:))
         buildMenu()
         store.objectWillChange.send()  // redraw the notch in the new language
+    }
+
+    @objc private func toggleRim() {
+        UserDefaults.standard.set(!UserDefaults.standard.bool(forKey: Store.rimKey), forKey: Store.rimKey)
+        store.objectWillChange.send()  // redraw the notch with or without it
     }
 
     @objc private func toggleSounds() {

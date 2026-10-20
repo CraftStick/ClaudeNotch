@@ -28,6 +28,8 @@ struct NotchMetrics {
 struct NotchShape: Shape {
     var topRadius: CGFloat
     var bottomRadius: CGFloat
+    /// Open, it's just the edge below the top of the screen: for the rim.
+    var closed = true
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(topRadius, bottomRadius) }
@@ -46,7 +48,7 @@ struct NotchShape: Shape {
         p.addQuadCurve(to: CGPoint(x: r.maxX - t, y: r.maxY - b), control: CGPoint(x: r.maxX - t, y: r.maxY))
         p.addLine(to: CGPoint(x: r.maxX - t, y: r.minY + t))
         p.addQuadCurve(to: CGPoint(x: r.maxX, y: r.minY), control: CGPoint(x: r.maxX - t, y: r.minY))
-        p.closeSubpath()
+        if closed { p.closeSubpath() }
         return p
     }
 }
@@ -87,6 +89,12 @@ struct NotchView: View {
         .onTapGesture {  // buttons inside win over this
             if let session { store.focus(session.id) }
         }
+        .overlay(alignment: .top) {
+            if mode != .hidden, UserDefaults.standard.bool(forKey: Store.rimKey) {
+                NotchRim(shape: shape, size: size, canvas: CGSize(width: 640, height: Self.maxHeight(notch: notch)),
+                         working: session?.phase.isActive == true)
+            }
+        }
         .shadow(color: .black.opacity(isOpen ? 0.35 : 0), radius: 10, y: 4)
         .opacity(mode == .hidden ? 0 : 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -100,7 +108,9 @@ struct NotchView: View {
         let body: CGSize
         switch mode {
         case .hidden: body = CGSize(width: notch.width, height: notch.height)
-        case .compact: body = CGSize(width: notch.width + 2 * wing, height: notch.height)
+        // A little deeper than the camera housing: the rim along the bottom runs inside the edge and
+        // must stay below the cut-out, where the screen has no pixels.
+        case .compact: body = CGSize(width: notch.width + 2 * wing, height: notch.height + NotchRim.width)
         case .expanded: body = CGSize(width: max(notch.width + 2 * wing + 150, 420), height: notch.height + detailHeight)
         case .permission: body = CGSize(width: max(notch.width + 2 * wing + 190, 470), height: notch.height + permissionHeight)
         case .details:
