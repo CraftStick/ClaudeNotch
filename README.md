@@ -97,7 +97,7 @@ When Claude Code asks for permission, the notch shows **Allow** (⌃⌥⌘Y), **
 | Stopped with Esc / API error | slumps / gets dizzy |
 | After the task | stays in the notch for 15 more minutes: looks around, dances, dozes off after 3 minutes, and finally walks away |
 
-If you're in another app when Claude finishes or needs an answer, a sound plays (can be switched off in the menu).
+Every time Claude finishes or needs an answer, a sound plays (can be switched off in the menu).
 
 ### Language
 

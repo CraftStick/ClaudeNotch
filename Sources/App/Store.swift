@@ -206,6 +206,10 @@ final class Store: ObservableObject {
     private var hoverWork: DispatchWorkItem?
     private var pruneTimer: Timer?
     private var motionTimer: Timer?
+    /// Copies of the sounds playing now. NSSound(named:) hands out one shared object per sound,
+    /// which won't start again while it's still playing (two sessions finishing together), and a
+    /// copy has to stay alive until it ends.
+    private var playingSounds: [NSSound] = []
 
     init() {
         UserDefaults.standard.register(defaults: [Self.soundsKey: true])
@@ -500,16 +504,19 @@ final class Store: ObservableObject {
 
     // MARK: - Sound and usage
 
-    /// Plays `sound` when you're not looking at the app the session runs in.
-    /// Returns whether you were away (whether or not sounds are on).
+    /// Plays `sound` every time while sounds are on in the menu. Whether the session's app is in
+    /// front says little (the Claude app has many sessions, a terminal many tabs), so it only
+    /// decides how long the result stays up: returns whether you're in another app.
     @discardableResult
     private func chime(_ sound: String, for s: Session) -> Bool {
-        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let away = s.host == nil || front != s.host
-        if away, UserDefaults.standard.bool(forKey: Self.soundsKey) {
-            NSSound(named: sound)?.play()
+        if UserDefaults.standard.bool(forKey: Self.soundsKey), let copy = NSSound(named: sound)?.copy() as? NSSound {
+            playingSounds.removeAll { !$0.isPlaying }
+            playingSounds.append(copy)
+            copy.play()
+            EventLog.append("Sound \(sound)")
         }
-        return away
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        return s.host == nil || front != s.host
     }
 
     private func recordUsage(_ id: String, _ usage: TranscriptUsage) {
