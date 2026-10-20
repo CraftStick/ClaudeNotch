@@ -108,6 +108,14 @@ struct NotchView: View {
                     .allowsHitTesting(false)
             }
         }
+        .overlay(alignment: .top) {
+            // A big task done: confetti from Clawd's hands over the open island.
+            if mode != .hidden, let session, session.cue == .celebrate, Date().timeIntervalSince(session.cueStart) < 4 {
+                ConfettiBurst(shape: shape, size: size, canvas: CGSize(width: 640, height: Self.maxHeight(notch: notch)),
+                              origin: CGPoint(x: ear + (mode == .compact ? 0 : 6) + 8 + 24, y: (notch.height - 32) / 2 + 14))
+                    .id(session.cueStart)
+            }
+        }
         .shadow(color: .black.opacity(isOpen ? 0.35 : 0), radius: 10, y: 4)
         .opacity(mode == .hidden ? 0 : 1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
