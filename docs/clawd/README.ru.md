@@ -1,0 +1,68 @@
+[English](README.md) · **Русский**
+
+# Clawd в чёлке
+
+Все анимации Clawd в чёлке и когда они играют. Clawd — талисман Claude от Anthropic. Claude Notch не хранит его спрайты у себя: он читает их при запуске из настольного приложения Claude. Без приложения Claude вместо него за ноутбуком печатает упрощённый нарисованный Clawd. Эти GIF сделаны тем же кодом анимации, что и в приложении, так что в чёлке всё выглядит точно так же.
+
+[← Назад к README](../../README.ru.md)
+
+## За работой
+
+<table>
+<tr>
+<td align="center" valign="top"><img src="idea.gif" width="96" alt="Clawd с лампочкой"><br><b>Лампочка, потом ноутбук</b><br>Пришла новая задача</td>
+<td align="center" valign="top"><img src="typing.gif" width="96" alt="Clawd печатает на ноутбуке"><br><b>Печатает на ноутбуке</b><br>Claude работает:<br>думает или использует инструменты</td>
+<td align="center" valign="top"><img src="thinking.gif" width="96" alt="Clawd с облачком"><br><b>Садится подумать</b><br>Думает дольше 12 секунд<br>без действий</td>
+</tr>
+<tr>
+<td align="center" valign="top"><img src="desktop.gif" width="96" alt="Clawd за компьютером"><br><b>Пересаживается за компьютер</b><br>Команда выполняется<br>дольше 8 секунд</td>
+<td align="center" valign="top"><img src="running.gif" width="96" alt="Clawd бежит"><br><b>Бегает</b><br>Работают субагенты,<br>или 6+ действий за 12 секунд</td>
+<td align="center" valign="top"><img src="waving.gif" width="96" alt="Clawd машет"><br><b>Машет тебе</b><br>Claude ждёт тебя:<br>разрешение, вопрос, план.<br>Дважды, когда открываешь приложение</td>
+</tr>
+</table>
+
+## Реакции
+
+Короткие реакции играют поверх того, что Clawd делал.
+
+<table>
+<tr>
+<td align="center" valign="top"><img src="excited.gif" width="96" alt="Clawd радуется"><br><b>Радуется</b><br>Действие разрешено<br>из чёлки</td>
+<td align="center" valign="top"><img src="facepalm.gif" width="96" alt="Clawd фейспалмит"><br><b>Фейспалм</b><br>Инструмент упал (не чаще раза<br>в 45 секунд) или нажата «Запретить»</td>
+</tr>
+</table>
+
+## Конец задачи
+
+<table>
+<tr>
+<td align="center" valign="top"><img src="done.gif" width="96" alt="Clawd подпрыгивает"><br><b>Подпрыгивает от радости</b><br>Claude закончил</td>
+<td align="center" valign="top"><img src="celebrate.gif" width="96" alt="Clawd с конфетти и брейкдансом"><br><b>Конфетти и брейкданс</b><br>Закончил большую задачу:<br>5+ минут или 150+ изменённых строк</td>
+<td align="center" valign="top"><img src="stopped.gif" width="96" alt="Clawd расстроен"><br><b>Расстраивается</b><br>Claude остановили<br>через Esc</td>
+<td align="center" valign="top"><img src="error.gif" width="96" alt="Clawd с кружащейся головой"><br><b>Кружится голова</b><br>Задача закончилась<br>ошибкой API</td>
+</tr>
+</table>
+
+## Отдых
+
+После задачи Clawd остаётся в чёлке ещё 15 минут, чтобы было видно, что Claude закончил. Раз в 30 секунд он делает одно из этого по очереди: оглядывается, покачивается, снова оглядывается, танцует, танцует хулу.
+
+<table>
+<tr>
+<td align="center" valign="top"><img src="looking-around.gif" width="96" alt="Clawd оглядывается"><br><b>Оглядывается</b></td>
+<td align="center" valign="top"><img src="swaying.gif" width="96" alt="Clawd покачивается"><br><b>Покачивается</b></td>
+<td align="center" valign="top"><img src="dancing.gif" width="96" alt="Clawd танцует"><br><b>Танцует</b></td>
+<td align="center" valign="top"><img src="hula.gif" width="96" alt="Clawd танцует хулу"><br><b>Танцует хулу</b></td>
+</tr>
+</table>
+
+Потом он устраивается поудобнее:
+
+<table>
+<tr>
+<td align="center" valign="top"><img src="sleeping.gif" width="96" alt="Clawd дремлет"><br><b>Засыпает</b><br>Через 3 минуты после задачи</td>
+<td align="center" valign="top"><img src="walking-off.gif" width="96" alt="Clawd уходит"><br><b>Уходит из чёлки</b><br>В конце 15 минут;<br>потом чёлка прячется</td>
+</tr>
+</table>
+
+Когда приходит новая задача, Clawd бросает всё и снова берётся за работу.

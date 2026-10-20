@@ -2,6 +2,8 @@
 
 **English** · [Русский](README.ru.md)
 
+<img src="docs/icon.png" width="128" alt="Claude Notch icon: pixel Clawd on a dark tile">
+
 # Claude Notch
 
 **[Claude Code](https://claude.com/claude-code) status in your MacBook notch — like the Dynamic Island on an iPhone.**<br>
@@ -30,7 +32,7 @@ cd ClaudeNotch
 ./install.sh
 ```
 
-That's it. Clawd shows up in the menu bar, and the notch comes alive as soon as Claude Code starts a task.
+That's it. Clawd waves from the notch and settles in the menu bar, and the notch comes alive as soon as Claude Code starts a task.
 
 <details>
 <summary>Without git — download the ZIP</summary>
@@ -72,6 +74,8 @@ Clawd on the left of the notch, the task's time on the right. On every action th
 
 Open the app itself (at login, or again from Finder or Spotlight) and Clawd waves from the notch: "Ready to work". Click it to open Claude, or wherever Claude Code ran last.
 
+<p align="center"><img src="docs/greeting.png" width="560" alt="The notch says Ready to work"></p>
+
 ### Details on hover
 
 Rest the pointer on the notch and a card opens: the task, what's happening now (with the description and the full command), subagents, recent actions with the size of each edit, other sessions, and at the bottom the turn's line changes, tokens and context fill. Click the notch to bring forward the app the session runs in (Terminal, iTerm, VS Code, Cursor, the Claude app…).
@@ -86,18 +90,18 @@ When Claude Code asks for permission, the notch shows **Allow** (⌃⌥⌘Y), **
 
 ### Clawd
 
-| When | Clawd |
-|---|---|
-| A new task comes in | a light bulb goes on above his head, then he gets out his laptop and types |
-| Thinking for a while (12+ s with no actions) | sits down with a speech bubble "…" |
-| A command runs longer than 8 s | moves over to a desktop computer |
-| Subagents at work or many actions in a row | runs |
-| Waiting for you: a question, a permission, a plan | waves at you |
-| You allowed an action | is delighted |
-| A command failed or you pressed Deny | facepalms |
-| Done | hops for joy; after a big task — confetti and a breakdance |
-| Stopped with Esc / API error | slumps / gets dizzy |
-| After the task | stays in the notch for 15 more minutes: looks around, dances, dozes off after 3 minutes, and finally walks away |
+Clawd lives in the notch and shows what Claude is up to: gets out his laptop and types while Claude works, sits down to think, moves to a desktop computer for long commands, waves when Claude needs you, hops for joy when it's done, and dozes off while he rests.
+
+<p align="center">
+<img src="docs/clawd/typing.gif" width="96" alt="Typing">
+<img src="docs/clawd/thinking.gif" width="96" alt="Thinking">
+<img src="docs/clawd/desktop.gif" width="96" alt="At a desktop computer">
+<img src="docs/clawd/waving.gif" width="96" alt="Waving">
+<img src="docs/clawd/celebrate.gif" width="96" alt="Confetti">
+<img src="docs/clawd/sleeping.gif" width="96" alt="Dozing">
+</p>
+
+**[All of Clawd's animations and when he plays them →](docs/clawd/README.md)**
 
 Every time Claude finishes or needs an answer, a sound plays (can be switched off in the menu).
 
@@ -115,7 +119,7 @@ Claude Code ──hook (JSON on stdin)──▶ claude-notch-hook ──Unix soc
 - **`Sources/Hook/main.swift`** — a tiny binary Claude Code runs on every event. It forwards the JSON to the app and prints the answer, if there is one. It always exits 0, silently, even when the app isn't running, so it never gets in Claude Code's way.
 - **`Store.swift`** — turns hook events into the notch's state and answers permission requests.
 - **`NotchView.swift`**, **`DetailsCard.swift`** — the interface: the shape around the notch, the open states, the cards.
-- **`ClawdAnimation.swift`**, **`Clawd.swift`** — Clawd's animations (see below).
+- **`ClawdAnimation.swift`**, **`Clawd.swift`** — Clawd's animations ([all of them](docs/clawd/README.md)).
 - **`TranscriptWatcher.swift`** — watches the session file: Claude Code sends no hook on Esc, and token usage lives there too.
 - **`AppFocus.swift`**, **`HotKeys.swift`**, **`SocketServer.swift`**, **`Language.swift`** — click to focus, ⌃⌥⌘Y/⌃⌥⌘N, the socket, the two languages.
 
@@ -130,7 +134,7 @@ Claude Code ──hook (JSON on stdin)──▶ claude-notch-hook ──Unix soc
 
 ## About Clawd
 
-Clawd is Anthropic's character, and his sprites aren't in this source code. At launch the app reads them from the Claude app installed on your Mac (they live in its `app.asar`, in the Clawd Quest easter egg). If Claude.app isn't installed or the sprite format changes, a simplified Clawd drawn in code is shown instead. The images in `docs/` are screenshots of the running app.
+Clawd is Anthropic's character, and his sprites aren't in this source code. At launch the app reads them from the Claude app installed on your Mac (they live in its `app.asar`, in the Clawd Quest easter egg). If Claude.app isn't installed or the sprite format changes, a simplified Clawd drawn in code is shown instead. The images in `docs/` are drawn by the app's own interface and animation code.
 
 This project is not affiliated with or endorsed by Anthropic. Claude is a trademark of Anthropic.
 
