@@ -36,7 +36,10 @@ enum DetailsLayout {
 
     static func height(_ s: Session, others: Int) -> CGFloat {
         var sections: [CGFloat] = []
-        func list(_ rows: Int) { if rows > 0 { sections.append(caption + captionGap + CGFloat(rows) * row) } }
+        // A list's rows sit in the section's stack too, so they're as far apart as the caption is from them.
+        func list(_ rows: Int) {
+            if rows > 0 { sections.append(caption + captionGap + CGFloat(rows) * row + CGFloat(rows - 1) * captionGap) }
+        }
         let task = taskLines(s)
         if task > 0 { sections.append(caption + captionGap + CGFloat(task) * line) }
         sections.append(caption + captionGap + nowHeight(DetailsCard.now(s)))
