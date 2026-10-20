@@ -21,4 +21,4 @@ echo "==> Adding the hooks to Claude Code"
 ./install-hooks.sh
 echo
 echo "Done. Claude Notch is running (Clawd's icon is in the menu bar)."
-echo "Start a task in Claude Code and watch the notch. Menu → Show demo (Показать демо) plays a fake session."
+echo "Start a task in Claude Code and watch the notch."

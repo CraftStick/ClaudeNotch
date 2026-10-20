@@ -289,10 +289,6 @@ final class Store: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + (wanted ? 0.3 : 0.35), execute: work)
     }
 
-    func handle(_ data: Data, reply: HookReply) {
-        handle((try? JSONSerialization.jsonObject(with: data)) as? [String: Any], reply: reply)
-    }
-
     func handle(_ json: [String: Any]?, reply: HookReply) {
         guard let json, let event = json["hook_event_name"] as? String else {
             reply.send(nil)
@@ -685,30 +681,6 @@ final class Store: ObservableObject {
             } else if s.desiredMotion(at: now) != s.motion {
                 sessions[id]?.syncMotion(at: now)
             }
-        }
-    }
-
-    // MARK: - Demo
-
-    func runDemo() {
-        let id = "demo-\(UUID().uuidString)"
-        let steps: [(TimeInterval, [String: Any])] = [
-            (0.0, ["hook_event_name": "UserPromptSubmit", "prompt": tr("Сделай статус Claude в чёлке MacBook", "Show Claude's status in the MacBook notch")]),
-            (2.5, ["hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": ["file_path": "/src/NotchView.swift"]]),
-            (3.5, ["hook_event_name": "PostToolUse"]),
-            (5.0, ["hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": ["file_path": "/src/Store.swift"]]),
-            (6.0, ["hook_event_name": "PostToolUse"]),
-            (8.0, ["hook_event_name": "PermissionRequest", "tool_name": "Bash",
-                   "tool_input": ["command": "rm -rf build && ./build.sh", "description": tr("Пересобрать приложение", "Rebuild the app")]]),
-            // 12 s to try the buttons (nothing real is allowed or denied), then the turn ends.
-            (20.0, ["hook_event_name": "PostToolUse"]),
-            (21.0, ["hook_event_name": "Stop"]),
-        ]
-        for (delay, var payload) in steps {
-            payload["session_id"] = id
-            payload["cwd"] = "/Users/demo/ClaudeNotch"
-            guard let data = try? JSONSerialization.data(withJSONObject: payload) else { continue }
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.handle(data, reply: .none) }
         }
     }
 }

@@ -16,9 +16,6 @@ final class HookReply {
 
     init(fd: Int32) { self.fd = fd }
 
-    /// For events that don't come from a hook (the demo).
-    static var none: HookReply { HookReply(fd: -1) }
-
     deinit { send(nil) }
 
     func send(_ data: Data?) {
