@@ -102,11 +102,11 @@ struct SettingsView: View {
                 Toggle(isOn: $sounds) {
                     Label(tr("Звук, когда готово или нужен ответ", "Sound when done or waiting for you"), systemImage: "speaker.wave.2")
                 }
-                .onChange(of: sounds) { on in if on { NSSound(named: "Glass")?.play() } }
+                .onChange(of: sounds) { _, on in if on { NSSound(named: "Glass")?.play() } }
                 Toggle(isOn: $rim) {
                     Label(tr("Переливающаяся обводка", "Glowing rim"), systemImage: "sparkles")
                 }
-                .onChange(of: rim) { _ in actions.changed() }
+                .onChange(of: rim) { actions.changed() }
                 Toggle(isOn: Binding(get: { alive }, set: { alive = $0; actions.setAlive($0) })) {
                     Label(tr("Clawd живёт в чёлке всегда", "Clawd stays in the notch"), systemImage: "pawprint")
                     Text(tr("Когда у Claude нет дел, он остаётся и сам находит себе занятие.",
@@ -122,7 +122,7 @@ struct SettingsView: View {
                 } label: {
                     Label(tr("Ответ из чёлки", "Answering from the notch"), systemImage: "keyboard")
                 }
-                .onChange(of: hotKeys) { _ in actions.changed() }
+                .onChange(of: hotKeys) { actions.changed() }
             } header: {
                 Text(tr("Горячие клавиши", "Shortcuts"))
             } footer: {

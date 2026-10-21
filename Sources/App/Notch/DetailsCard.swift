@@ -309,13 +309,19 @@ private struct AgentRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text(formatElapsed((agent.finished ?? context.date).timeIntervalSince(agent.started)))
-                    .font(.system(size: 10.5).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.35))
+            if let finished = agent.finished {  // nothing to tick
+                elapsed(until: finished)
+            } else {
+                TimelineView(.periodic(from: .now, by: 1)) { context in elapsed(until: context.date) }
             }
         }
         .frame(height: DetailsLayout.row)
+    }
+
+    private func elapsed(until end: Date) -> some View {
+        Text(formatElapsed(end.timeIntervalSince(agent.started)))
+            .font(.system(size: 10.5).monospacedDigit())
+            .foregroundStyle(.white.opacity(0.35))
     }
 
     private var name: String {

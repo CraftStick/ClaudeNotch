@@ -34,6 +34,7 @@ final class Store: ObservableObject {
     /// nothing in it moves and nothing ticks; it all catches up from the clock when it can be seen again.
     @Published private(set) var onScreen = true
     private var motionTimer: Timer?
+    private var ticking: Ticking?
     private var nextPrune = Date.distantPast
     /// Copies of the sounds playing now. NSSound(named:) hands out one shared object per sound,
     /// which won't start again while it's still playing (two sessions finishing together), and a
@@ -57,19 +58,45 @@ final class Store: ObservableObject {
         syncTicking()
     }
 
-    /// The clock ticks once a second while something in the notch depends on it: a session, at work or
-    /// resting, or the greeting, which leaves after a while unless Clawd lives in the notch. Otherwise, and
-    /// while the notch can't be seen, it doesn't wake the Mac up at all.
+    enum Ticking: Equatable { case everySecond, at(Date) }
+
+    /// The clock ticks once a second while Claude is at work: Clawd's motions depend on time then. With
+    /// every session resting, and for the greeting, which leaves after a while unless Clawd lives in the
+    /// notch, it only wakes up once, when the first rest is over. Otherwise, and while the notch can't
+    /// be seen, it doesn't wake the Mac up at all.
     private func syncTicking() {
-        let needed = onScreen && (!sessions.isEmpty || (greeting != nil && !Self.alive))
-        if needed, motionTimer == nil {
-            let timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
-            timer.tolerance = 0.3  // needn't be on time: lets macOS bundle the wakeup with others
-            motionTimer = timer
-        } else if !needed, let timer = motionTimer {
-            timer.invalidate()
-            motionTimer = nil
+        let wanted = nextTick()
+        guard wanted != ticking else { return }
+        motionTimer?.invalidate()
+        motionTimer = nil
+        ticking = wanted
+        let timer: Timer
+        switch wanted {
+        case nil:
+            return
+        case .everySecond:
+            timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
+        case .at(let date):
+            timer = Timer(fire: date, interval: 0, repeats: false) { [weak self] _ in
+                guard let self else { return }
+                self.motionTimer = nil
+                self.ticking = nil
+                self.tick()
+                self.syncTicking()
+            }
         }
+        timer.tolerance = 0.3  // needn't be on time: lets macOS bundle the wakeup with others
+        RunLoop.main.add(timer, forMode: .common)
+        motionTimer = timer
+    }
+
+    func nextTick() -> Ticking? {
+        guard onScreen else { return nil }
+        if sessions.values.contains(where: { $0.phase.isActive }) { return .everySecond }
+        var ends = sessions.values.map { $0.turnEnd ?? $0.lastEvent }
+        if let g = greeting, !Self.alive { ends.append(g.lastEvent) }
+        // A moment past the end: the rest is over once it has lasted longer than `restDuration`.
+        return ends.min().map { .at($0.addingTimeInterval(Self.restDuration + 0.05)) }
     }
 
     /// Sessions where Claude is busy or waiting, most recent first.
@@ -191,6 +218,12 @@ final class Store: ObservableObject {
             update(shown.id) { s, now in s.play(.arrive, at: now) }
         }
         greeting = Self.makeGreeting(at: now, cue: .arrive)
+    }
+
+    /// "Stays in the notch" was switched on or off: the greeting now stays, or leaves when its rest is over.
+    func aliveChanged() {
+        objectWillChange.send()
+        syncTicking()
     }
 
     private func poke() {
@@ -623,10 +656,11 @@ final class Store: ObservableObject {
         commit(s, expandFor: nil)
     }
 
-    /// The transcript grew. Noted at most every 10 seconds: it only serves to notice long silences.
+    /// The transcript grew. Noted at most once a minute: it only serves to notice silences of five
+    /// minutes and more, and every note redraws the notch.
     private func recordWrite(_ id: String) {
         let now = Date()
-        guard let s = sessions[id], now.timeIntervalSince(s.lastWrite) > 10 else { return }
+        guard let s = sessions[id], now.timeIntervalSince(s.lastWrite) > 60 else { return }
         sessions[id]?.lastWrite = now
     }
 
@@ -830,8 +864,8 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Every second: time-based motions (thinking for a while, a slow command, a burst of tools
-    /// ending), and sessions whose rest is over leave the notch — Clawd has walked off by then.
+    /// Every second while Claude works: time-based motions (thinking for a while, a slow command, a burst
+    /// of tools ending); and sessions whose rest is over leave the notch — Clawd has walked off by then.
     /// When he lives in the notch for good, the greeting stays instead, and comes back if it's gone.
     /// Every 10 seconds, stale sessions too.
     private func tick() {

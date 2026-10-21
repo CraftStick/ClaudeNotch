@@ -42,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         },
         setAlive: { [weak self] on in
             if on { self?.store.moveIn() }
-            self?.store.objectWillChange.send()
+            self?.store.aliveChanged()
         },
         changed: { [weak self] in
             self?.buildMenu()

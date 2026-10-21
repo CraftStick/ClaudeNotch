@@ -81,6 +81,16 @@ struct StoreTests {
         #expect(session?.activity.title == tr("Ответ отправлен", "Answer sent"))
     }
 
+    @Test func theClockTicksOnlyWhileClaudeWorks() throws {
+        send("UserPromptSubmit", ["prompt": "Fix it"])
+        #expect(store.nextTick() == .everySecond)
+        send("Stop", ["last_assistant_message": "Done."])
+        let end = try #require(session?.turnEnd)
+        #expect(store.nextTick() == .at(end.addingTimeInterval(Store.restDuration + 0.05)))
+        store.screen(visible: false)
+        #expect(store.nextTick() == nil)
+    }
+
     @Test func nothingIsSentWithoutATick() throws {
         let hook = send("PermissionRequest", ["tool_name": "AskUserQuestion", "tool_input": ["questions": [
             ["question": "Which?", "multiSelect": true, "options": [["label": "A"], ["label": "B"]]],
