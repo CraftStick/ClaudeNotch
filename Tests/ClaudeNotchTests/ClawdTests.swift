@@ -52,6 +52,16 @@ struct ClawdTests {
 
     // MARK: - Clock
 
+    /// A rest's fidgets: never one twice in a row, all of them over a rest, and not in one set order.
+    @Test func fidgetsComeInNoSetOrder() {
+        let rest = (0..<30).map { ClawdAnimator.pick($0, of: 4, seed: 7) }
+        #expect(zip(rest, rest.dropFirst()).allSatisfy { $0 != $1 })
+        #expect(Set(rest) == [0, 1, 2, 3])
+        #expect(rest == (0..<30).map { ClawdAnimator.pick($0, of: 4, seed: 7) })
+        #expect(rest != (0..<30).map { ClawdAnimator.pick($0, of: 4, seed: 8) })
+        #expect(ClawdAnimator.pick(5, of: 1, seed: 7) == 0)
+    }
+
     @Test func theSameSeedPlaysOutTheSameWay() {
         var a = SeededRandom(seed: 42), b = SeededRandom(seed: 42), c = SeededRandom(seed: 43)
         let first = (0..<5).map { _ in a.next() }

@@ -179,11 +179,12 @@ struct ClawdAnimator {
         return all.compactMapValues { $0 }
     }()
 
-    /// How a turn ended: a happy hop, a sigh after Esc, dizzy after an API error.
+    /// How a turn ended: a happy hop; after Esc he turns to you and blinks, listening (often Esc just
+    /// means you want to say something); dizzy after an API error.
     private func ending(_ motion: Motion) -> Clip? {
         switch motion {
         case .done: return ClawdAssets.jumping.map(Self.hop)
-        case .stopped: return ClawdAssets.disappointed.map { Clip(sheet: $0, frames: 2...42, fps: 12) }
+        case .stopped: return ClawdAssets.turning.map { Clip(sheet: $0, frames: [0, 0, 0, 4, 0, 0, 0, 0, 0, 4, 0, 0], fps: 6) }
         case .failed: return ClawdAssets.dizzy.map { Clip(sheet: $0, frames: 0...40, fps: 12) }
         default: return nil
         }
@@ -210,7 +211,8 @@ struct ClawdAnimator {
         let n = Int(t / window)
         let intoFidget = t - Double(n) * window - 10  // starts 10 s into each window
         if !Self.fidgets.isEmpty, intoFidget >= 0 {
-            let fidget = Self.fidgets[n % Self.fidgets.count]
+            let seed = UInt64(bitPattern: Int64(session.motionStart.timeIntervalSinceReferenceDate))
+            let fidget = Self.fidgets[Self.pick(n, of: Self.fidgets.count, seed: seed)]
             if intoFidget < fidget.duration { return Frame(fidget, at: intoFidget) }
         }
         // Standing still until the next fidget, or until he sits down or walks off: no look before then.
@@ -222,10 +224,19 @@ struct ClawdAnimator {
     private static let fidgets: [Clip] = [
         ClawdAssets.lookingAround.map { Clip(sheet: $0, frames: 4...30, fps: 12) },
         ClawdAssets.swaying.map { Clip(sheet: $0, frames: 4...48, fps: 12) },
-        ClawdAssets.lookingAround.map { Clip(sheet: $0, frames: 4...30, fps: 12) },
         ClawdAssets.dancing.map { Clip(sheet: $0, frames: 4...38, fps: 12) },
         ClawdAssets.hula.map { Clip(sheet: $0, frames: 6...53, fps: 12) },
     ].compactMap { $0 }
+
+    /// Which of `count` the `n`th fidget of a rest is: in no set order, and never the same twice in a row.
+    /// `seed` is when the rest began, so it stays the same however often he's drawn.
+    static func pick(_ n: Int, of count: Int, seed: UInt64) -> Int {
+        guard count > 1 else { return 0 }
+        var random = SeededRandom(seed: seed)
+        var pick = Int.random(in: 0..<count, using: &random)
+        for _ in 0..<max(0, n) { pick = (pick + Int.random(in: 1..<count, using: &random)) % count }
+        return pick
+    }
 
     // MARK: - Living in the notch
 
