@@ -13,6 +13,16 @@ struct DescribeTests {
         #expect(!Updates.isNewer("0.1.0", than: "0.1.1"))
     }
 
+    @Test func theSameVersionBuiltAgainIsAnUpdate() {
+        #expect(Updates.build(fromDiskImage: "ClaudeNotch-0.1.2-18.dmg") == 18)
+        #expect(Updates.build(fromDiskImage: "ClaudeNotch-0.1.2.dmg") == nil)
+        #expect(Updates.isNewer("0.1.2", build: 18, than: "0.1.2", build: 17))
+        #expect(!Updates.isNewer("0.1.2", build: 17, than: "0.1.2", build: 17))
+        #expect(!Updates.isNewer("0.1.2", build: 0, than: "0.1.2", build: 17))
+        #expect(!Updates.isNewer("0.1.1", build: 30, than: "0.1.2", build: 17))
+        #expect(Updates.isNewer("0.1.3", build: 0, than: "0.1.2", build: 17))
+    }
+
     // MARK: - Cheers
 
     @Test func testsAndPushesAreToldApart() {

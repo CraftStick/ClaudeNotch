@@ -1,14 +1,16 @@
 #!/bin/bash
-# Builds the disk image for a release, build/ClaudeNotch-<version>.dmg: Claude Notch for Apple Silicon
+# Builds the disk image for a release, build/ClaudeNotch-<version>-<build>.dmg (the update check reads
+# the build from that name, so a release made again with fixes reaches those who have it): Claude Notch for Apple Silicon
 # and Intel next to a link to Applications, on a background with an arrow from one to the other.
 # Finder lays the window out, so the first run asks whether this terminal may control Finder.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)
+BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)
 VOLUME="Claude Notch"
 WORK=build/dmg
-OUT="build/ClaudeNotch-$VERSION.dmg"
+OUT="build/ClaudeNotch-$VERSION-$BUILD.dmg"
 MOUNT="/Volumes/$VOLUME"
 
 if [[ -d "$MOUNT" ]]; then
