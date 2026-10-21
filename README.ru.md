@@ -34,7 +34,7 @@ git clone https://github.com/CraftStick/ClaudeNotch.git ~/ClaudeNotch
 cd ~/ClaudeNotch && ./install.sh
 ```
 
-`install.sh` собирает приложение в `~/Applications` и добавляет хуки. Обновить — `git pull && ./install.sh`, удалить — `./uninstall.sh`, тесты — `swift test`.
+`install.sh` собирает приложение в `/Applications` и добавляет хуки. Обновить — `git pull && ./install.sh`, удалить — `./uninstall.sh`, тесты — `swift test`.
 
 </details>
 

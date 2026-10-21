@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SETTINGS="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
-HOOK="$HOME/Applications/ClaudeNotch.app/Contents/MacOS/claude-notch-hook"
+HOOK=/Applications/ClaudeNotch.app/Contents/MacOS/claude-notch-hook
 MODE="${1:-install}"
 
 if [[ "$MODE" != "install" && "$MODE" != "--uninstall" ]]; then

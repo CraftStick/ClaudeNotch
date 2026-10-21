@@ -34,7 +34,7 @@ git clone https://github.com/CraftStick/ClaudeNotch.git ~/ClaudeNotch
 cd ~/ClaudeNotch && ./install.sh
 ```
 
-`install.sh` builds the app into `~/Applications` and adds the hooks. Update with `git pull && ./install.sh`, remove with `./uninstall.sh`, run the tests with `swift test`.
+`install.sh` builds the app into `/Applications` and adds the hooks. Update with `git pull && ./install.sh`, remove with `./uninstall.sh`, run the tests with `swift test`.
 
 </details>
 

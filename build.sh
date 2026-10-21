@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds ClaudeNotch.app, installs it to ~/Applications and (re)starts it.
+# Builds ClaudeNotch.app, installs it to /Applications and (re)starts it.
 # --no-install only builds it into build/.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -10,7 +10,8 @@ if ! command -v swiftc >/dev/null; then
 fi
 
 APP=build/ClaudeNotch.app
-DEST="$HOME/Applications/ClaudeNotch.app"
+DEST=/Applications/ClaudeNotch.app
+OLD="$HOME/Applications/ClaudeNotch.app"  # where it went before: one copy is enough
 # This Mac's kind by default; ARCHS="arm64 x86_64" makes one app for both (Tools/make-dmg.sh does).
 read -r -a ARCHS <<< "${ARCHS:-$(uname -m)}"
 
@@ -45,8 +46,7 @@ fi
 if [[ "${1:-}" == "--no-install" ]]; then exit 0; fi
 
 pkill -x ClaudeNotch 2>/dev/null || true
-mkdir -p "$HOME/Applications"
-rm -rf "$DEST"
+rm -rf "$DEST" "$OLD"
 cp -R "$APP" "$DEST"
 rm -rf "$APP"  # a copy left in build/ would show up in Spotlight too
 open "$DEST"

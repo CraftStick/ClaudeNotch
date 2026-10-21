@@ -431,7 +431,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Opened from the disk image: offers to copy itself to Applications and open from there, so
-    /// it's plain it got there. A copy that's there already is quit and put in the Trash.
+    /// it's plain it got there. A copy that's installed already is quit and put in the Trash.
     private func offerToMove() {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
@@ -459,13 +459,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// Where a copy is already, else /Applications, else ~/Applications for a user who can't write there.
+    /// Always to /Applications, as build.sh installs it: one copy. One from before in ~/Applications goes too.
     private func copyToApplications() throws -> URL {
         let fm = FileManager.default
         let name = Bundle.main.bundleURL.lastPathComponent
-        let folders = [URL(fileURLWithPath: "/Applications"), fm.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]
-        let copy = folders.map { $0.appendingPathComponent(name) }.first { fm.fileExists(atPath: $0.path) }
-            ?? (fm.isWritableFile(atPath: folders[0].path) ? folders[0] : folders[1]).appendingPathComponent(name)
+        let copy = URL(fileURLWithPath: "/Applications").appendingPathComponent(name)
+        let old = fm.homeDirectoryForCurrentUser.appendingPathComponent("Applications").appendingPathComponent(name)
 
         // Quit first: put in the Trash while it runs, the old copy would offer to remove everything.
         let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
@@ -477,8 +476,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         others.filter { !$0.isTerminated }.forEach { $0.forceTerminate() }
 
-        try fm.createDirectory(at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
         if fm.fileExists(atPath: copy.path) { try fm.trashItem(at: copy, resultingItemURL: nil) }
+        if fm.fileExists(atPath: old.path) { try? fm.trashItem(at: old, resultingItemURL: nil) }
         try fm.copyItem(at: Bundle.main.bundleURL, to: copy)
         // Opened once already with Gatekeeper's OK: the copy needn't ask again.
         let xattr = Process()

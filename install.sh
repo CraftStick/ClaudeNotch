@@ -1,5 +1,5 @@
 #!/bin/bash
-# One-step install: builds the app into ~/Applications, starts it and adds the Claude Code hooks.
+# One-step install: builds the app into /Applications, starts it and adds the Claude Code hooks.
 # Run it again to update after `git pull`.
 set -euo pipefail
 cd "$(dirname "$0")"
