@@ -130,7 +130,9 @@ private final class FlowingColorsView: NSView {
         turn.duration = Self.turn
         turn.repeatCount = .infinity
         turn.calculationMode = .linear
-        turn.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: 20, preferred: 20)  // easy on the battery
+        // Easy on the battery: a turn every 5 s moves the colours about a point a frame at 12 frames a
+        // second, too little to tell from 20, and the screen redraws that corner of the menu bar less often.
+        turn.preferredFrameRateRange = CAFrameRateRange(minimum: 8, maximum: 12, preferred: 12)
         gradient.add(turn, forKey: "spin")
     }
 
