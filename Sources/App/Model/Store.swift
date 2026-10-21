@@ -109,10 +109,13 @@ final class Store: ObservableObject {
     }
 
     /// Brings the app the session runs in to the front; the greeting opens Claude and goes away.
+    /// Living in the notch for good, Clawd is there with Claude closed too, easy to brush against: a click
+    /// only makes him hop and wave, unless he's in the middle of something.
     func focus(_ id: String) {
         EventLog.append("Focus \(id)")
         if id == Self.greetingID {
-            if !Self.alive { greeting = nil }
+            guard !Self.alive else { return poke() }
+            greeting = nil
             if let app = AppFocus.claudeApp { AppFocus.open(app) }
             return
         }
@@ -173,6 +176,14 @@ final class Store: ObservableObject {
             update(shown.id) { s, now in s.play(.arrive, at: now) }
         }
         greeting = Self.makeGreeting(at: now, cue: .arrive)
+    }
+
+    private func poke() {
+        guard let g = greeting else { return }
+        let now = Date()
+        if let laptop = ClawdAssets.laptop, let waving = ClawdAssets.waving,
+           ClawdAnimator(session: g, laptop: laptop, waving: waving).frame(at: now).busy { return }
+        greeting?.play(.hello, at: now)
     }
 
     /// Clawd on his own in the notch, hopping and waving hello (or floating in under a parachute):

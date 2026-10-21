@@ -103,4 +103,17 @@ struct ClawdTests {
             }
         }
     }
+
+    /// A poke on the notch makes Clawd hop and wave, but not in the middle of a reaction.
+    @Test(.enabled(if: ClawdTests.hasSprites, "needs Claude.app"))
+    func aReactionKeepsHimBusy() throws {
+        let laptop = try #require(ClawdAssets.laptop), waving = try #require(ClawdAssets.waving)
+        let start = Date()
+        var s = Session(id: "s", turnStart: start, lastEvent: start)
+        s.play(.hello, at: start)
+        let animator = ClawdAnimator(session: s, laptop: laptop, waving: waving)
+        #expect(animator.frame(at: start + 0.2).busy)
+        let reaction = try #require(ClawdAnimator.reactions[.hello])
+        #expect(!animator.frame(at: start + reaction.duration + 1).busy)
+    }
 }

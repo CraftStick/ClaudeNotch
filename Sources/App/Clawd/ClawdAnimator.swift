@@ -42,7 +42,8 @@ struct ClawdAnimator {
     /// One frame to draw; `dozing` is the time asleep (for the floating "z"s), `offsetX` moves
     /// Clawd while he walks off, `rate` is how often the picture changes from here (redraws/s).
     /// `mirrored` is how Clawd usually faces in the notch, to the left; not, he faces right.
-    /// `offsetY` drops him from above (a parachute); `decals` are props drawn over him.
+    /// `offsetY` drops him from above (a parachute); `decals` are props drawn over him. `busy`: he's in
+    /// the middle of a reaction or a pastime, which a poke shouldn't cut short.
     struct Frame {
         let sheet: PixelSheet
         let index: Int
@@ -52,6 +53,7 @@ struct ClawdAnimator {
         var rate: Double = 16
         var mirrored = true
         var decals: [Decal] = []
+        var busy = false
 
         init(_ sheet: PixelSheet, _ index: Int, rate: Double = 16, dozing: TimeInterval? = nil, offsetX: CGFloat = 0,
              offsetY: CGFloat = 0, mirrored: Bool = true, decals: [Decal] = []) {
@@ -66,6 +68,12 @@ struct ClawdAnimator {
         }
 
         init(_ clip: Clip, at t: TimeInterval) { self.init(clip.sheet, clip.frame(at: t), rate: clip.fps) }
+
+        func markedBusy() -> Frame {
+            var frame = self
+            frame.busy = true
+            return frame
+        }
     }
 
 
@@ -88,8 +96,8 @@ struct ClawdAnimator {
             let putAway = exit(from: session.cueInterrupted)
             let lead = putAway?.duration ?? 0
             let t = date.timeIntervalSince(session.cueStart)
-            if let putAway, t < lead { return Frame(putAway, at: t) }
-            if t < lead + reaction.duration { return reaction.frame(t - lead) }
+            if let putAway, t < lead { return Frame(putAway, at: t).markedBusy() }
+            if t < lead + reaction.duration { return reaction.frame(t - lead).markedBusy() }
             let cueEnd = session.cueStart.addingTimeInterval(lead + reaction.duration)
             if cueEnd > session.motionStart {
                 // The reaction took over the start of what Clawd does now: carry on from its end
@@ -571,7 +579,7 @@ struct ClawdAnimator {
             if now < start { return standing(until: start, now) }
             if now < start + pastime.duration {
                 return start >= restingSince.timeIntervalSinceReferenceDate
-                    ? pastime.frame(now - start) : standing(until: start + pastime.duration, now)
+                    ? pastime.frame(now - start).markedBusy() : standing(until: start + pastime.duration, now)
             }
             start += pastime.duration
         }

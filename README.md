@@ -131,7 +131,7 @@ When Claude asks you a question, the notch shows its options as buttons: click o
 
 Clawd lives in the notch and shows what Claude is up to: gets out his laptop and types while Claude works, sits down to think, moves to a desktop computer for long commands, waves when Claude needs you, hops for joy when it's done, and dozes off under an open book while he rests.
 
-Want him around all the time? Clawd's menu → **Clawd stays in the notch**: he floats in under a parachute and lives in the notch for good, with pastimes of his own: coffee, music in headphones, wizardry, pancakes, dances, a breakdance, a nap, a walk out of the notch and back.
+Want him around all the time? Clawd's menu → **Clawd stays in the notch**: he floats in under a parachute and lives in the notch for good, with pastimes of his own: coffee, music in headphones, wizardry, pancakes, dances, a breakdance, a nap, a walk out of the notch and back. With Claude closed, a click on the notch doesn't open Claude any more: Clawd hops and waves (unless he's busy), and a pixel wave runs where the notch would say “Ready to work”.
 
 <p align="center">
 <img src="docs/clawd/typing.gif" width="96" alt="Typing">

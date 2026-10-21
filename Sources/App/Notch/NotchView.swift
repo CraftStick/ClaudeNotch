@@ -129,8 +129,16 @@ struct NotchView: View {
 
             switch mode {
             case .expanded:
-                DetailRow(session: s)
-                    .frame(height: detailHeight, alignment: .top)
+                if s.isGreeting, Store.alive {
+                    // Nothing to tell with Claude closed, and nothing to click: just a wave.
+                    PixelWave()
+                        .padding(.horizontal, 22)
+                        .frame(height: detailHeight - 6)
+                        .frame(height: detailHeight, alignment: .top)
+                } else {
+                    DetailRow(session: s)
+                        .frame(height: detailHeight, alignment: .top)
+                }
             case .permission:
                 if let prompt = store.prompt, let form = prompt.form {
                     QuestionCard(form: form, waiting: store.prompts.count - 1,
