@@ -119,11 +119,7 @@ struct NotchView: View {
                             .background(Capsule().fill(claudeOrange))
                             .help(tr("Сессий в работе: \(busy)", "Sessions at work: \(busy)"))
                     }
-                    if s.isGreeting {
-                        NotchExtraView(kind: NotchExtra.current, moving: store.onScreen)  // no task's time to count
-                    } else {
-                        ElapsedLabel(session: s, ticking: store.onScreen)
-                    }
+                    if !s.isGreeting { ElapsedLabel(session: s, ticking: store.onScreen) }
                 }
                 .padding(.trailing, 10)
                 .frame(width: wing, alignment: .trailing)
