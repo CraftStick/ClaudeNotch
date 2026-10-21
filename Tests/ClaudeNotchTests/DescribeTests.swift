@@ -73,6 +73,13 @@ struct DescribeTests {
         #expect(Describe.prompt("<system-reminder>secret\nstuff</system-reminder>\nFix <b>it</b>").text == "Fix it")
     }
 
+    /// Replying to something earlier: what you say to it, without the reply marker or the quote.
+    @Test func aReplyIsWhatYouSay() {
+        #expect(Describe.prompt("<!-- reply 1 -->\n> В DMG 0.1.2 их нет.\n\nа надо").text == "а надо")
+        #expect(Describe.prompt("<!-- reply 2 -->\n> Fix the clock").text == "Fix the clock")
+        #expect(Describe.prompt("a > b, isn't it?").text == "a > b, isn't it?")
+    }
+
     // MARK: - Tools
 
     @Test func aCommandShowsWhatItDoes() {

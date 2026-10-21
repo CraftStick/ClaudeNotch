@@ -66,6 +66,17 @@ enum Describe {
     /// (`<command-name>`), reminders. The tags come out, so the notch shows words rather than markup.
     /// Only a prompt that starts with a tag is one of those: one you typed may well mention them.
     static func prompt(_ text: String) -> (text: String, notice: Activity?) {
+        // A reply to something earlier: "<!-- reply 1 -->", the "> " lines it quotes, then what you say
+        // to it. What you say is the task; the quote only if that's all there is.
+        var text = text.replacingOccurrences(of: #"<!--[\s\S]*?-->"#, with: "", options: .regularExpression)
+        let lines = text.components(separatedBy: .newlines)
+        let quoted = lines.filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix(">") }
+        let said = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix(">") }
+        if !quoted.isEmpty {
+            text = said.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? quoted.map { String($0.trimmingCharacters(in: .whitespaces).dropFirst()) }.joined(separator: "\n")
+                : said.joined(separator: "\n")
+        }
         func words(_ text: String) -> String { String(text.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(300)) }
         guard text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<") else { return (words(text), nil) }
         func tag(_ name: String) -> String? {
