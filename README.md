@@ -18,12 +18,12 @@ And Clawd lives in the notch.
 
 You need macOS 14 or later and Claude Code, in a terminal or in the Claude app.
 
-1. Download **ClaudeNotch-….dmg** from the [latest release](https://github.com/CraftStick/ClaudeNotch/releases/latest), open it and drag Claude Notch to Applications.
-2. Open it. Apple hasn't notarized it, so the first time macOS won't: click **Done**, then **System Settings → Privacy & Security → Open Anyway**.
+1. Download **ClaudeNotch-….dmg** from the [latest release](https://github.com/CraftStick/ClaudeNotch/releases/latest) and open Claude Notch right in it. Apple hasn't notarized it, so the first time macOS won't: click **Done**, then **System Settings → Privacy & Security → Open Anyway**.
+2. Click **Move**: it copies itself to Applications and opens from there.
 3. When it asks to connect to Claude Code, click **Connect**. It adds its hooks to `~/.claude/settings.json` and keeps the original next to it.
 
-**Update:** quit it (Clawd's menu → Quit) and drag the new one over the old one.<br>
-**Uninstall:** uncheck **Connected to Claude Code** in Clawd's menu, then quit and move the app to the Trash.
+**Update:** open the new one from its disk image and click **Move**: it quits the old one and takes its place.<br>
+**Uninstall:** move the app to the Trash and click **Remove All**: its hooks, login item, settings and data go with it.
 
 <details>
 <summary>Build from source</summary>

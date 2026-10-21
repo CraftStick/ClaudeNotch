@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 /// The disk image's window: a warm light background (Finder draws the icons' names in black in light
-/// mode, and can't be told otherwise) with an arrow from Claude Notch to Applications and a hint below.
+/// mode, and can't be told otherwise) with an arrow from Claude Notch to Applications and a hint below: dragging it works, opening it
+/// right away moves it there itself.
 /// make-dmg.sh puts the icons on `left` and `right`.
 struct DmgBackground: View {
     static let size = CGSize(width: 600, height: 380)
@@ -22,10 +23,10 @@ struct DmgBackground: View {
                 .frame(width: 104, height: 28)
                 .position(x: (Self.left.x + Self.right.x) / 2, y: Self.left.y - 6)
             VStack(spacing: 4) {
-                Text("Перетащи Claude Notch в «Программы»")
+                Text("Открой Claude Notch: он сам переедет в «Программы»")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Color(white: 0.25))
-                Text("Drag Claude Notch to Applications")
+                Text("Open Claude Notch: it moves itself to Applications")
                     .font(.system(size: 12))
                     .foregroundStyle(Color(white: 0.45))
             }
