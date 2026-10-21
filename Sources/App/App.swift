@@ -56,13 +56,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private static let screenUnlocked = Notification.Name("com.apple.screenIsUnlocked")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if Self.runsFromDiskImage { return offerToMove() }  // before the check below: it may replace the running one
         // Already running, e.g. this is another copy of the app: that one says hi instead.
         if SocketServer.isAlive(Paths.socket, telling: Store.openedMessage) {
-            NSApp.terminate(nil)
-            return
-        }
-        if Self.runsFromDiskImage {
-            askToMoveFirst()
             NSApp.terminate(nil)
             return
         }
@@ -434,14 +430,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             || (try? app.resourceValues(forKeys: [.volumeIsReadOnlyKey]))?.volumeIsReadOnly == true
     }
 
-    private func askToMoveFirst() {
+    /// Opened from the disk image: offers to copy itself to Applications and open from there, so
+    /// it's plain it got there. A copy that's there already is quit and put in the Trash.
+    private func offerToMove() {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = tr("Сначала перетащи Claude Notch в «Программы»", "Drag Claude Notch to Applications first")
-        alert.informativeText = tr("Потом открой его оттуда: из образа диска оно работать не сможет, когда тот извлекут.",
-                                   "Then open it from there: run from the disk image, it would stop once the image is ejected.")
-        alert.addButton(withTitle: tr("Понятно", "OK"))
-        alert.runModal()
+        alert.messageText = tr("Переместить Claude Notch в «Программы»?", "Move Claude Notch to Applications?")
+        alert.informativeText = tr("Из образа диска он перестанет работать, когда тот извлекут. Claude Notch скопирует себя в «Программы» и откроется оттуда.",
+                                   "Run from the disk image, it would stop once the image is ejected. Claude Notch copies itself to Applications and opens from there.")
+        alert.addButton(withTitle: tr("Переместить", "Move"))
+        alert.addButton(withTitle: tr("Выйти", "Quit"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return NSApp.terminate(nil) }
+
+        let copy: URL
+        do {
+            copy = try copyToApplications()
+        } catch {
+            show(error)
+            return NSApp.terminate(nil)
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true  // this one, from the image, still runs
+        NSWorkspace.shared.openApplication(at: copy, configuration: configuration) { _, error in
+            DispatchQueue.main.async {
+                if let error { self.show(error) }
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
+    /// Where a copy is already, else /Applications, else ~/Applications for a user who can't write there.
+    private func copyToApplications() throws -> URL {
+        let fm = FileManager.default
+        let name = Bundle.main.bundleURL.lastPathComponent
+        let folders = [URL(fileURLWithPath: "/Applications"), fm.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]
+        let copy = folders.map { $0.appendingPathComponent(name) }.first { fm.fileExists(atPath: $0.path) }
+            ?? (fm.isWritableFile(atPath: folders[0].path) ? folders[0] : folders[1]).appendingPathComponent(name)
+
+        // Quit first: put in the Trash while it runs, the old copy would offer to remove everything.
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+            .filter { $0 != .current }
+        others.forEach { $0.terminate() }
+        let deadline = Date().addingTimeInterval(5)
+        while others.contains(where: { !$0.isTerminated }), Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        others.filter { !$0.isTerminated }.forEach { $0.forceTerminate() }
+
+        try fm.createDirectory(at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if fm.fileExists(atPath: copy.path) { try fm.trashItem(at: copy, resultingItemURL: nil) }
+        try fm.copyItem(at: Bundle.main.bundleURL, to: copy)
+        // Opened once already with Gatekeeper's OK: the copy needn't ask again.
+        let xattr = Process()
+        xattr.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+        xattr.arguments = ["-dr", "com.apple.quarantine", copy.path]
+        if (try? xattr.run()) != nil { xattr.waitUntilExit() }
+        return copy
     }
 
     /// Copied in from the disk image, the app connects itself: the first time it asks, and once
