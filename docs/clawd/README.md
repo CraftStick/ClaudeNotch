@@ -19,6 +19,16 @@ Every animation Clawd plays in the notch, and when he plays it. Clawd is the mas
 <td align="center" valign="top"><img src="running.gif" width="96" alt="Clawd running"><br><b>Runs</b><br>Subagents are at work,<br>or 6+ actions in 12 seconds</td>
 <td align="center" valign="top"><img src="waving.gif" width="96" alt="Clawd waving"><br><b>Waves at you</b><br>Claude is waiting for you:<br>a permission, a question, a plan.<br>With a hop when you open the app</td>
 </tr>
+<tr>
+<td align="center" valign="top"><img src="searching.gif" width="96" alt="Clawd in a deerstalker with a magnifying glass"><br><b>Turns detective</b><br>Claude searches the code,<br>files or the web</td>
+<td align="center" valign="top"><img src="compacting.gif" width="96" alt="Clawd packing papers into a box"><br><b>Packs his papers away</b><br>The context is being compacted</td>
+<td align="center" valign="top"><img src="sweating.gif" width="96" alt="Clawd sweating at his laptop"><br><b>Breaks a sweat</b><br>The context is 85% full;<br>from 95% he sways too</td>
+</tr>
+<tr>
+<td align="center" valign="top"><img src="looking-for-you.gif" width="96" alt="Clawd looking around"><br><b>Looks around for you</b><br>Waiting for you<br>for over a minute</td>
+<td align="center" valign="top"><img src="waiting-long.gif" width="96" alt="Clawd sitting and waiting"><br><b>Sits down to wait</b><br>Waiting for you<br>for over five minutes</td>
+<td align="center" valign="top"><img src="yawning.gif" width="96" alt="Clawd yawning at his laptop"><br><b>Yawns now and then</b><br>At work between<br>1 and 5 at night</td>
+</tr>
 </table>
 
 ## Reactions
@@ -29,6 +39,12 @@ Short reactions play over whatever Clawd was doing.
 <tr>
 <td align="center" valign="top"><img src="excited.gif" width="96" alt="Clawd delighted"><br><b>Is delighted</b><br>You allowed an action<br>from the notch</td>
 <td align="center" valign="top"><img src="facepalm.gif" width="96" alt="Clawd facepalming"><br><b>Facepalms</b><br>A tool failed (at most once<br>every 45 seconds) or you pressed Deny</td>
+<td align="center" valign="top"><img src="despair.gif" width="96" alt="Clawd slumping, head down"><br><b>Hangs his head</b><br>The third failure in a row</td>
+</tr>
+<tr>
+<td align="center" valign="top"><img src="shrug.gif" width="96" alt="Clawd with a question mark over his head"><br><b>Shrugs</b><br>Auto mode turned<br>an action down</td>
+<td align="center" valign="top"><img src="sparkler.gif" width="96" alt="Clawd with a sparkler"><br><b>Lights a sparkler</b><br>Tests passed</td>
+<td align="center" valign="top"><img src="rocket.gif" width="96" alt="Clawd launching a rocket"><br><b>Launches a rocket</b><br>git push went through</td>
 </tr>
 </table>
 
@@ -38,14 +54,15 @@ Short reactions play over whatever Clawd was doing.
 <tr>
 <td align="center" valign="top"><img src="done.gif" width="96" alt="Clawd hopping"><br><b>Hops for joy</b><br>Claude is done</td>
 <td align="center" valign="top"><img src="celebrate.gif" width="96" alt="Clawd with confetti, breakdancing"><br><b>Confetti and a breakdance</b><br>Done after a big task:<br>5+ minutes or 150+ changed lines</td>
-<td align="center" valign="top"><img src="stopped.gif" width="96" alt="Clawd slumping"><br><b>Slumps</b><br>You stopped Claude<br>with Esc</td>
+<td align="center" valign="top"><img src="stopped.gif" width="96" alt="Clawd turning to you"><br><b>Turns to you and listens</b><br>You stopped Claude<br>with Esc</td>
 <td align="center" valign="top"><img src="error.gif" width="96" alt="Clawd dizzy"><br><b>Gets dizzy</b><br>The task ended<br>with an API error</td>
+<td align="center" valign="top"><img src="rate-limit.gif" width="96" alt="Clawd by an hourglass"><br><b>Waits by an hourglass</b><br>The rate limit was reached</td>
 </tr>
 </table>
 
 ## Resting
 
-After a task Clawd stays in the notch for 15 more minutes, so you can see that Claude is done. Every 30 seconds he does one of these, in this order: looks around, sways, looks around again, dances, does the hula.
+After a task Clawd stays in the notch for 15 more minutes, so you can see that Claude is done. Every 30 seconds he does one of these, in no fixed order and never the same twice in a row: looks around, sways, dances, does the hula.
 
 <table>
 <tr>

@@ -22,6 +22,8 @@ struct Activity: Equatable {
     var command = false
     /// A Task/Agent call: subagents are at work.
     var agent = false
+    /// A search (code, files, the web): Clawd puts on his deerstalker.
+    var search = false
     /// `detail` is a sentence (a prompt, a thought): cut it at the end, not in the middle like a path.
     var prose = false
     /// Why Claude runs this tool, in its own words: what it wrote around the call. Only for tools
@@ -69,15 +71,18 @@ struct SubAgent: Equatable {
 enum Motion: Equatable {
     /// At the laptop; thinking hard (a speech bubble); at the desk while a long command runs;
     /// running while subagents work or tools fly by; waving while waiting for you;
-    /// resting after a turn that ended in one of three ways.
-    case typing, pondering, desktop, running, waving, done, stopped, failed
+    /// resting after a turn that ended in one of three ways. Packing papers into a box while the
+    /// context is compacted; by an hourglass after a turn that hit the rate limit.
+    /// Peering through a magnifying glass in a deerstalker while Claude searches.
+    case typing, pondering, desktop, running, waving, done, stopped, failed, compacting, limited, searching
 }
 
 /// A one-off reaction Clawd plays over whatever he is doing: an idea when a task comes in,
 /// joy when you allow something, a facepalm when a tool fails or you say no,
 /// confetti after a big task, a hop and a wave when the app is opened, a parachute when he
-/// moves into the notch for good.
-enum Cue: Hashable { case idea, excited, facepalm, celebrate, hello, arrive }
+/// moves into the notch for good. Head in his hands after failures in a row, a shrug when auto mode
+/// turns something down, a sparkler when tests pass, a rocket after a push.
+enum Cue: Hashable { case idea, excited, facepalm, celebrate, hello, arrive, despair, shrug, sparkler, rocket }
 
 struct Session: Equatable {
     let id: String
@@ -105,6 +110,10 @@ struct Session: Equatable {
     private(set) var cueStart = Date.distantPast
     private(set) var cueInterrupted = Motion.done
     var lastFacepalm = Date.distantPast
+    /// Tools that failed in a row, this turn.
+    var failStreak = 0
+    /// The turn ended at the rate limit.
+    var rateLimited = false
     /// When the session last made a sound: a question comes as PreToolUse and PermissionRequest at
     /// once, and should sound once.
     var lastChime = Date.distantPast
@@ -149,11 +158,16 @@ struct Session: Equatable {
         case .waiting: return .waving
         case .done: return .done
         case .stopped: return .stopped
-        case .failed: return .failed
+        case .failed: return rateLimited ? .limited : .failed
+        case .tool where activity == .compacting, .thinking where activity == .compacting: return .compacting
+        case .tool where activity.search:
+            return activity.agent ? .running : .searching
         case .tool:
             if activity.agent || isBusy(at: now) { return .running }
             return activity.command && quiet > 8 ? .desktop : .typing
         case .thinking:
+            // Between two searches he keeps his hat on, rather than back to the laptop for a moment.
+            if motion == .searching, now.timeIntervalSince(lastEvent) < 3 { return .searching }
             if isBusy(at: now) { return .running }
             return quiet > 12 ? .pondering : .typing
         }
@@ -194,6 +208,18 @@ struct Session: Equatable {
         lastFacepalm = now
     }
 
+    /// Another tool failed: a facepalm, and at the third in a row (the sixth…) his head in his hands,
+    /// which isn't held back like the facepalm: it says this keeps going wrong.
+    mutating func toolFailed(at now: Date) {
+        failStreak += 1
+        if failStreak % 3 == 0 {
+            play(.despair, at: now)
+            lastFacepalm = now
+        } else {
+            facepalm(at: now)
+        }
+    }
+
     /// Whether a sound now isn't one too many: none within two seconds of the last.
     mutating func takesChime(at now: Date) -> Bool {
         guard now.timeIntervalSince(lastChime) > 2 else { return false }
@@ -224,6 +250,8 @@ struct Session: Equatable {
         linesAdded = 0
         linesRemoved = 0
         turnOutputTokens = 0
+        failStreak = 0
+        rateLimited = false
         agents.removeAll { $0.finished != nil }
     }
 }

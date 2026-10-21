@@ -231,4 +231,166 @@ enum Props {
         ".....l..l........l..l.....",
         "......l.l........l.l......",
     ], ["B": 0x2f_5a_a8_ff, "C": 0xf3_e3_c4_ff, "D": 0x1e_3c_78_ff, "l": 0xc8_cc_d2_ff])
+
+    // MARK: Moods (on Pointing frame 0 too, standing; the ground is y 20)
+
+    /// His eyes turned up, at something above him: at (6, 7).
+    static let eyesUp = PixelArt("eyesUp", [
+        "xx........xx",
+        "bb........bb",
+    ], ["b": body, "x": eye])
+
+    /// His eyes turned aside, at something on the ground beside him: at (6, 7).
+    static let eyesAside = PixelArt("eyesAside", [
+        "bxx.......bxx",
+        "bxx.......bxx",
+    ], ["b": body, "x": eye])
+
+    /// A drop of sweat running down the back of his head while the context fills up.
+    static let sweat = PixelArt("sweat", [
+        ".h.",
+        "hld",
+        "lld",
+        ".d.",
+    ], ["h": 0xf4_fb_ff_ff, "l": 0x9a_d8_ff_ff, "d": 0x5a_a8_e0_ff])
+
+    private static let cardboard: [Character: UInt32] = [
+        "B": 0xc9_96_5b_ff, "b": 0xd9_a8_6a_ff, "d": 0x9c_68_36_ff, "k": 0x4a_30_18_ff, "F": 0xe0_b4_78_ff, "t": 0xec_dc_b4_ff,
+    ]
+
+    /// An open cardboard box on the ground beside him, his papers going into it: at (25, 13).
+    static let box = PixelArt("box", [
+        "F.........F",
+        ".F.......F.",
+        "bkkkkkkkkkd",
+        "bBBBBBBBBBd",
+        "bBBBttBBBBd",
+        "bBBBBBBBBBd",
+        "bBBBBBBBBBd",
+        "ddddddddddd",
+    ], cardboard)
+
+    /// The box shut with them in it: at (25, 13).
+    static let boxShut = PixelArt("boxShut", [
+        "...........",
+        "...........",
+        "FFFFFFFFFFF",
+        "bBBBBttBBBd",
+        "bBBBttBBBBd",
+        "bBBBBBBBBBd",
+        "bBBBBBBBBBd",
+        "ddddddddddd",
+    ], cardboard)
+
+    /// A sheet of paper with lines on it, flat and tumbling, flying into the box.
+    static let paper = PixelArt("paper", [
+        "wwww",
+        "wllw",
+        "wwww",
+        "wllw",
+        "wwwW",
+    ], ["w": 0xfa_f7_ef_ff, "l": 0xa8_b4_c4_ff, "W": 0xd8_d2_c4_ff])
+    static let paperTumbling = PixelArt("paperTumbling", [
+        "wwwww",
+        "wlllw",
+        "wwwwW",
+    ], ["w": 0xfa_f7_ef_ff, "l": 0xa8_b4_c4_ff, "W": 0xd8_d2_c4_ff])
+
+    /// A puff of dust where something lands: small, then spreading and thinning out.
+    static let puff = PixelArt("puff", ["p.p", ".p."], ["p": 0xd8_cf_c0_ff])
+    static let puffWide = PixelArt("puffWide", ["p...p", ".p.p."], ["p": 0xb8_b0_a4_ff])
+
+    /// "?" over his head: at (12, -4). Drawn the wrong way round, as the notch mirrors it with him.
+    static let question = PixelArt("question", [
+        ".qqq",
+        "q..Q",
+        "...q",
+        "..q.",
+        ".q..",
+        "....",
+        ".q..",
+    ].map { String($0.reversed()) }, ["q": 0xfa_f7_ef_ff, "Q": 0xd8_d2_c4_ff])
+
+    /// An hourglass in a wooden frame beside him, `level` of its 9 grains of sand run down, a stream
+    /// through the neck while they fall: at (25, 10).
+    static func hourglass(_ level: Int, running: Bool) -> PixelArt {
+        let level = max(0, min(9, level))
+        var rows = ["WWWWWWWWW", "pgggggggp", "pg.....gp", "p.g...g.p", "p..g.g..p", "p...g...p",
+                    "p..g.g..p", "p.g...g.p", "pg.....gp", "pgggggggp", "WWWWWWWWW"]
+        func put(_ row: Int, _ column: Int, _ c: Character) {
+            var chars = Array(rows[row])
+            chars[column] = c
+            rows[row] = String(chars)
+        }
+        // The top bulb's sand from its surface down; the bottom's from the floor up.
+        let top = [(2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (3, 3), (3, 4), (3, 5), (4, 4)]
+        let bottom = [(8, 2), (8, 3), (8, 4), (8, 5), (8, 6), (7, 3), (7, 4), (7, 5), (6, 4)]
+        for (i, cell) in top.enumerated() where i >= level { put(cell.0, cell.1, "s") }
+        for (i, cell) in bottom.enumerated() where i < level { put(cell.0, cell.1, "s") }
+        if running, level < 9 { put(5, 4, "s") }
+        return PixelArt("hourglass\(level)\(running ? "r" : "")", rows,
+                        ["W": 0x8f_55_20_ff, "p": 0xb8_74_2e_ff, "g": 0xc4_e0_ec_ff, "s": 0xf1_c8_77_ff])
+    }
+
+    /// A rocket, white with a blue nose and fins and a porthole, standing beside him: at (27, 6), its
+    /// nozzle on y 16.
+    static let rocket = PixelArt("rocket", [
+        "....n....",
+        "...nnn...",
+        "..nNnnn..",
+        "..wwwws..",
+        "..wpppw..",
+        "..wpLpw..",
+        "..wpppw..",
+        "..wwwws..",
+        "f.wwwws.f",
+        "ffwwwwsff",
+        "ff.kkk.ff",
+    ], ["n": 0x3a_64_b8_ff, "N": 0x7a_a4_e8_ff, "w": 0xf6_f6_f2_ff, "s": 0xc8_cc_d4_ff, "p": 0x2c_4c_94_ff,
+        "L": 0xc8_e8_ff_ff, "f": 0x2c_4c_94_ff, "k": 0x2a_2a_2e_ff])
+    /// Its flame, in two flickers, under the nozzle.
+    static let flame = PixelArt("flame", [".y.", "yYy", ".o."], ["y": 0xff_d0_4a_ff, "Y": 0xff_f6_c8_ff, "o": 0xf5_8a_2a_ff])
+    static let flameLong = PixelArt("flameLong", ["yYy", "yYy", ".y.", ".o."], ["y": 0xff_d0_4a_ff, "Y": 0xff_f6_c8_ff, "o": 0xf5_8a_2a_ff])
+    static let spark = PixelArt("spark", ["y"], ["y": 0xff_d0_4a_ff])
+
+    /// The launch button in his hand: at (21, 9); pressed, the red button down and lit.
+    static let remote = PixelArt("remote", ["..r..", "kkkkk", "kKKKk"], ["r": 0xd8_3a_2a_ff, "k": 0x26_26_2a_ff, "K": 0x3c_3c_44_ff])
+    static let remotePressed = PixelArt("remotePressed", [".....", "kkRkk", "kKKKk"], ["R": 0xff_5a_3a_ff, "k": 0x26_26_2a_ff, "K": 0x3c_3c_44_ff])
+
+    // MARK: Searching (Pointing frame 0)
+
+    private static let tweed: [Character: UInt32] = [
+        "o": 0x2e_26_22_ff, "h": 0x7a_6a_5e_ff, "H": 0x5e_50_48_ff, "l": 0x94_84_76_ff, "b": 0x6a_5a_4e_ff,
+    ]
+
+    /// A deerstalker, its brim on the top of his head, ear flaps tied up on top: at (2, -2).
+    static let deerstalker = PixelArt("deerstalker", [
+        "......oo....oo......",
+        ".......oooooo.......",
+        ".....ohhlhhHhho.....",
+        "....ohhlhhhHhhhho...",
+        "...ohhlhhhhHhhhhho..",
+        "..oooooooooooooooo..",
+        "obbbbbbbbbbbbbbbbbbo",
+        ".oooooooooooooooooo.",
+    ], tweed)
+
+    /// A big magnifying glass held up beside his narrowed eye, a glint on the glass, its handle down to
+    /// his hand: at (18, 3).
+    static let magnifier = PixelArt("magnifier", [
+        "..kkkk..",
+        ".kwwggk.",
+        "kwwgggGk",
+        "kwggggGk",
+        "kgggggGk",
+        "kggggGGk",
+        ".kGGGGk.",
+        "..kkkk..",
+        "...hh...",
+        "...hh...",
+        "....hh..",
+    ], ["k": 0x26_26_2a_ff, "w": 0xff_ff_ff_ff, "g": 0xd8_e2_e8_ff, "G": 0xa8_b6_c0_ff, "h": 0x5a_3a_22_ff])
+
+    /// The eye behind the glass narrowed to a slit: at (16, 7).
+    static let squint = PixelArt("squint", ["bb", "xx"], ["b": body, "x": eye])
 }

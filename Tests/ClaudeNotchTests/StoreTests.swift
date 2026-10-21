@@ -168,6 +168,51 @@ struct StoreTests {
         #expect(session?.cue == .facepalm)
     }
 
+    @Test func failuresInARowGetWorse() {
+        send("UserPromptSubmit", ["prompt": "Build it"])
+        func fail() {
+            send("PreToolUse", ["tool_name": "Bash", "tool_input": ["command": "make"]])
+            send("PostToolUseFailure", ["tool_name": "Bash", "tool_input": ["command": "make"], "error": "Exit code 2"])
+        }
+        fail()
+        #expect(session?.cue == .facepalm)
+        fail()
+        fail()
+        #expect(session?.cue == .despair)
+        #expect(session?.failStreak == 3)
+        send("PreToolUse", ["tool_name": "Bash", "tool_input": ["command": "make"]])
+        send("PostToolUse", ["tool_name": "Bash", "tool_input": ["command": "make"]])
+        #expect(session?.failStreak == 0)
+    }
+
+    @Test func passingTestsAndAPushAreCheered() {
+        send("UserPromptSubmit", ["prompt": "Ship it"])
+        for (command, cue) in [("swift test", Cue.sparkler), ("git push origin main", .rocket)] {
+            send("PreToolUse", ["tool_name": "Bash", "tool_input": ["command": command]])
+            send("PostToolUse", ["tool_name": "Bash", "tool_input": ["command": command]])
+            #expect(session?.cue == cue, "\(command)")
+        }
+    }
+
+    @Test func autoModeSayingNoIsAShrug() {
+        send("UserPromptSubmit", ["prompt": "Clean up"])
+        send("PreToolUse", ["tool_name": "Bash", "tool_input": ["command": "rm -rf build"]])
+        send("PermissionDenied", ["tool_name": "Bash", "tool_input": ["command": "rm -rf build"], "reason": "[Irreversible]"])
+        #expect(session?.cue == .shrug)
+    }
+
+    @Test func compactingAndTheRateLimitHaveTheirOwnLooks() {
+        send("UserPromptSubmit", ["prompt": "Go on"])
+        send("PreCompact")
+        #expect(session?.desiredMotion(at: Date()) == .compacting)
+        send("PostCompact")
+        #expect(session?.desiredMotion(at: Date()) != .compacting)
+        send("StopFailure", ["error": "rate_limit", "last_assistant_message": "API Error: Rate limit reached"])
+        #expect(session?.desiredMotion(at: Date()) == .limited)
+        send("UserPromptSubmit", ["prompt": "Again"])
+        #expect(session?.rateLimited == false)
+    }
+
     @Test func editsAddUpTheirLines() {
         send("UserPromptSubmit", ["prompt": "Edit"])
         for _ in 0..<2 {

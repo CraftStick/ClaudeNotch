@@ -43,7 +43,7 @@ cd ~/ClaudeNotch && ./install.sh
 - **Status in the notch.** Clawd on the left, the task's time on the right, a counter when several sessions are at work. The notch opens for what matters: a new task, a failure, Claude waiting for you, done.
 - **Details on hover.** The task, what Claude is doing and why, its plan, subagents, recent actions, tokens and context, other sessions. A click brings forward the terminal tab or app the session runs in.
 - **Answers from the notch.** Allow or deny a permission request (⌃⌥⌘Y / ⌃⌥⌘N, or **Always**), and pick the answers to Claude's questions (⌃⌥⌘1…4).
-- **Clawd.** He types while Claude works, thinks, waves when it needs you, hops when it's done and dozes while he rests. With **Clawd stays in the notch** on, he lives there for good, with pastimes of his own. [All his animations →](docs/clawd/README.md)
+- **Clawd.** He types while Claude works, thinks, waves when it needs you, hops when it's done and dozes while he rests; he turns detective while Claude searches, packs papers into a box while it compacts and launches a rocket after a push. With **Clawd stays in the notch** on, he lives there for good, with pastimes of his own. [All his animations →](docs/clawd/README.md)
 - A sound when Claude is done or waiting for you, a glowing rim, English and Russian. All of it in Clawd's menu in the menu bar.
 
 <p align="center"><img src="docs/card.png" width="440" alt="The card you get on hover"> <img src="docs/permission.png" width="440" alt="A permission request in the notch"></p>

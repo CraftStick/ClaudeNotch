@@ -390,8 +390,10 @@ final class Store: ObservableObject {
                 if event == "PostToolUse" {
                     s.linesAdded += tool.added
                     s.linesRemoved += tool.removed
+                    s.failStreak = 0
+                    if toolName == "Bash", let cue = Describe.cheer(for: toolInput["command"] as? String ?? "") { s.play(cue, at: now) }
                 } else if failed {
-                    s.facepalm(at: now)
+                    s.toolFailed(at: now)
                 }
             }
             let tool = s.currentTool ?? Describe.tool(toolName, toolInput)
@@ -423,7 +425,7 @@ final class Store: ObservableObject {
                                   detail: tool.command ? tool.detail : tool.headline, monospaced: tool.command,
                                   note: reason, failed: true)
             s.failedAt = now
-            s.facepalm(at: now)
+            s.play(.shrug, at: now)  // not a failure: Claude carries on another way
             commit(s, expandFor: 4)
 
         case "Elicitation":
@@ -511,6 +513,7 @@ final class Store: ObservableObject {
         case "StopFailure":
             dropPrompts(for: id)
             s.phase = .failed
+            s.rateLimited = json["error"] as? String == "rate_limit"
             s.turnEnd = now
             s.currentTool = nil
             // `error` is the kind ("rate_limit"); the message is the error as Claude Code shows it

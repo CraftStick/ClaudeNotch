@@ -83,8 +83,14 @@ struct ClawdTests {
     func everyPastimeAndReactionHasItsFrames() {
         #expect(ClawdAnimator.pastimes.count >= 10)
         #expect(Set(ClawdAnimator.reactions.keys) == [.idea, .excited, .facepalm, .celebrate, .hello, .arrive])
+        #expect(Set(ClawdAnimator.moodReactions.keys) == [.despair, .shrug, .sparkler, .rocket])
+        let moods = [("compacting", ClawdAnimator.compacting), ("rate limit", ClawdAnimator.rateLimit), ("searching", ClawdAnimator.searching)].compactMap { name, pastime in
+            pastime.map { (name, $0) }
+        }
+        #expect(moods.count == 3)
         let all = ClawdAnimator.pastimes.enumerated().map { ("pastime \($0.offset)", $0.element) }
             + ClawdAnimator.reactions.map { ("reaction \($0.key)", $0.value) }
+            + ClawdAnimator.moodReactions.map { ("mood \($0.key)", $0.value) } + moods
         for (what, pastime) in all {
             #expect(pastime.duration > 0, "\(what)")
             for t in stride(from: 0, through: pastime.duration, by: 0.05) {
@@ -99,16 +105,24 @@ struct ClawdTests {
     func everyPhaseHasItsFrames() throws {
         let laptop = try #require(ClawdAssets.laptop), waving = try #require(ClawdAssets.waving)
         let start = Date()
-        for phase in [Phase.thinking, .tool, .waiting, .done, .stopped, .failed] {
-            for cue in [nil, Cue.celebrate, .facepalm] {
+        // Also compacting, after the rate limit, with the context nearly full, and late at night.
+        let late = Calendar.current.date(bySettingHour: 2, minute: 0, second: 0, of: start)!
+        for (phase, extra) in [(Phase.thinking, ""), (.tool, ""), (.waiting, ""), (.done, ""), (.stopped, ""), (.failed, ""),
+                               (.tool, "compacting"), (.failed, "rate limit"), (.tool, "full"), (.thinking, "full"), (.tool, "search")] {
+            for cue in [nil, Cue.celebrate, .facepalm, .despair, .rocket] {
+                let start = extra == "full" ? late : start
                 var s = Session(id: "s", turnStart: start, lastEvent: start)
                 s.syncMotion(at: start)
                 s.phase = phase
+                if extra == "compacting" { s.activity = .compacting }
+                if extra == "search" { s.activity = Describe.tool("Grep", ["pattern": "TODO"]) }
+                if extra == "rate limit" { s.rateLimited = true }
+                if extra == "full" { s.contextTokens = 196_000 }
                 s.syncMotion(at: start)
                 if let cue { s.play(cue, at: start) }
                 let animator = ClawdAnimator(session: s, laptop: laptop, waving: waving)
                 for t in stride(from: 0.0, through: Store.restDuration + 10, by: 0.7) {
-                    Self.check(animator.frame(at: start + t), "\(phase) \(cue.map { "\($0)" } ?? "")")
+                    Self.check(animator.frame(at: start + t), "\(phase) \(extra) \(cue.map { "\($0)" } ?? "")")
                 }
             }
         }

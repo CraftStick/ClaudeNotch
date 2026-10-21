@@ -3,6 +3,16 @@ import Foundation
 // MARK: - Formatting
 
 enum Describe {
+    /// A command worth a cheer once it went through: a push gets a rocket, a test run a sparkler.
+    static func cheer(for command: String) -> Cue? {
+        func has(_ pattern: String) -> Bool { command.range(of: pattern, options: .regularExpression) != nil }
+        if has(#"(^|[;&|(]\s*|\s)git(\s+-\S+(\s+(?!push\b)[^\s-]\S*)?)*\s+push\b"#) { return .rocket }  // also git -C dir push
+        let tests = [#"\bswift\s+test\b"#, #"\b(npm|pnpm|yarn|bun)\s+(run\s+)?test\b"#, #"\bpytest\b"#, #"\bgo\s+test\b"#,
+                     #"\bcargo\s+(test|nextest)\b"#, #"\bxcodebuild\b.*\btest\b"#, #"\b(jest|vitest|rspec|phpunit)\b"#,
+                     #"\b(mvn|gradle|\./gradlew)\s+test\b"#, #"\bmake\s+(test|check)\b"#, #"\bpython3?\s+-m\s+(pytest|unittest)\b"#]
+        return tests.contains(where: has) ? .sparkler : nil
+    }
+
     static func tool(_ name: String, _ input: [String: Any]) -> Activity {
         func str(_ key: String) -> String { input[key] as? String ?? "" }
         func file(_ key: String = "file_path") -> String { (str(key) as NSString).lastPathComponent }
@@ -30,11 +40,11 @@ enum Describe {
                             added: lineDiff("", str("new_source")).added)
         case "Grep":
             return Activity(symbol: "magnifyingglass", title: tr("Ищет в коде", "Searching code"), detail: oneLine(str("pattern")), monospaced: true,
-                            note: str("path").isEmpty ? "" : tr("в ", "in ") + file("path"))
+                            note: str("path").isEmpty ? "" : tr("в ", "in ") + file("path"), search: true)
         case "Glob":
-            return Activity(symbol: "folder", title: tr("Ищет файлы", "Finding files"), detail: oneLine(str("pattern")), monospaced: true)
+            return Activity(symbol: "folder", title: tr("Ищет файлы", "Finding files"), detail: oneLine(str("pattern")), monospaced: true, search: true)
         case "WebSearch":
-            return Activity(symbol: "globe", title: tr("Ищет в интернете", "Searching the web"), detail: oneLine(str("query")))
+            return Activity(symbol: "globe", title: tr("Ищет в интернете", "Searching the web"), detail: oneLine(str("query")), search: true)
         case "WebFetch":
             return Activity(symbol: "globe", title: tr("Читает страницу", "Reading page"), detail: host(str("url")))
         case "Task", "Agent":

@@ -2,6 +2,21 @@ import Testing
 @testable import ClaudeNotch
 
 struct DescribeTests {
+    // MARK: - Cheers
+
+    @Test func testsAndPushesAreToldApart() {
+        for command in ["swift test", "cd app && npm test", "npm run test -- --watch=false", "pytest -q", "go test ./...",
+                        "cargo test", "python3 -m pytest", "make check"] {
+            #expect(Describe.cheer(for: command) == .sparkler, "\(command)")
+        }
+        for command in ["git push", "git push -u origin main", "cd x && git push --force-with-lease", "git -C repo push"] {
+            #expect(Describe.cheer(for: command) == .rocket, "\(command)")
+        }
+        for command in ["git status", "swift build", "ls test", "echo 'git pushed'", "cat latest.txt", "gh pr create"] {
+            #expect(Describe.cheer(for: command) == nil, "\(command)")
+        }
+    }
+
     // MARK: - Prompts
 
     @Test func aTypedPromptIsShownAsTyped() {

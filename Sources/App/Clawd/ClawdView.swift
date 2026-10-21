@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Clawd in the notch. With the Claude app's sprites he turns to a laptop and types while Claude
 /// works, puts it away and waves while Claude waits for you. After a turn he reacts (a happy hop,
-/// a sigh after Esc, dizzy after an error), then idles with the odd fidget and dozes off; or, when he
+/// a look at you after Esc, dizzy after an error), then idles with the odd fidget and dozes off; or, when he
 /// lives in the notch for good, keeps busy with his own pastimes.
 ///
 /// `moving`: the notch can be seen. While it can't (a sleeping display, a locked screen), he holds still
@@ -124,7 +124,7 @@ private final class ClawdLayerView: NSView {
 }
 
 /// Sprite frames turned into pictures once, mirrored the way Clawd faces in the notch.
-private enum SpriteImages {
+enum SpriteImages {
     private static let cache: NSCache<NSString, CGImage> = {
         let cache = NSCache<NSString, CGImage>()
         cache.countLimit = 600  // a few kilobytes each

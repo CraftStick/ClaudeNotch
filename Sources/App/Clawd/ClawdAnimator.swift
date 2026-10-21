@@ -89,8 +89,12 @@ struct ClawdAnimator {
     private var closeLaptop: Clip { Clip(sheet: laptop, frames: 34...42, fps: 16) }
 
     func frame(at date: Date) -> Frame {
+        mood(plainFrame(at: date), at: date)
+    }
+
+    private func plainFrame(at date: Date) -> Frame {
         let sinceMotion = date.timeIntervalSince(session.motionStart)
-        if let cue = session.cue, let reaction = Self.reactions[cue] {
+        if let cue = session.cue, let reaction = Self.reactions[cue] ?? Self.moodReactions[cue] {
             // Put the laptop away first.
             let putAway = exit(from: session.cueInterrupted)
             let lead = putAway?.duration ?? 0
@@ -133,8 +137,20 @@ struct ClawdAnimator {
             guard let sheet = ClawdAssets.running else { return Frame(laptop, typingLoop.looped(at: t)) }
             return Frame(sheet, Clip(sheet: sheet, frames: 5...16, fps: 16).looped(at: t), rate: 16)
         case .waving:
+            if let impatient = Self.waitingLong(t) { return impatient }
             let cycle = Array(3...16) + Array(repeating: 0, count: 10)  // wave, then a short pause
             return Frame(waving, cycle[Int(t * 12) % cycle.count], rate: 12)
+        case .searching:
+            guard let looking = Self.searching else { return Frame(laptop, typingLoop.looped(at: t)) }
+            if previous != .searching, let putting = Self.hatOn(t) { return putting }
+            return looking.frame(t.truncatingRemainder(dividingBy: looking.duration))
+        case .compacting:
+            guard let box = Self.compacting else { return Frame(laptop, typingLoop.looped(at: t)) }
+            return box.frame(t.truncatingRemainder(dividingBy: box.duration))
+        case .limited:
+            if previous != nil, let hourglass = Self.rateLimit, t < hourglass.duration { return hourglass.frame(t) }
+            if previous != nil { t -= Self.rateLimit?.duration ?? 0 }
+            return Store.alive ? life(at: date, restingSince: date.addingTimeInterval(-t)) : idle(t, sinceRest: sinceMotion)
         case .done, .stopped, .failed:
             if previous != nil, let ending = ending(motion) {
                 if t < ending.duration { return Frame(ending, at: t) }
