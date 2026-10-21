@@ -21,13 +21,13 @@ struct PermissionCard: View {
                 Button(tr("В приложении", "In app")) { answer(.askInApp) }
                     .buttonStyle(NotchButtonStyle(kind: .plain))
                 Spacer(minLength: 6)
-                Button { answer(.deny) } label: { ShortcutLabel(title: tr("Запретить", "Deny"), key: "⌃⌥⌘N") }
+                Button { answer(.deny) } label: { ShortcutLabel(title: tr("Запретить", "Deny"), key: HotKeyChoice.current.label("N")) }
                     .buttonStyle(NotchButtonStyle(kind: .secondary))
                 if prompt.ruleSummary != nil {
                     Button(tr("Всегда", "Always")) { answer(.allowAlways) }
                         .buttonStyle(NotchButtonStyle(kind: .secondary))
                 }
-                Button { answer(.allow) } label: { ShortcutLabel(title: tr("Разрешить", "Allow"), key: "⌃⌥⌘Y") }
+                Button { answer(.allow) } label: { ShortcutLabel(title: tr("Разрешить", "Allow"), key: HotKeyChoice.current.label("Y")) }
                     .buttonStyle(NotchButtonStyle(kind: .primary))
             }
             Text(prompt.ruleSummary.map { tr("«Всегда» добавит правило ", "“Always” adds the rule ") + $0 } ?? " ")
@@ -102,7 +102,7 @@ struct QuestionCard: View {
                         .foregroundStyle(.white.opacity(0.4))
                 }
                 if question.multiSelect {
-                    Button(action: submit) { ShortcutLabel(title: tr("Готово", "Done"), key: "⌃⌥⌘Y") }
+                    Button(action: submit) { ShortcutLabel(title: tr("Готово", "Done"), key: HotKeyChoice.current.label("Y")) }
                         .buttonStyle(NotchButtonStyle(kind: .primary))
                         .disabled(form.picked.isEmpty)
                         .opacity(form.picked.isEmpty ? 0.4 : 1)
@@ -142,7 +142,7 @@ private struct OptionLabel: View {
                     .truncationMode(.tail)
             }
             Spacer(minLength: 6)
-            Text("⌃⌥⌘\(number)")
+            Text(HotKeyChoice.current.label("\(number)"))
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.white.opacity(0.35))
         }
@@ -170,9 +170,11 @@ private struct ShortcutLabel: View {
     var body: some View {
         HStack(spacing: 4) {
             Text(title)
-            Text(key)
-                .font(.system(size: 10, weight: .medium))
-                .opacity(0.45)
+            if !key.isEmpty {
+                Text(key)
+                    .font(.system(size: 10, weight: .medium))
+                    .opacity(0.45)
+            }
         }
     }
 }

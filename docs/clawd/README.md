@@ -86,7 +86,7 @@ When a new task comes in, Clawd stops whatever he's doing and gets back to work.
 
 ## Living in the notch for good
 
-Switch on Clawd's menu → **Clawd stays in the notch** and he floats down into it under a parachute, waves, and never walks off: when Claude has nothing going on, he stays in the notch and keeps himself busy. Every few seconds he does something, in no fixed order. Nothing turns up out of thin air: he takes it out from behind his back and puts it back there when he's done.
+Switch on **Clawd stays in the notch** in the settings (Clawd's menu → Settings…) and he floats down into it under a parachute, waves, and never walks off: when Claude has nothing going on, he stays in the notch and keeps himself busy. Every few seconds he does something, in no fixed order. Nothing turns up out of thin air: he takes it out from behind his back and puts it back there when he's done.
 
 - brings a mug of coffee out from behind his back: steam curls up, and now and then he takes a sip with his eyes shut in a smile;
 - lifts headphones from behind his back over his head, puts them on and nods to the beat with his eyes shut, notes floating off;

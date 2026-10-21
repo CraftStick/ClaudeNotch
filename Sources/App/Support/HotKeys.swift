@@ -38,3 +38,39 @@ final class HotKeys {
         actions = [:]
     }
 }
+
+/// The modifiers that go with Y, N and 1…4 to answer from the notch: ⌃⌥⌘ unless changed in the
+/// settings, or none at all to keep every key for other apps.
+enum HotKeyChoice: String, CaseIterable {
+    case controlOptionCommand, controlOption, optionCommand, controlCommand, off
+
+    static let key = "hotKeys"
+
+    static var current: HotKeyChoice {
+        UserDefaults.standard.string(forKey: key).flatMap(Self.init(rawValue:)) ?? .controlOptionCommand
+    }
+
+    /// Carbon flags; nil when switched off.
+    var modifiers: Int? {
+        switch self {
+        case .controlOptionCommand: return controlKey | optionKey | cmdKey
+        case .controlOption: return controlKey | optionKey
+        case .optionCommand: return optionKey | cmdKey
+        case .controlCommand: return controlKey | cmdKey
+        case .off: return nil
+        }
+    }
+
+    var symbols: String {
+        switch self {
+        case .controlOptionCommand: return "⌃⌥⌘"
+        case .controlOption: return "⌃⌥"
+        case .optionCommand: return "⌥⌘"
+        case .controlCommand: return "⌃⌘"
+        case .off: return ""
+        }
+    }
+
+    /// What a button shows for `key`, as "⌃⌥⌘Y"; nothing when they're off.
+    func label(_ key: String) -> String { self == .off ? "" : symbols + key }
+}

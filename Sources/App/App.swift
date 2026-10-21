@@ -27,19 +27,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let panel = NotchPanel()
     private var server: SocketServer?
     private var statusItem: NSStatusItem?
-    private var loginItem: NSMenuItem?
+    private var updateItem: NSMenuItem?
+    private let updates = Updates()
+    private lazy var settings = SettingsWindow(actions: SettingsActions(
+        isConnected: { ClaudeHooks.state() == .connected },
+        setConnected: { [weak self] on in
+            guard on != (ClaudeHooks.state() == .connected) else { return }
+            self?.toggleClaudeCode()
+        },
+        opensAtLogin: { SMAppService.mainApp.status == .enabled },
+        setOpensAtLogin: { [weak self] on in
+            guard on != (SMAppService.mainApp.status == .enabled) else { return }
+            self?.toggleLaunchAtLogin()
+        },
+        setAlive: { [weak self] on in
+            if on { self?.store.moveIn() }
+            self?.store.objectWillChange.send()
+        },
+        changed: { [weak self] in
+            self?.buildMenu()
+            self?.shortcuts = nil
+            self?.updateHotKeys()
+            self?.store.objectWillChange.send()  // the notch again, in its language, with or without the rim
+        }), updates: updates)
     private var promptsObserver: AnyCancellable?
     private var visibilityObserver: AnyCancellable?
     private var hoverTimer: Timer?
     private var notchScreen: NSScreen?
     private var notch: NotchMetrics?
-    private var soundsItem: NSMenuItem?
-    private var rimItem: NSMenuItem?
-    private var aliveItem: NSMenuItem?
-    private var claudeCodeItem: NSMenuItem?
     private let hotKeys = HotKeys()
     private let trashWatcher = TrashWatcher()
-    private var shortcuts = Shortcuts.none
+    /// nil: none registered yet, or the settings changed which ones to take.
+    private var shortcuts: Shortcuts?
     /// The pointer is over the visible notch: take clicks there (to focus a session).
     private var pointerInside = false
     /// Where the pointer was at the last look, and whether the notch changed since: with neither,
@@ -80,6 +99,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         trashWatcher.start()
         syncLaunchAtLogin()
         connectToClaudeCodeIfNeeded()
+        updates.announce = { [weak self] version, page in self?.announce(version, page) }
+        updates.schedule()
         promptsObserver = store.$prompts.sink { [weak self] _ in
             DispatchQueue.main.async {  // after `prompts` has its new value
                 self?.resizePanel()
@@ -283,9 +304,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Permission shortcuts
 
     /// ⌃⌥⌘Y / ⌃⌥⌘N answer the oldest request, ⌃⌥⌘1…4 pick an answer to a question (and ⌃⌥⌘Y sends the
-    /// ones ticked). System-wide hot keys take the keys away from every app, so they must not be
-    /// everyday shortcuts like ⌘N, and only the ones the card on show uses are taken.
-    static let hotKeyModifiers = cmdKey | optionKey | controlKey
+    /// ones ticked); the settings may pick other modifiers, or none. System-wide hot keys take the keys
+    /// away from every app, so they must not be everyday shortcuts like ⌘N, and only the ones the card
+    /// on show uses are taken.
 
     /// The shortcuts the card on show answers to.
     private enum Shortcuts: Equatable {
@@ -294,14 +315,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateHotKeys() {
-        let wanted = store.prompt.map { prompt in
+        let modifiers = HotKeyChoice.current.modifiers
+        let wanted = modifiers == nil ? .none : store.prompt.map { prompt in
             prompt.form.map { Shortcuts.question(options: $0.current.options.count, multiSelect: $0.current.multiSelect) }
                 ?? .permission
         } ?? .none
         guard wanted != shortcuts else { return }
         shortcuts = wanted
         hotKeys.unregisterAll()
-        let modifiers = Self.hotKeyModifiers
+        guard let modifiers else { return }
         switch wanted {
         case .none:
             break
@@ -353,24 +375,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title.isEnabled = false
         menu.addItem(title)
         menu.addItem(.separator())
-        claudeCodeItem = add(to: menu, tr("Подключено к Claude Code", "Connected to Claude Code"), "link", #selector(toggleClaudeCode))
-        loginItem = add(to: menu, tr("Запускать при входе", "Open at login"), "arrow.up.forward.app", #selector(toggleLaunchAtLogin))
-        soundsItem = add(to: menu, tr("Звук, когда готово или нужен ответ", "Sound when done or waiting for you"),
-                         "speaker.wave.2", #selector(toggleSounds))
-        rimItem = add(to: menu, tr("Переливающаяся обводка", "Glowing rim"), "sparkles", #selector(toggleRim))
-        aliveItem = add(to: menu, tr("Clawd живёт в чёлке всегда", "Clawd stays in the notch"), "pawprint", #selector(toggleAlive))
-
-        let languages = NSMenu()
-        for (choice, name) in [(nil, tr("Как в системе", "System")), (Language.en, "English"), (Language.ru, "Русский")] {
-            let option = NSMenuItem(title: name, action: #selector(pickLanguage(_:)), keyEquivalent: "")
-            option.target = self
-            option.representedObject = choice?.rawValue
-            option.state = Language.choice == choice ? .on : .off
-            languages.addItem(option)
-        }
-        let language = add(to: menu, tr("Язык", "Language"), "globe", nil)
-        language.submenu = languages
-
+        updateItem = add(to: menu, "", "arrow.down.circle.fill", #selector(openUpdate))
+        updateItem?.isHidden = true
+        add(to: menu, tr("Настройки…", "Settings…"), "gearshape", #selector(openSettings), key: ",")
         menu.addItem(.separator())
         let quit = add(to: menu, tr("Выйти", "Quit"), "power", #selector(NSApplication.terminate(_:)), key: "q")
         quit.target = nil  // goes to NSApp
@@ -386,36 +393,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
+    /// A newer version, when the update check (on in the settings) found one.
     func menuNeedsUpdate(_ menu: NSMenu) {
-        claudeCodeItem?.state = ClaudeHooks.state() == .connected ? .on : .off
-        loginItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        soundsItem?.state = UserDefaults.standard.bool(forKey: Store.soundsKey) ? .on : .off
-        rimItem?.state = UserDefaults.standard.bool(forKey: Store.rimKey) ? .on : .off
-        aliveItem?.state = Store.alive ? .on : .off
+        if case .available(let version, _) = updates.status {
+            updateItem?.title = tr("Вышла версия \(version) — скачать", "Version \(version) is out — download")
+            updateItem?.isHidden = false
+        } else {
+            updateItem?.isHidden = true
+        }
     }
 
-    @objc private func pickLanguage(_ sender: NSMenuItem) {
-        Language.choice = (sender.representedObject as? String).flatMap(Language.init(rawValue:))
-        buildMenu()
-        store.objectWillChange.send()  // redraw the notch in the new language
+    @objc private func openSettings() { settings.show() }
+
+    @objc private func openUpdate() {
+        if case .available(_, let page) = updates.status { NSWorkspace.shared.open(page) }
     }
 
-    @objc private func toggleRim() {
-        UserDefaults.standard.set(!UserDefaults.standard.bool(forKey: Store.rimKey), forKey: Store.rimKey)
-        store.objectWillChange.send()  // redraw the notch with or without it
-    }
-
-    /// On, Clawd floats in under a parachute; off, he leaves once the rest after the last turn is over.
-    @objc private func toggleAlive() {
-        UserDefaults.standard.set(!Store.alive, forKey: Store.aliveKey)
-        if Store.alive { store.moveIn() }
-        store.objectWillChange.send()
-    }
-
-    @objc private func toggleSounds() {
-        let on = !UserDefaults.standard.bool(forKey: Store.soundsKey)
-        UserDefaults.standard.set(on, forKey: Store.soundsKey)
-        if on { NSSound(named: "Glass")?.play() }
+    /// Told once per version, while it's on.
+    private func announce(_ version: String, _ page: URL) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = tr("Вышла Claude Notch \(version)", "Claude Notch \(version) is out")
+        alert.informativeText = tr("Сейчас у тебя \(Updates.current). Скачай образ диска, открой новый Claude Notch прямо в нём и нажми «Переместить»: он встанет на место старого.",
+                                   "You have \(Updates.current). Download the disk image, open the new Claude Notch right in it and click Move: it takes the old one's place.")
+        alert.addButton(withTitle: tr("Открыть страницу", "Open the Page"))
+        alert.addButton(withTitle: tr("Позже", "Later"))
+        if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(page) }
     }
 
     // MARK: - Claude Code
@@ -502,8 +505,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let alert = NSAlert()
             alert.messageText = tr("Подключить Claude Notch к Claude Code?", "Connect Claude Notch to Claude Code?")
             alert.informativeText = tr(
-                "Claude Notch добавит свои хуки в ~/.claude/settings.json: так Claude Code будет сообщать ему, что делает. Остальные настройки останутся как были, а исходный файл сохранится рядом. Отключить можно в меню Clawd в строке меню.",
-                "Claude Notch adds its hooks to ~/.claude/settings.json, so Claude Code tells it what it's doing. Your other settings stay as they are, and the original file is saved next to it. You can disconnect in Clawd's menu in the menu bar.")
+                "Claude Notch добавит свои хуки в ~/.claude/settings.json: так Claude Code будет сообщать ему, что делает. Остальные настройки останутся как были, а исходный файл сохранится рядом. Отключить можно в настройках: меню Clawd в строке меню → «Настройки…».",
+                "Claude Notch adds its hooks to ~/.claude/settings.json, so Claude Code tells it what it's doing. Your other settings stay as they are, and the original file is saved next to it. You can disconnect in the settings: Clawd's menu in the menu bar → Settings….")
             alert.addButton(withTitle: tr("Подключить", "Connect"))
             alert.addButton(withTitle: tr("Не сейчас", "Not now"))
             if alert.runModal() == .alertFirstButtonReturn {

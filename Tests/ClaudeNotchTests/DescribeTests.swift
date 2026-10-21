@@ -2,6 +2,17 @@ import Testing
 @testable import ClaudeNotch
 
 struct DescribeTests {
+    // MARK: - Updates
+
+    @Test func versionsCompareByNumber() {
+        #expect(Updates.isNewer("0.1.10", than: "0.1.9"))
+        #expect(Updates.isNewer("0.2", than: "0.1.5"))
+        #expect(Updates.isNewer("1.0.0", than: "0.9.9"))
+        #expect(!Updates.isNewer("0.1.0", than: "0.1"))
+        #expect(!Updates.isNewer("0.1.1", than: "0.1.1"))
+        #expect(!Updates.isNewer("0.1.0", than: "0.1.1"))
+    }
+
     // MARK: - Cheers
 
     @Test func testsAndPushesAreToldApart() {
