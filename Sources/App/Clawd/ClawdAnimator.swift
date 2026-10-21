@@ -611,13 +611,10 @@ struct ClawdAnimator {
         var random = SeededRandom(seed: UInt64(stretch))
         var start = stretch * Self.lifeStretch
         let end = start + Self.lifeStretch
-        var last = -1
+        var recent: [Int] = []
         while !Self.pastimes.isEmpty {
             start += Double.random(in: 3...8, using: &random)
-            // Never the same twice in a row.
-            var pick = Int.random(in: 0..<Self.pastimes.count, using: &random)
-            if pick == last { pick = (pick + 1) % Self.pastimes.count }
-            last = pick
+            let pick = Self.nextPastime(after: &recent, of: Self.pastimes.count, using: &random)
             let pastime = Self.pastimes[pick]
             guard start + pastime.duration <= end else { break }
             if now < start { return standing(until: start, now) }
@@ -628,6 +625,18 @@ struct ClawdAnimator {
             start += pastime.duration
         }
         return standing(until: end, now)
+    }
+
+    /// How many pastimes go by before one comes back.
+    static let pastimeGap = 6
+
+    /// Which pastime comes next: any of `count`, in no set order, but none of the last `pastimeGap`
+    /// (`recent`, which it adds to), so the same few don't keep coming back.
+    static func nextPastime(after recent: inout [Int], of count: Int, using random: inout SeededRandom) -> Int {
+        let free = (0..<count).filter { !recent.contains($0) }
+        let pick = free.randomElement(using: &random) ?? Int.random(in: 0..<count, using: &random)
+        recent = Array((recent + [pick]).suffix(min(pastimeGap, count - 1)))
+        return pick
     }
 
     /// Standing still until `until`, in seconds of the clock as `now` is: the next look comes right

@@ -158,4 +158,14 @@ struct ClawdTests {
         let reaction = try #require(ClawdAnimator.reactions[.hello])
         #expect(!animator.frame(at: start + reaction.duration + 1).busy)
     }
+
+    @Test func aPastimeComesBackOnlyAfterSixOthers() {
+        var random = SeededRandom(seed: 42)
+        var recent: [Int] = []
+        let picks = (0..<200).map { _ in ClawdAnimator.nextPastime(after: &recent, of: 16, using: &random) }
+        for i in picks.indices.dropFirst(ClawdAnimator.pastimeGap) {
+            #expect(!picks[(i - ClawdAnimator.pastimeGap)..<i].contains(picks[i]))
+        }
+        #expect(Set(picks).count == 16)  // every one of them, in time
+    }
 }
