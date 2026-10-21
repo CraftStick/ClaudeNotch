@@ -128,6 +128,24 @@ struct ClawdTests {
         }
     }
 
+    /// A rate limit right after you ask, while the light bulb is still up: the hourglass once it's down.
+    @Test(.enabled(if: ClawdTests.hasSprites, "needs Claude.app"))
+    func theHourglassComesAfterTheLightBulb() throws {
+        let laptop = try #require(ClawdAssets.laptop), waving = try #require(ClawdAssets.waving)
+        let start = Date()
+        var s = Session(id: "s", turnStart: start, lastEvent: start)
+        s.phase = .thinking
+        s.syncMotion(at: start)
+        s.play(.idea, at: start)
+        s.phase = .failed
+        s.rateLimited = true
+        s.syncMotion(at: start + 1)
+        let animator = ClawdAnimator(session: s, laptop: laptop, waving: waving)
+        let idea = try #require(ClawdAnimator.reactions[.idea])
+        let frames = stride(from: idea.duration, through: idea.duration + 6, by: 0.5).map { animator.frame(at: start + $0) }
+        #expect(frames.contains { $0.decals.contains { $0.art.name.hasPrefix("hourglass") } })
+    }
+
     /// A poke on the notch makes Clawd hop and wave, but not in the middle of a reaction.
     @Test(.enabled(if: ClawdTests.hasSprites, "needs Claude.app"))
     func aReactionKeepsHimBusy() throws {

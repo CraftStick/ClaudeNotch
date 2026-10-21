@@ -152,8 +152,11 @@ struct ClawdAnimator {
             }
             return box.frame(t.truncatingRemainder(dividingBy: box.duration))
         case .limited:
-            if previous != nil, let hourglass = Self.rateLimit, t < hourglass.duration { return hourglass.frame(t) }
-            if previous != nil { t -= Self.rateLimit?.duration ?? 0 }
+            // Also after a reaction (nil): a rate limit often comes while the light bulb is still up.
+            if let hourglass = Self.rateLimit {
+                if t < hourglass.duration { return hourglass.frame(t) }
+                t -= hourglass.duration
+            }
             return Store.alive ? life(at: date, restingSince: date.addingTimeInterval(-t)) : idle(t, sinceRest: sinceMotion)
         case .done, .stopped, .failed:
             if previous != nil, let ending = ending(motion) {

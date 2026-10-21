@@ -333,26 +333,37 @@ enum Props {
         ".q..",
     ].map { String($0.reversed()) }, ["q": 0xfa_f7_ef_ff, "Q": 0xd8_d2_c4_ff])
 
-    /// An hourglass in a wooden frame beside him, `level` of its 9 grains of sand run down, a stream
-    /// through the neck while they fall: at (25, 6).
+    /// An hourglass beside him: two glass bulbs meeting at a narrow neck between wooden caps, `level` of
+    /// its 9 grains of sand run down, a stream through the neck while they fall: at (25, 6).
     static func hourglass(_ level: Int, running: Bool) -> PixelArt {
         let level = max(0, min(9, level))
-        var rows = ["WWWWWWWWW", "pgggggggp", "pg.....gp", "p.g...g.p", "p..g.g..p", "p...g...p",
-                    "p..g.g..p", "p.g...g.p", "pg.....gp", "pgggggggp", "WWWWWWWWW"]
+        var rows = ["DWWWWWWWW",
+                    ".DWWWWWW.",
+                    ".G.....g.",
+                    "..G...g..",
+                    "...G.g...",
+                    "....g....",
+                    "...G.g...",
+                    "..G...g..",
+                    ".G.....g.",
+                    ".DWWWWWW.",
+                    "DWWWWWWWW"]
         func put(_ row: Int, _ column: Int, _ c: Character) {
             var chars = Array(rows[row])
             chars[column] = c
             rows[row] = String(chars)
         }
-        // The top bulb's sand from its surface down; the bottom's from the floor up.
-        let top = [(2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (3, 3), (3, 4), (3, 5), (4, 4)]
-        let bottom = [(8, 2), (8, 3), (8, 4), (8, 5), (8, 6), (7, 3), (7, 4), (7, 5), (6, 4)]
+        // The top bulb's sand from its surface down; the bottom's heaped up from the floor.
+        let top = [(2, 2), (2, 6), (2, 3), (2, 5), (2, 4), (3, 3), (3, 5), (3, 4), (4, 4)]
+        let bottom = [(8, 4), (8, 3), (8, 5), (8, 2), (8, 6), (7, 4), (7, 3), (7, 5), (6, 4)]
         for (i, cell) in top.enumerated() where i >= level { put(cell.0, cell.1, "s") }
         for (i, cell) in bottom.enumerated() where i < level { put(cell.0, cell.1, "s") }
-        if running, level < 9 { put(5, 4, "s") }
-        rows = rows.map { $0.first == "p" ? "q" + $0.dropFirst() : $0 }  // the post at the back in shadow
+        if running, level < 9 {
+            put(5, 4, "s")
+            if level < 6 { put(6, 4, "s") }  // falling on through the bottom bulb's empty top
+        }
         return PixelArt("hourglass\(level)\(running ? "r" : "")", rows,
-                        ["W": 0x8f_55_20_ff, "p": 0xb8_74_2e_ff, "q": 0x9a_5e_24_ff, "g": 0xc4_e0_ec_ff, "s": 0xf1_c8_77_ff])
+                        ["W": 0xb8_74_2e_ff, "D": 0x8f_55_20_ff, "g": 0xc4_e0_ec_ff, "G": 0x9c_b8_c6_ff, "s": 0xf1_c8_77_ff])
     }
 
     /// A rocket, white with a blue nose and fins and a porthole, standing beside him: at (27, 2), its
