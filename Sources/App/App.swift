@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var aliveItem: NSMenuItem?
     private var claudeCodeItem: NSMenuItem?
     private let hotKeys = HotKeys()
+    private let trashWatcher = TrashWatcher()
     private var shortcuts = Shortcuts.none
     /// The pointer is over the visible notch: take clicks there (to focus a session).
     private var pointerInside = false
@@ -80,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         layoutPanel()
         setUpStatusItem()
+        trashWatcher.start()
         syncLaunchAtLogin()
         connectToClaudeCodeIfNeeded()
         promptsObserver = store.$prompts.sink { [weak self] _ in
