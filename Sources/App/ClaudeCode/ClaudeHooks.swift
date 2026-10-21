@@ -57,9 +57,12 @@ enum ClaudeHooks {
         Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/claude-notch-hook").path
     }
 
-    /// Claude Code runs the command through a shell: a path with spaces needs quotes.
+    /// Claude Code runs the command through a shell: a path with spaces needs quotes. With the app
+    /// gone (put in the Trash while it wasn't running, so it couldn't take its hooks out) the hook
+    /// quietly does nothing, rather than Claude Code reporting a missing file at every step.
     static func command(for hook: String) -> String {
-        hook.contains(" ") ? "\"\(hook)\"" : hook
+        let path = hook.contains(" ") ? "\"\(hook)\"" : hook
+        return "[ ! -x \(path) ] || \(path)"
     }
 
     static func state(settings: URL = settingsURL, hook: String = hookPath) -> State {

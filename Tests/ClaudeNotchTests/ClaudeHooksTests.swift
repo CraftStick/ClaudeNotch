@@ -34,7 +34,7 @@ struct ClaudeHooksTests {
         #expect(ClaudeHooks.state(settings: settings, hook: hook) == .connected)
         #expect(try read()["model"] as? String == "opus")
         // A path with a space is quoted: Claude Code runs the command through a shell.
-        #expect(try commands("PreToolUse") == ["/other/hook", "\"\(hook)\""])
+        #expect(try commands("PreToolUse") == ["/other/hook", "[ ! -x \"\(hook)\" ] || \"\(hook)\""])
         for event in ClaudeHooks.events.keys {
             #expect(try commands(event).filter { $0.contains("claude-notch-hook") }.count == 1, "\(event)")
         }
@@ -82,6 +82,30 @@ struct ClaudeHooksTests {
         try ClaudeHooks.connect(settings: link, hook: hook)
         #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == settings.path)
         #expect(ClaudeHooks.state(settings: settings, hook: hook) == .connected)
+    }
+
+    /// With the app gone the hook does nothing and says nothing; with it there, it runs as itself.
+    @Test func theHookIsQuietWithoutTheApp() throws {
+        func run(_ hook: String) throws -> (status: Int32, output: String) {
+            let shell = Process()
+            shell.executableURL = URL(fileURLWithPath: "/bin/sh")
+            shell.arguments = ["-c", ClaudeHooks.command(for: hook)]
+            let pipe = Pipe()
+            shell.standardOutput = pipe
+            shell.standardError = pipe
+            try shell.run()
+            shell.waitUntilExit()
+            return (shell.terminationStatus, String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+        }
+        let gone = try run(folder.appendingPathComponent("Gone App.app/Contents/MacOS/claude-notch-hook").path)
+        #expect(gone.status == 0 && gone.output.isEmpty)
+
+        let hook = folder.appendingPathComponent("Some App/claude-notch-hook")
+        try FileManager.default.createDirectory(at: hook.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho here; exit 3\n".utf8).write(to: hook)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+        let there = try run(hook.path)
+        #expect(there.status == 3 && there.output == "here\n")
     }
 
     /// install-hooks.sh writes the same hooks for an install from source.

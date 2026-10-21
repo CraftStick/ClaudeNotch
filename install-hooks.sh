@@ -56,12 +56,15 @@ def is_ours(group):
 with open(path, encoding="utf-8") as f:
     settings = json.load(f)
 hooks = settings.setdefault("hooks", {})
+# Like the app writes it: does nothing once the app is gone (ClaudeHooks.command(for:)).
+quoted = f'"{hook}"' if " " in hook else hook
+command = f"[ ! -x {quoted} ] || {quoted}"
 
 for event in set(hooks) | set(EVENTS):
     groups = [g for g in hooks.get(event, []) if not is_ours(g)]
     if mode == "install" and event in EVENTS:
         matcher, timeout = EVENTS[event]
-        group = {"hooks": [{"type": "command", "command": hook, "timeout": timeout}]}
+        group = {"hooks": [{"type": "command", "command": command, "timeout": timeout}]}
         if matcher:
             group = {"matcher": matcher, **group}
         groups.append(group)
