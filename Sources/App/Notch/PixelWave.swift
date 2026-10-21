@@ -5,9 +5,9 @@ import SwiftUI
 /// row and fading out at both ends; it rises higher in some places than in others. It only moves while it's on screen, which is while
 /// the pointer rests on the notch.
 struct PixelWave: View {
-    /// A dot every 6 points, 4.5 across: dots apart, like lights.
-    private static let pitch: CGFloat = 6
-    private static let dot: CGFloat = 4.5
+    /// A dot every 5 points, 4 across: dots apart, like lights, and sharp on a Retina screen.
+    private static let pitch: CGFloat = 5
+    private static let dot: CGFloat = 4
     /// The wave's length and height in dots, how much the height swells and shrinks along it, and how
     /// many dots it runs a second.
     private static let length = 18.0
