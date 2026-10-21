@@ -362,6 +362,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         rimItem = add(to: menu, tr("Переливающаяся обводка", "Glowing rim"), "sparkles", #selector(toggleRim))
         aliveItem = add(to: menu, tr("Clawd живёт в чёлке всегда", "Clawd stays in the notch"), "pawprint", #selector(toggleAlive))
 
+        // What's on the right while there's no task's time to show.
+        let extras = NSMenu()
+        for extra in NotchExtra.available {
+            let option = NSMenuItem(title: extra.name, action: #selector(pickExtra(_:)), keyEquivalent: "")
+            option.target = self
+            option.representedObject = extra.rawValue
+            option.state = NotchExtra.current == extra ? .on : .off
+            extras.addItem(option)
+        }
+        add(to: menu, tr("Справа в чёлке", "Right of the notch"), "clock", nil).submenu = extras
+
         let languages = NSMenu()
         for (choice, name) in [(nil, tr("Как в системе", "System")), (Language.en, "English"), (Language.ru, "Русский")] {
             let option = NSMenuItem(title: name, action: #selector(pickLanguage(_:)), keyEquivalent: "")
@@ -394,6 +405,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         soundsItem?.state = UserDefaults.standard.bool(forKey: Store.soundsKey) ? .on : .off
         rimItem?.state = UserDefaults.standard.bool(forKey: Store.rimKey) ? .on : .off
         aliveItem?.state = Store.alive ? .on : .off
+    }
+
+    @objc private func pickExtra(_ sender: NSMenuItem) {
+        UserDefaults.standard.set(sender.representedObject as? String, forKey: NotchExtra.key)
+        buildMenu()
+        store.objectWillChange.send()  // redraw the notch with it
     }
 
     @objc private func pickLanguage(_ sender: NSMenuItem) {

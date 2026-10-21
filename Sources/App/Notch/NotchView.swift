@@ -120,7 +120,7 @@ struct NotchView: View {
                             .help(tr("Сессий в работе: \(busy)", "Sessions at work: \(busy)"))
                     }
                     if s.isGreeting {
-                        PixelClock(moving: store.onScreen)  // no task's time to count: the time of day
+                        NotchExtraView(kind: NotchExtra.current, moving: store.onScreen)  // no task's time to count
                     } else {
                         ElapsedLabel(session: s, ticking: store.onScreen)
                     }
