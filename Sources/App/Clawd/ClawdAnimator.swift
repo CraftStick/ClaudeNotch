@@ -87,7 +87,6 @@ struct ClawdAnimator {
     private var openLaptop: Clip { Clip(sheet: laptop, frames: 2...16, fps: 12) }
     private var typingLoop: Clip { Clip(sheet: laptop, frames: 17...33, fps: 12) }
     private var closeLaptop: Clip { Clip(sheet: laptop, frames: 34...42, fps: 16) }
-    private var standing: Frame { Frame(laptop, 0, rate: 2) }
 
     func frame(at date: Date) -> Frame {
         let sinceMotion = date.timeIntervalSince(session.motionStart)
@@ -214,7 +213,10 @@ struct ClawdAnimator {
             let fidget = Self.fidgets[n % Self.fidgets.count]
             if intoFidget < fidget.duration { return Frame(fidget, at: intoFidget) }
         }
-        return standing
+        // Standing still until the next fidget, or until he sits down or walks off: no look before then.
+        let nextFidget = Double(intoFidget < 0 ? n : n + 1) * window + 10 - t
+        let next = [nextFidget, Self.sleepAfter - sinceRest, Store.restDuration - Self.walkOff - sinceRest].filter { $0 > 0 }.min()
+        return Frame(laptop, 0, rate: 1 / max(next ?? 1, 1.0 / 16))
     }
 
     private static let fidgets: [Clip] = [

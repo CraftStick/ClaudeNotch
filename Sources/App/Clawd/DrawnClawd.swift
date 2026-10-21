@@ -127,6 +127,8 @@ enum ClawdSprite {
 /// turns to you and hops while it waits for you, blinks now and then.
 struct DrawnClawdView: View {
     let phase: Phase
+    /// The notch can be seen: while it can't, he holds still.
+    var moving = true
     /// A sprite pixel per point, like the sheets from Claude.app.
     private let unit: CGFloat = 1
 
@@ -134,7 +136,7 @@ struct DrawnClawdView: View {
     private static let rhythm = [1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 12, paused: !phase.isActive)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 12, paused: !phase.isActive || !moving)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let pose = pose(t)
             Canvas { ctx, _ in

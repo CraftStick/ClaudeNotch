@@ -45,6 +45,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// there's nothing to work out.
     private var lastPointer: NSPoint?
     private var notchChanged = true
+    private var pointerNear = false
+    /// The pointer is followed from mouse events, once one has come in; polled until then.
+    private var followingMouse = false
+    private var lookPending = false
+    /// What keeps anyone from seeing the notch, besides the panel being covered.
+    private var screensAsleep = false, locked = false, switchedAway = false
+    private static let screenLocked = Notification.Name("com.apple.screenIsLocked")
+    private static let screenUnlocked = Notification.Name("com.apple.screenIsUnlocked")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Already running, e.g. this is another copy of the app: that one says hi instead.
@@ -83,10 +91,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         visibilityObserver = store.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {  // after the change
-                self?.notchChanged = true
-                self?.updatePointerTracking()
+                guard let self else { return }
+                self.notchChanged = true
+                self.updatePointerTracking()
+                // The notch changed under a pointer that may not move: is it still over it?
+                if self.followingMouse, self.store.mode != .hidden, self.store.onScreen { self.trackPointer() }
             }
         }
+        observeVisibility()
+        followMouse()
         updatePointerTracking()
         NotificationCenter.default.addObserver(
             self, selector: #selector(layoutPanel),
@@ -140,30 +153,108 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
     }
 
+    // MARK: - Can the notch be seen
+
+    /// Nobody sees the notch while its display sleeps, the screen is locked, another user is at the Mac or
+    /// the panel is covered: the store's clock stops then, and Clawd and the rim hold still.
+    private func observeVisibility() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.screensDidWakeNotification,
+                     NSWorkspace.sessionDidResignActiveNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
+            workspace.addObserver(self, selector: #selector(visibilityChanged(_:)), name: name, object: nil)
+        }
+        for name in [Self.screenLocked, Self.screenUnlocked] {
+            DistributedNotificationCenter.default().addObserver(self, selector: #selector(visibilityChanged(_:)), name: name, object: nil)
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(visibilityChanged(_:)),
+                                               name: NSWindow.didChangeOcclusionStateNotification, object: panel)
+        updateVisibility()
+    }
+
+    @objc private func visibilityChanged(_ note: Notification) {
+        switch note.name {
+        case NSWorkspace.screensDidSleepNotification: screensAsleep = true
+        case NSWorkspace.screensDidWakeNotification: screensAsleep = false
+        case NSWorkspace.sessionDidResignActiveNotification: switchedAway = true
+        case NSWorkspace.sessionDidBecomeActiveNotification: switchedAway = false
+        case Self.screenLocked: locked = true
+        case Self.screenUnlocked: locked = false
+        default: break  // the panel was covered or uncovered
+        }
+        updateVisibility()
+    }
+
+    private func updateVisibility() {
+        let visible = panel.occlusionState.contains(.visible) && !screensAsleep && !locked && !switchedAway
+        if visible != store.onScreen { EventLog.append(visible ? "Notch on screen" : "Notch out of sight") }
+        store.screen(visible: visible)
+    }
+
     // MARK: - Hover
 
-    /// The pointer is only watched while there's a notch to hover: no wakeups while it's hidden.
+    /// Looks at the pointer when the mouse moves, at most 20 times a second, over other apps and over the
+    /// notch: with the mouse at rest, nothing wakes the app up for it. Only where the pointer is comes in,
+    /// and it stays in the app; watching mouse moves needs no permission, unlike keys. Should no event
+    /// come in all the same, the pointer is polled instead.
+    private func followMouse() {
+        let moved: (NSEvent) -> Void = { [weak self] _ in self?.mouseMoved() }
+        _ = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged], handler: moved)
+        _ = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { event in
+            moved(event)
+            return event
+        }
+    }
+
+    private func mouseMoved() {
+        if !followingMouse {
+            followingMouse = true
+            EventLog.append("Pointer followed from mouse events")
+            hoverTimer?.invalidate()
+            hoverTimer = nil
+        }
+        guard !lookPending, store.mode != .hidden, store.onScreen else { return }
+        lookPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.lookPending = false
+            self?.trackPointer()
+        }
+    }
+
+    /// Until mouse events come in, the pointer is polled while there's a notch to hover and it can be seen:
+    /// no wakeups otherwise.
     private func updatePointerTracking() {
-        let visible = store.mode != .hidden
-        if visible, hoverTimer == nil {
-            let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in self?.trackPointer() }
-            timer.tolerance = 0.02
-            RunLoop.main.add(timer, forMode: .common)
-            hoverTimer = timer
-        } else if !visible, let timer = hoverTimer {
+        let watching = store.mode != .hidden && store.onScreen
+        if watching, hoverTimer == nil, !followingMouse {
+            lookAgain(after: 0.1)
+        } else if !watching, let timer = hoverTimer {
             timer.invalidate()
             hoverTimer = nil
             trackPointer()  // once more, to let go of the hover and the clicks
         }
     }
 
-    /// The pointer is polled rather than tracked: the panel lets clicks through, so it gets no
-    /// mouse events, and polling needs no special permission. A look finds nothing new unless the
-    /// pointer moved or the notch changed.
-    private func trackPointer() {
-        guard let screen = notchScreen, let notch else { return }
+    /// The next look at the pointer: 10 times a second while it's near the notch, about 3 times a second
+    /// while it's elsewhere, where it takes a moment to get to the notch anyway.
+    private func lookAgain(after delay: TimeInterval) {
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.hoverTimer = nil
+            let near = self.trackPointer()
+            if self.store.mode != .hidden, self.store.onScreen, !self.followingMouse { self.lookAgain(after: near ? 0.1 : 0.3) }
+        }
+        timer.tolerance = delay / 5  // lets macOS bundle the wakeup with others
+        RunLoop.main.add(timer, forMode: .common)
+        hoverTimer = timer
+    }
+
+    /// Where the pointer is against the notch. The panel lets clicks through, so it can't track the pointer
+    /// itself. A look finds nothing new unless the pointer moved or the notch changed. Returns whether the
+    /// pointer is near the notch.
+    @discardableResult
+    private func trackPointer() -> Bool {
+        guard let screen = notchScreen, let notch else { return false }
         let location = NSEvent.mouseLocation
-        guard location != lastPointer || notchChanged else { return }
+        guard location != lastPointer || notchChanged else { return pointerNear }
         lastPointer = location
         notchChanged = false
         let mode = store.mode
@@ -176,12 +267,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let zone = NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
                           width: size.width, height: size.height).insetBy(dx: -4, dy: -4)
         let inside = zone.contains(location)
+        pointerNear = zone.insetBy(dx: -150, dy: -100).contains(location)
         store.pointer(inside: inside)
         let visible = inside && mode != .hidden
         if visible != pointerInside {
             pointerInside = visible
             updateMouseHandling()
         }
+        return pointerNear
     }
 
     /// Click-through, except over a visible notch or while a permission card has buttons.

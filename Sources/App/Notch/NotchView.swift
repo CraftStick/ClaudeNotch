@@ -42,7 +42,7 @@ struct NotchView: View {
         .overlay(alignment: .top) {
             if mode != .hidden, UserDefaults.standard.bool(forKey: Store.rimKey) {
                 NotchRim(shape: shape, size: size, canvas: CGSize(width: 640, height: Self.maxHeight(notch: notch)),
-                         working: session?.phase.isActive == true)
+                         working: session?.phase.isActive == true && store.onScreen)
             }
         }
         .overlay(alignment: .bottomLeading) {
@@ -105,7 +105,7 @@ struct NotchView: View {
     private func content(_ s: Session, others: [Session], mode: DisplayMode) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                ClawdBadge(session: s, showsHint: mode == .compact && !s.isGreeting)
+                ClawdBadge(session: s, showsHint: mode == .compact && !s.isGreeting, moving: store.onScreen)
                     .padding(.leading, 8)
                     .frame(width: wing, alignment: .leading)
                 Spacer(minLength: notch.width)
@@ -119,7 +119,7 @@ struct NotchView: View {
                             .background(Capsule().fill(claudeOrange))
                             .help(tr("Сессий в работе: \(busy)", "Sessions at work: \(busy)"))
                     }
-                    if !s.isGreeting { ElapsedLabel(session: s) }
+                    if !s.isGreeting { ElapsedLabel(session: s, ticking: store.onScreen) }
                 }
                 .padding(.trailing, 10)
                 .frame(width: wing, alignment: .trailing)
@@ -176,6 +176,7 @@ func phaseColor(_ phase: Phase) -> Color {
 private struct ClawdBadge: View {
     let session: Session
     let showsHint: Bool
+    let moving: Bool
 
     private var hint: String? {
         guard showsHint else { return nil }
@@ -189,7 +190,7 @@ private struct ClawdBadge: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            ClawdView(session: session)
+            ClawdView(session: session, moving: moving)
             if let hint {
                 Image(systemName: hint)
                     .font(.system(size: 11, weight: .semibold))
@@ -203,12 +204,16 @@ private struct ClawdBadge: View {
 
 private struct ElapsedLabel: View {
     let session: Session
+    /// The notch can be seen: no ticking while it can't.
+    let ticking: Bool
 
     var body: some View {
         if let end = session.turnEnd {  // the turn is over: nothing to tick
             label(end)
-        } else {
+        } else if ticking {
             TimelineView(.periodic(from: .now, by: 1)) { context in label(context.date) }
+        } else {
+            label(Date())
         }
     }
 

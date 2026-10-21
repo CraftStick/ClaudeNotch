@@ -15,6 +15,7 @@ final class NotchPanel: NSPanel {
         ignoresMouseEvents = true
         isMovable = false
         hidesOnDeactivate = false
+        acceptsMouseMovedEvents = true  // the pointer moving over it, while it takes clicks, is seen too
     }
 
     override var canBecomeKey: Bool { false }

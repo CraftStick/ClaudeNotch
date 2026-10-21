@@ -14,7 +14,7 @@ final class Store: ObservableObject {
     static let aliveKey = "alwaysAlive"
     static var alive: Bool { UserDefaults.standard.bool(forKey: aliveKey) }
 
-    @Published private(set) var sessions: [String: Session] = [:]
+    @Published private(set) var sessions: [String: Session] = [:] { didSet { syncTicking() } }
     @Published private(set) var expanded = false
     @Published private(set) var focusID: String?
     @Published private(set) var prompts: [PermissionPrompt] = []  // oldest first
@@ -23,15 +23,18 @@ final class Store: ObservableObject {
     /// A session clicked in the card's list of others: the card shows it until the pointer leaves.
     @Published private(set) var pickedID: String?
     /// Shown when the app is opened and nothing else is in the notch: "Ready to work", a click opens Claude.
-    @Published private(set) var greeting: Session?
+    @Published private(set) var greeting: Session? { didSet { syncTicking() } }
     static let greetingID = "greeting"
     /// What a second copy of the app sends before it quits, so this one greets you.
     static let openedMessage = Data(#"{"hook_event_name":"ClaudeNotchOpened"}"#.utf8)
     private let transcripts = TranscriptWatcher()
     private var collapseWork: DispatchWorkItem?
     private var hoverWork: DispatchWorkItem?
-    private var pruneTimer: Timer?
+    /// The notch can be seen: no sleeping display, locked screen or other user at the Mac. While it can't,
+    /// nothing in it moves and nothing ticks; it all catches up from the clock when it can be seen again.
+    @Published private(set) var onScreen = true
     private var motionTimer: Timer?
+    private var nextPrune = Date.distantPast
     /// Copies of the sounds playing now. NSSound(named:) hands out one shared object per sound,
     /// which won't start again while it's still playing (two sessions finishing together), and a
     /// copy has to stay alive until it ends.
@@ -46,15 +49,27 @@ final class Store: ObservableObject {
         transcripts.onUsage = { [weak self] id, usage in self?.recordUsage(id, usage) }
         transcripts.onThought = { [weak self] id, thought, written in self?.recordThought(id, thought, written: written) }
         transcripts.onWrite = { [weak self] id in self?.recordWrite(id) }
-        pruneTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            self?.prune()
+    }
+
+    func screen(visible: Bool) {
+        guard visible != onScreen else { return }
+        onScreen = visible
+        syncTicking()
+    }
+
+    /// The clock ticks once a second while something in the notch depends on it: a session, at work or
+    /// resting, or the greeting, which leaves after a while unless Clawd lives in the notch. Otherwise, and
+    /// while the notch can't be seen, it doesn't wake the Mac up at all.
+    private func syncTicking() {
+        let needed = onScreen && (!sessions.isEmpty || (greeting != nil && !Self.alive))
+        if needed, motionTimer == nil {
+            let timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
+            timer.tolerance = 0.3  // needn't be on time: lets macOS bundle the wakeup with others
+            motionTimer = timer
+        } else if !needed, let timer = motionTimer {
+            timer.invalidate()
+            motionTimer = nil
         }
-        motionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            self?.tick()
-        }
-        // Neither needs to be on time: let macOS bundle their wakeups with others.
-        pruneTimer?.tolerance = 2
-        motionTimer?.tolerance = 0.3
     }
 
     /// Sessions where Claude is busy or waiting, most recent first.
@@ -353,7 +368,9 @@ final class Store: ObservableObject {
                     s.thought = ""
                 }
                 s.currentTool = s.activity
-                commit(s, expandFor: s.activity.quiet ? nil : 2.5)
+                // Not opened for every tool, which would keep the notch moving the whole time Claude
+                // works: what it runs shows under the pointer.
+                commit(s, expandFor: nil)
             }
 
         case "PostToolUse", "PostToolUseFailure":
@@ -455,7 +472,7 @@ final class Store: ObservableObject {
             // Only mid-turn: a manual /compact between turns isn't Claude at work.
             guard known, s.phase.isActive else { return }
             s.activity = .compacting
-            commit(s, expandFor: 2.5)
+            commit(s, expandFor: nil)
 
         case "PostCompact":
             // Done compacting: back to work, rather than "Compacting" until the next tool.
@@ -563,9 +580,9 @@ final class Store: ObservableObject {
         return s.host == nil || front != s.host
     }
 
-    /// Claude wrote down a thought or a message: the notch opens on what it thinks about, or on why it
-    /// runs the tool it has just started. Claude Code writes the text out around the time of the call,
-    /// often a moment after the tool's hook.
+    /// Claude wrote down a thought or a message: the notch shows what it thinks about, or why it runs the
+    /// tool it has just started, under the pointer. Claude Code writes the text out around the time of
+    /// the call, often a moment after the tool's hook.
     private func recordThought(_ id: String, _ thought: String, written: Date) {
         guard var s = sessions[id] else { return }
         switch s.phase {
@@ -586,7 +603,7 @@ final class Store: ObservableObject {
         default:
             return
         }
-        commit(s, expandFor: 3)
+        commit(s, expandFor: nil)
     }
 
     /// The transcript grew. Noted at most every 10 seconds: it only serves to notice long silences.
@@ -777,7 +794,8 @@ final class Store: ObservableObject {
         commit(s, expandFor: 3)
     }
 
-    /// Safety net for anything we missed: stale sessions quietly time out.
+    /// Safety net for anything we missed: stale sessions quietly time out. Worked out from the clock, so it
+    /// catches up after a while without ticks.
     private func prune() {
         let now = Date()
         for (id, s) in sessions {
@@ -798,8 +816,13 @@ final class Store: ObservableObject {
     /// Every second: time-based motions (thinking for a while, a slow command, a burst of tools
     /// ending), and sessions whose rest is over leave the notch — Clawd has walked off by then.
     /// When he lives in the notch for good, the greeting stays instead, and comes back if it's gone.
+    /// Every 10 seconds, stale sessions too.
     private func tick() {
         let now = Date()
+        if now >= nextPrune {
+            nextPrune = now.addingTimeInterval(10)
+            prune()
+        }
         if Self.alive {
             if greeting == nil { greeting = Self.makeGreeting(at: now, cue: .arrive) }
         } else if let g = greeting, now.timeIntervalSince(g.lastEvent) > Self.restDuration {

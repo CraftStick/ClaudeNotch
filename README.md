@@ -6,9 +6,9 @@
 
 # Claude Notch
 
-**[Claude Code](https://claude.com/claude-code) status in your MacBook notch — like the Dynamic Island on an iPhone.**<br>
-See what the agent is doing right now, how long the task has been running, and when it's waiting for you.<br>
-Answer permission requests with buttons right in the notch. And Clawd lives there too.
+**[Claude Code](https://claude.com/claude-code) in your MacBook's notch, like the Dynamic Island on an iPhone.**<br>
+See what Claude is doing, how long it's been at it and when it needs you, and answer it right there.<br>
+And Clawd lives in the notch.
 
 <img src="docs/notch.gif" width="640" alt="The notch during a task: Clawd gets out his laptop and types, a command runs, Done">
 
@@ -16,180 +16,52 @@ Answer permission requests with buttons right in the notch. And Clawd lives ther
 
 ## Install
 
-You need **macOS 14 or later** and **Claude Code** (in the terminal or in the Code tab of the Claude desktop app).
+You need macOS 14 or later and Claude Code, in a terminal or in the Claude app.
 
-**1.** Download **ClaudeNotch-….dmg** from the [latest release](https://github.com/CraftStick/ClaudeNotch/releases/latest), open it and drag Claude Notch to Applications.
+1. Download **ClaudeNotch-….dmg** from the [latest release](https://github.com/CraftStick/ClaudeNotch/releases/latest), open it and drag Claude Notch to Applications.
+2. Open it. Apple hasn't notarized it, so the first time macOS won't: click **Done**, then **System Settings → Privacy & Security → Open Anyway**.
+3. When it asks to connect to Claude Code, click **Connect**. It adds its hooks to `~/.claude/settings.json` and keeps the original next to it.
 
-**2.** Open Claude Notch from Applications. Apple hasn't notarized it, so the first time macOS won't open it. This takes a minute, once:
-
-   1. Double-click **ClaudeNotch** in Applications. macOS says it can't open it: click **Done** (not Move to Trash).
-   2. Open **System Settings → Privacy & Security** and scroll down to **Security**. Next to the line about ClaudeNotch, click **Open Anyway**. The button only shows up after you've tried to open the app.
-   3. Confirm with your password or Touch ID. If macOS asks once more, click **Open Anyway** again.
-
-**3.** Claude Notch asks to connect to Claude Code: click **Connect**. It adds its hooks to `~/.claude/settings.json`; your other settings stay as they are, and the original file is saved next to it as `settings.json.bak-claudenotch`.
-
-That's it. Clawd says hi from the notch and settles in the menu bar, and the notch comes alive as soon as Claude Code starts a task. Sessions that were already open may only pick it up after a restart.
-
-**Update:** quit Claude Notch (Clawd's menu → Quit), then drag the new one from the next release's .dmg to Applications and replace the old one.
-
-**Uninstall:** in Clawd's menu, uncheck **Connected to Claude Code** (its hooks come out of `~/.claude/settings.json`) and **Open at login**, then **Quit** and drag Claude Notch from Applications to the Trash. Without the first step, Claude Code would complain about the missing hooks on every event.
+**Update:** quit it (Clawd's menu → Quit) and drag the new one over the old one.<br>
+**Uninstall:** uncheck **Connected to Claude Code** in Clawd's menu, then quit and move the app to the Trash.
 
 <details>
-<summary>Or build it from source</summary>
-
-**1.** Install Apple's command line developer tools if you don't have them yet (an installer window opens; if they're already there, the command says so):
+<summary>Build from source</summary>
 
 ```bash
-xcode-select --install
-```
-
-**2.** Download and install Claude Notch:
-
-```bash
+xcode-select --install   # Apple's command line tools, if you don't have them yet
 git clone https://github.com/CraftStick/ClaudeNotch.git ~/ClaudeNotch
-cd ~/ClaudeNotch
-./install.sh
+cd ~/ClaudeNotch && ./install.sh
 ```
 
-The project goes into the `ClaudeNotch` folder in your home folder; the update and uninstall commands below work from any folder.
-
-That's it. Clawd says hi from the notch and settles in the menu bar, and the notch comes alive as soon as Claude Code starts a task.
-
-<details>
-<summary>Without git — download the ZIP</summary>
-
-```bash
-cd ~ && curl -L -o ClaudeNotch.zip https://github.com/CraftStick/ClaudeNotch/archive/refs/heads/main.zip
-unzip -q ClaudeNotch.zip && mv ClaudeNotch-main ClaudeNotch && rm ClaudeNotch.zip
-cd ~/ClaudeNotch && chmod +x *.sh && ./install.sh
-```
-
-To update without git, delete `~/ClaudeNotch` and run these again.
+`install.sh` builds the app into `~/Applications` and adds the hooks. Update with `git pull && ./install.sh`, remove with `./uninstall.sh`, run the tests with `swift test`.
 
 </details>
 
-<details>
-<summary>What <code>install.sh</code> does</summary>
+## What it does
 
-1. Builds the app from source (`build.sh`) into `~/Applications/ClaudeNotch.app` and starts it. It's built on your Mac, so macOS shows no Gatekeeper warnings.
-2. Adds the hooks to `~/.claude/settings.json` (`install-hooks.sh`). Your other settings and hooks stay untouched, the first run saves the original as `settings.json.bak-claudenotch` (later runs leave it alone), and running it again adds nothing twice.
-3. The app turns on Open at Login by itself (you can switch it off in the menu). And if it isn't running when a Claude Code session opens, in the Claude app or a terminal, it starts along with it.
+- **Status in the notch.** Clawd on the left, the task's time on the right, a counter when several sessions are at work. The notch opens for what matters: a new task, a failure, Claude waiting for you, done.
+- **Details on hover.** The task, what Claude is doing and why, its plan, subagents, recent actions, tokens and context, other sessions. A click brings forward the terminal tab or app the session runs in.
+- **Answers from the notch.** Allow or deny a permission request (⌃⌥⌘Y / ⌃⌥⌘N, or **Always**), and pick the answers to Claude's questions (⌃⌥⌘1…4).
+- **Clawd.** He types while Claude works, thinks, waves when it needs you, hops when it's done and dozes while he rests. With **Clawd stays in the notch** on, he lives there for good, with pastimes of his own. [All his animations →](docs/clawd/README.md)
+- A sound when Claude is done or waiting for you, a glowing rim, English and Russian. All of it in Clawd's menu in the menu bar.
 
-</details>
-
-**Update:**
-
-```bash
-cd ~/ClaudeNotch && git pull && ./install.sh
-```
-
-**Uninstall** (hooks, login item, the app and its data):
-
-```bash
-cd ~/ClaudeNotch && ./uninstall.sh
-```
-
-</details>
-
-## Features
-
-### Status in the notch
-
-Clawd on the left of the notch, the task's time on the right. On every action the notch opens for a couple of seconds: "Running a command", "Reading file", "Editing", "Searching code", "Browser"… with the details. Several sessions at once are fine: a counter next to the timer shows how many are at work. Sessions that were already running when the app started show up right away.
-
-A thin rim runs along the island's edge: red, orange and gold, flowing around it while Claude works and holding still while it rests. Switch it off in Clawd's menu → **Glowing rim**.
-
-The notch also says what Claude is thinking about: "Thinking…" with the gist of its thoughts, and under each action why it's doing it ("Editing · auth.ts — Fix the token check"). It takes this from what Claude writes between actions; for a command, its description is shown instead of the command itself.
-
-When Claude keeps a task list (TodoWrite, TaskCreate/TaskUpdate, or the Claude app's plan), a green line grows along the bottom of the island as steps get done, and the card says "Plan · step 3 of 5" with the step under way. When it's done, the notch shows the last line of its reply; if that's a question, Clawd waves: "Waiting for your answer".
-
-When something goes wrong, the notch says so plainly. A command that fails, a file Claude couldn't edit or an action auto mode turned down shows with a red icon and the error's first line ("Command failed · Exit code 1 · Error: Cannot find module 'express'"), and stays red among the card's recent actions. If the turn itself dies on an API error, the notch says why in plain words (rate limited, Claude overloaded, signed out, a billing problem…) with Claude Code's own message under it. And when an MCP server asks you to fill in a form or open a page, the notch waits with you.
-
-Open the app itself (at login, along with a new Claude Code session, or again from Finder or Spotlight) and Clawd hops and waves from the notch: "Ready to work". Click it to open Claude, or wherever Claude Code ran last.
-
-<p align="center"><img src="docs/greeting.png" width="560" alt="The notch says Ready to work"></p>
-
-### Details on hover
-
-Rest the pointer on the notch and a card opens: the task, what's happening now (with the description and the full command), subagents, recent actions with the size of each edit, other sessions, and at the bottom the turn's line changes, tokens and context fill. When Claude asks you a question, its options are there too. And when a session at work has given no sign of life for five minutes, the card says "Now · quiet for 6 min": it may have hung, or a command is taking its time.
-
-To look at another session, click it under "Other sessions": the card switches to it, and the one it showed before moves into the list, so you can go round them all without leaving the notch. Once the pointer leaves, the notch is back on the freshest session.
-
-Click the notch to bring forward the app the session runs in (Terminal, iTerm, VS Code, Cursor, the Claude app…); on the card, the session it shows. In Terminal and iTerm it's the very tab the session runs in; the first time, macOS asks whether Claude Notch may control the terminal.
-
-<p align="center"><img src="docs/card.png" width="560" alt="The card you get on hover"></p>
-
-### Permissions from the notch
-
-When Claude Code asks for permission, the notch shows **Allow** (⌃⌥⌘Y), **Deny** (⌃⌥⌘N) and **Always** — add the rule Claude Code suggests so it won't ask again. The shortcuts only work while a request is showing, need no macOS permissions, and don't take everyday shortcuts like ⌘N away from other apps. In the Claude app and IDE extensions the usual permission dialog appears too, and whichever answer comes first wins. In the terminal the notch waits 20 seconds, then hands the question back to the usual prompt (or click **In app** right away).
-
-When Claude asks you a question, the notch shows its options as buttons: click one (or press ⌃⌥⌘1…4) and the answer goes straight back to Claude Code, the way its own dialog would send it. Several questions come one after another; where more than one option may be picked, tick them and click **Done** (⌃⌥⌘Y). To type an answer of your own, click **Answer in app**. In the terminal a question waits a minute and a half before going back to the usual prompt.
-
-<p align="center"><img src="docs/permission.png" width="560" alt="A permission request in the notch"></p>
-
-### Clawd
-
-Clawd lives in the notch and shows what Claude is up to: gets out his laptop and types while Claude works, sits down to think, moves to a desktop computer for long commands, waves when Claude needs you, hops for joy when it's done, and dozes off under an open book while he rests.
-
-Want him around all the time? Clawd's menu → **Clawd stays in the notch**: he floats in under a parachute and lives in the notch for good, with pastimes of his own: coffee, music in headphones, wizardry, pancakes, dances, a breakdance, a nap, a walk out of the notch and back. With Claude closed, a click on the notch doesn't open Claude any more: Clawd hops and waves (unless he's busy), and a pixel wave runs where the notch would say “Ready to work”.
-
-<p align="center">
-<img src="docs/clawd/typing.gif" width="96" alt="Typing">
-<img src="docs/clawd/thinking.gif" width="96" alt="Thinking">
-<img src="docs/clawd/desktop.gif" width="96" alt="At a desktop computer">
-<img src="docs/clawd/waving.gif" width="96" alt="Waving">
-<img src="docs/clawd/celebrate.gif" width="96" alt="Confetti">
-<img src="docs/clawd/sleeping.gif" width="96" alt="Dozing">
-</p>
-
-**[All of Clawd's animations and when he plays them →](docs/clawd/README.md)**
-
-Every time Claude finishes or needs an answer, a sound plays (can be switched off in the menu).
-
-### Language
-
-The interface is in English or Russian, following your system language. Switch it in Clawd's menu → **Language**.
+<p align="center"><img src="docs/card.png" width="440" alt="The card you get on hover"> <img src="docs/permission.png" width="440" alt="A permission request in the notch"></p>
 
 ## How it works
 
-```
-Claude Code ──hook (JSON on stdin)──▶ claude-notch-hook ──Unix socket──▶ ClaudeNotch.app
-                    ◀── decision (permission requests only) ──┘
-```
+Claude Code runs a tiny hook on every event, which hands it to the app over a local socket and, for a permission request or a question, hands your answer back. The app also reads the session files in `~/.claude/projects`, to notice Esc and count tokens.
 
-- **`Sources/Hook/main.swift`** — a tiny binary Claude Code runs on every event. It forwards the JSON to the app and prints the answer, if there is one. It always exits 0, silently, even when the app isn't running, so it never gets in Claude Code's way.
-- **`Sources/App/Model/`** — the notch's state. `Store.swift` turns hook events into it and answers permission requests and questions; `Session.swift`, `Prompts.swift` and `TaskList.swift` are what it keeps; `Describe.swift` puts tools and prompts into words.
-- **`Sources/App/Notch/`** — the interface: the panel over the notch, its shape and rim, the open states, the cards.
-- **`Sources/App/Clawd/`** — Clawd: his sprites, read from Claude.app, his animations and props ([all of them](docs/clawd/README.md)), and the Clawd drawn in code for a Mac without Claude.app.
-- **`Sources/App/ClaudeCode/`** — the link to Claude Code: the socket the hook talks to; the hooks in `~/.claude/settings.json`, the same ones `install-hooks.sh` writes; and the session files, watched because Claude Code sends no hook on Esc, and token usage lives there too.
-- **`Sources/App/Support/`** — click to focus (the hook tells the app which terminal tab a session runs in, by its tty), ⌃⌥⌘Y/⌃⌥⌘N, the two languages, the event log.
-- **`Tests/`** — tests for everything that needs no screen: hook events, questions, the hooks in the settings, the transcripts, Clawd's frames. Run them with `swift test`.
-
-**Privacy.** Everything stays on your Mac, no network. The hook sends events only to the socket `~/Library/Application Support/ClaudeNotch/notch.sock`, which only your user can open. The app reads the session files in `~/.claude/projects` only to notice Esc, to count tokens, to show what Claude is thinking about and, at launch, to find sessions already at work. To bring a Terminal or iTerm tab forward, it asks that terminal over AppleScript for the tab with the session's tty, and does nothing else with it.
-
-**Resources.** About 22 MB of memory. While Claude works, Clawd's animation takes 1–2% of one CPU core (measured on an M2 MacBook); with nothing in the notch the app just waits and wakes up less than once a second (with Clawd staying in the notch for good, his animation never stops). The flowing rim costs the app nothing, but macOS redraws that corner of the menu bar for it (about 7% of a core for WindowServer while Claude works); it holds still otherwise, and you can switch it off.
+Everything stays on your Mac, with no network. While the notch can't be seen (the display asleep, the screen locked), the app doesn't wake up at all; while Claude works, it takes about 1–2% of one core.
 
 ## Troubleshooting
 
-- **The notch doesn't react.** Check that the app is running (`pgrep -x ClaudeNotch`) and connected: Clawd's menu shows a check at **Connected to Claude Code** (or `grep -c claude-notch-hook ~/.claude/settings.json` counts the hooks). Claude Code sessions that were already open sometimes pick up new hooks only after a restart.
-- **A click brings Terminal or iTerm forward, but not the session's tab.** Turn Claude Notch on in System Settings → Privacy & Security → Automation. macOS may ask again after an update: the app is built on your Mac, and each build looks new to it.
-- **What reaches the app** is in the log: `tail -f ~/Library/Application\ Support/ClaudeNotch/events.log`.
-- **Context fill** is counted against 200K tokens, or 1M once a session has used more: Claude Code doesn't write the window size into the session file.
-- **A display without a notch** gets a "virtual" notch in the menu bar.
+- **The notch doesn't react:** check that Clawd's menu says **Connected to Claude Code**. Sessions opened before may need a restart.
+- **A click opens the terminal but not the session's tab:** allow Claude Notch in System Settings → Privacy & Security → Automation.
+- **What reaches the app:** `tail -f ~/Library/Application\ Support/ClaudeNotch/events.log`.
 
 ## About Clawd
 
-Clawd is Anthropic's character, and his sprites aren't in this source code. At launch the app reads them from the Claude app installed on your Mac (they live in its `app.asar`, in the Clawd Quest easter egg). If Claude.app isn't installed or the sprite format changes, a simplified Clawd drawn in code is shown instead. The images in `docs/` are drawn by the app's own interface and animation code.
+Clawd is Anthropic's character, and his sprites aren't in this repository: the app reads them from the Claude app on your Mac, and draws a simpler Clawd if it isn't there. This project isn't affiliated with or endorsed by Anthropic.
 
-This project is not affiliated with or endorsed by Anthropic. Claude is a trademark of Anthropic.
-
-## License
-
-[MIT](LICENSE)
-
-<div align="center">
-
-
-If you found this useful, consider leaving a ⭐ — it helps a lot!
-
-</div>
+[MIT License](LICENSE)

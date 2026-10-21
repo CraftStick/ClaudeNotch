@@ -5,15 +5,19 @@ import SwiftUI
 /// works, puts it away and waves while Claude waits for you. After a turn he reacts (a happy hop,
 /// a sigh after Esc, dizzy after an error), then idles with the odd fidget and dozes off; or, when he
 /// lives in the notch for good, keeps busy with his own pastimes.
+///
+/// `moving`: the notch can be seen. While it can't (a sleeping display, a locked screen), he holds still
+/// and nothing wakes the Mac up for him.
 struct ClawdView: View {
     let session: Session
+    var moving = true
 
     var body: some View {
         if let laptop = ClawdAssets.laptop, let waving = ClawdAssets.waving {
-            ClawdLayer(animator: ClawdAnimator(session: session, laptop: laptop, waving: waving))
+            ClawdLayer(animator: ClawdAnimator(session: session, laptop: laptop, waving: waving), moving: moving)
                 .frame(width: ClawdAnimator.size.width, height: ClawdAnimator.size.height)
         } else {
-            DrawnClawdView(phase: session.phase)
+            DrawnClawdView(phase: session.phase, moving: moving)
         }
     }
 }
@@ -23,17 +27,25 @@ struct ClawdView: View {
 /// whole notch: about 6% of a CPU core, against about 1% this way.
 private struct ClawdLayer: NSViewRepresentable {
     let animator: ClawdAnimator
+    let moving: Bool
 
     func makeNSView(context: Context) -> ClawdLayerView { ClawdLayerView(animator: animator) }
-    func updateNSView(_ view: ClawdLayerView, context: Context) { view.animator = animator }
+
+    func updateNSView(_ view: ClawdLayerView, context: Context) {
+        view.moving = moving
+        view.animator = animator
+    }
 }
 
 private final class ClawdLayerView: NSView {
     var animator: ClawdAnimator { didSet { showFrame() } }
+    var moving = true
     private let sprite = CALayer()
     /// Two "z"s drifting up and fading from beside the head while Clawd dozes, half a cycle apart.
     private let zs = [CALayer(), CALayer()]
     private var timer: Timer?
+    /// What's on show, so a frame that looks the same isn't sent to the screen again.
+    private var shown: (image: CGImage?, frame: CGRect)?
 
     init(animator: ClawdAnimator) {
         self.animator = animator
@@ -64,38 +76,46 @@ private final class ClawdLayerView: NSView {
         showFrame()
     }
 
-    /// Shows the frame for now and comes back when the picture changes; stops while out of a window.
+    /// Shows the frame for now and comes back when the picture changes; stops while out of a window, and
+    /// while he isn't `moving`.
     private func showFrame() {
         timer?.invalidate()
         timer = nil
         guard window != nil else { return }
         let frame = animator.frame(at: Date())
         let sheet = frame.sheet
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        sprite.contents = SpriteImages.image(sheet, frame.index, mirrored: frame.mirrored, decals: frame.decals)
+        let image = SpriteImages.image(sheet, frame.index, mirrored: frame.mirrored, decals: frame.decals)
         // The sheet's anchor on Clawd's feet; props may make the picture bigger than the sheet.
         let feet = ClawdAnimator.feet
         let box = SpriteImages.bounds(sheet, frame.decals)
         let left = frame.mirrored
             ? feet.x + sheet.anchor.x - CGFloat(box.width + box.minX)
             : feet.x - sheet.anchor.x + CGFloat(box.minX)
-        sprite.frame = CGRect(x: left + frame.offsetX,
-                              y: feet.y - sheet.anchor.y + CGFloat(box.minY) + frame.offsetY,
-                              width: CGFloat(box.width), height: CGFloat(box.height))
-        // Beside his head, or from above a book on it.
-        let zStart = frame.decals.isEmpty ? feet.y - 14 : sprite.frame.minY - 5
-        for (z, offset) in zip(zs, [0.0, 0.5]) {
-            z.isHidden = frame.dozing == nil
-            guard let dozing = frame.dozing else { continue }
-            let p = (dozing / 2.6 + offset).truncatingRemainder(dividingBy: 1)
-            z.position = CGPoint(x: feet.x + 4 + p * 4, y: zStart - p * 12)
-            z.opacity = Float(0.75 * (1 - p))
-        }
-        CATransaction.commit()
+        let rect = CGRect(x: left + frame.offsetX, y: feet.y - sheet.anchor.y + CGFloat(box.minY) + frame.offsetY,
+                          width: CGFloat(box.width), height: CGFloat(box.height))
 
-        let delay = 1 / min(16, max(1, frame.rate))
+        // The same picture in the same place (he stands still, or a sheet holds a frame) needs no new one.
+        if frame.dozing != nil || shown?.image !== image || shown?.frame != rect {
+            shown = (image, rect)
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            sprite.contents = image
+            sprite.frame = rect
+            // Beside his head, or from above a book on it.
+            let zStart = frame.decals.isEmpty ? feet.y - 14 : rect.minY - 5
+            for (z, offset) in zip(zs, [0.0, 0.5]) {
+                z.isHidden = frame.dozing == nil
+                guard let dozing = frame.dozing else { continue }
+                let p = (dozing / 2.6 + offset).truncatingRemainder(dividingBy: 1)
+                z.position = CGPoint(x: feet.x + 4 + p * 4, y: zStart - p * 12)
+                z.opacity = Float(0.75 * (1 - p))
+            }
+            CATransaction.commit()
+        }
+
+        guard moving else { return }
+        // Up to 16 times a second, and as seldom as once every 5 seconds while he stands still.
+        let delay = 1 / min(16, max(0.2, frame.rate))
         let next = Timer(timeInterval: delay, repeats: false) { [weak self] _ in self?.showFrame() }
         next.tolerance = delay / 10  // lets macOS bundle the wakeup with others
         RunLoop.main.add(next, forMode: .common)
