@@ -146,6 +146,10 @@ struct ClawdAnimator {
             return looking.frame(t.truncatingRemainder(dividingBy: looking.duration))
         case .compacting:
             guard let box = Self.compacting else { return Frame(laptop, typingLoop.looped(at: t)) }
+            if previous != .compacting, let aside = Self.turnAside {
+                if t < aside.duration { return Frame(aside, at: t) }
+                t -= aside.duration
+            }
             return box.frame(t.truncatingRemainder(dividingBy: box.duration))
         case .limited:
             if previous != nil, let hourglass = Self.rateLimit, t < hourglass.duration { return hourglass.frame(t) }
@@ -169,6 +173,7 @@ struct ClawdAnimator {
         switch motion {
         case .typing: return closeLaptop
         case .desktop: return ClawdAssets.desktop.map { Clip(sheet: $0, frames: 76...87, fps: 16) }
+        case .searching, .compacting: return Self.turnBack  // turned aside: back to you
         default: return nil
         }
     }
@@ -485,22 +490,29 @@ struct ClawdAnimator {
             }
         }
 
-        // A mug of coffee from behind his back: steam curls up from it, and twice he takes a sip, eyes shut in
-        // a smile.
-        let coffee = ClawdAssets.pointing.map { sheet in
+        // A mug of coffee from behind his back: he turns aside with it, like at the laptop, steam curls up
+        // from it, and twice he takes a sip, eyes shut in a smile; then turns back to put it away. Turned
+        // (Turning 8) his hand is at x 22, y 5–8; a row lower as he starts to turn (4), a row higher once
+        // round (5).
+        let coffee = ClawdAssets.pointing.flatMap { sheet in ClawdAssets.turning.map { turning in
             let (take, putBack) = handHeld(sheet, [Decal(Props.mug, 0, -1)])
+            func turn(_ frames: [Int]) -> Pastime {
+                Pastime(duration: Double(frames.count) / 12) { t in
+                    let index = frames[min(frames.count - 1, Int(t * 12))]
+                    let mug = index == 4 ? Decal(Props.mug, 24, 5) : Decal(Props.mug, 23, 3)
+                    return Frame(turning, index, rate: 12, decals: [mug])
+                }
+            }
             let drinking = Pastime(duration: 8) { t in
                 let sip = (1.6..<3.0).contains(t) || (5.0..<6.4).contains(t)
                 let decals = sip
-                    ? [Decal(Props.mug, 23, 6), Decal(Props.happyEyes, 5, 7)] + steam(t, x: 26, y: 5)
-                    : [Decal(Props.mug, 24, 8)] + steam(t, x: 27, y: 7)
-                return Frame(sheet, 0, rate: 12, decals: decals)
+                    ? [Decal(Props.mug, 22, 2), Decal(Props.happyEyesTurned, 8, 3)] + steam(t, x: 25, y: 1)
+                    : [Decal(Props.mug, 23, 4)] + steam(t, x: 26, y: 3)
+                return Frame(turning, 8, rate: 12, decals: decals)
             }
-            return Pastime.sequence([take, drinking, putBack])!
-        }
+            return Pastime.sequence([take, turn([4, 5]), drinking, turn([5, 4]), putBack])!
+        } }
 
-        // Headphones from behind his back, over his head: on they go, and he nods to the beat with his eyes
-        // shut while notes float off.
         let music = ClawdAssets.pointing.map { sheet in
             let phones = Props.headphones
             let (take, putBack) = headgear(sheet, phones, x: 1, folded: (Props.headphonesFolded, 5), tucked: 7, raising: 0, overhead: -1, lowering: -1, worn: 3)

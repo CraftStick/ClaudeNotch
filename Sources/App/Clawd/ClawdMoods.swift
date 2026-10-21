@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// How Clawd takes what happens at work, beyond typing and waving: packing papers into a box while
@@ -8,64 +9,90 @@ import Foundation
 extension ClawdAnimator {
     // MARK: Motions
 
+    /// Turned to what's beside him, the way he sits at the laptop: three-quarter, his back in shadow
+    /// (Turning 6–10). His body x 4–19 (in shadow x 4–6) from y 1 down to the ground at y 16, eyes at
+    /// x 9–10 and 17–18, y 3–4, arms at y 5–8 out to x 0 and x 22.
+    static func turned(rate: Double, offsetX: CGFloat = 0, offsetY: CGFloat = 0, decals: [Decal]) -> Frame? {
+        ClawdAssets.turning.map { Frame($0, 8, rate: rate, offsetX: offsetX, offsetY: offsetY, decals: decals) }
+    }
+
+    /// Turning from you to what's beside him, and back.
+    static let turnAside = ClawdAssets.turning.map { Clip(sheet: $0, frames: [4, 5], fps: 12) }
+    static let turnBack = ClawdAssets.turning.map { Clip(sheet: $0, frames: [5, 4, 0], fps: 12) }
+
     /// Compacting: two sheets of paper tumble in an arc from his hand into the box beside him, which he
     /// watches; the lid flaps shut with a puff of dust and he gives it a satisfied squash. Loops while
     /// Claude compacts.
-    static let compacting: Pastime? = ClawdAssets.pointing.map { sheet in
+    static let compacting: Pastime? = ClawdAssets.turning.map { _ in
         Pastime(duration: 3.2) { t in
             var decals: [Decal] = []
             let shut = (1.55..<3.0).contains(t)
-            decals.append(Decal(shut ? Props.boxShut : Props.box, 25, 13))
-            // Each sheet: from his hand (21, 9) up over his shoulder and down into the box (28, 14).
+            decals.append(Decal(shut ? Props.boxShut : Props.box, 25, 9))
+            // Each sheet: from his hand (23, 5) up over his shoulder and down into the box (28, 10).
             for start in [0.0, 0.55] where (start..<(start + 0.9)).contains(t) {
                 let p = (t - start) / 0.9
-                let x = 21 + Int((28 - 21) * p)
-                let y = 9 - Int(4 * p * (1 - p) * 12) + Int(5 * p)
+                let x = 23 + Int((28 - 23) * p)
+                let y = 5 - Int(4 * p * (1 - p) * 10) + Int(5 * p)
                 decals.append(Decal(Int(t / 0.15) % 2 == 0 ? Props.paper : Props.paperTumbling, x, y))
             }
             // Dust out from under the lid as it shuts, spreading and fading.
-            if (1.6..<1.85).contains(t) { decals += [Decal(Props.puff, 23, 18), Decal(Props.puff, 35, 18)] }
-            if (1.85..<2.2).contains(t) { decals += [Decal(Props.puffWide, 21, 17), Decal(Props.puffWide, 35, 17)] }
+            if (1.6..<1.85).contains(t) { decals += [Decal(Props.puff, 23, 14), Decal(Props.puff, 35, 14)] }
+            if (1.85..<2.2).contains(t) { decals += [Decal(Props.puffWide, 21, 13), Decal(Props.puffWide, 35, 13)] }
             let squash = (1.6..<1.95).contains(t)
             if squash {
-                decals.append(Decal(Props.happyEyes, 5, 7))
+                decals.append(Decal(Props.happyEyesTurned, 8, 3))
             } else if t < 1.55 {
-                decals.append(Decal(Props.eyesAside, 6, 7))  // watching his papers go in
+                decals.append(Decal(Props.eyesDownTurned, 9, 3))  // watching his papers go in
             }
-            return Frame(sheet, 0, rate: 12, offsetY: squash ? 1 : 0, decals: decals)
+            return turned(rate: 12, offsetY: squash ? 1 : 0, decals: decals)!
         }
     }
 
-    /// A rate limit: he stands by an hourglass, eyes on it, while its sand runs down; once it's all
-    /// through he blinks at you.
-    static let rateLimit: Pastime? = ClawdAssets.pointing.map { sheet in
-        Pastime(duration: 8) { t in
-            let running = t < 7
-            let level = running ? Int(t / 7 * 9) : 9
-            var decals = [Decal(Props.hourglass(level, running: running && Int(t * 8) % 2 == 0), 25, 10)]
-            let blink = t.truncatingRemainder(dividingBy: 2.6) > 2.45 || (7.3..<7.45).contains(t)
-            decals.append(blink ? Decal(Props.closedEyes, 5, 7) : Decal(Props.eyesAside, 6, 7))
-            if !running, !blink { decals.removeLast() }  // done: back to looking at you
-            return Frame(sheet, 0, rate: 8, decals: decals)
+    /// A rate limit: he turns to an hourglass beside him, eyes on it, while its sand runs down; once it's
+    /// all through he blinks and turns back to you.
+    static let rateLimit: Pastime? = turnAside.flatMap { aside in turnBack.map { back in
+        Pastime(duration: aside.duration + 8 + back.duration) { t in
+            let glass = { (level: Int, running: Bool) in Decal(Props.hourglass(level, running: running), 25, 6) }
+            if t < aside.duration { return Frame(aside, at: t) }
+            let u = t - aside.duration
+            guard u < 8 else {
+                var frame = Frame(back, at: u - 8)
+                frame.decals = [glass(9, false)]
+                return frame
+            }
+            let running = u < 7
+            let level = running ? Int(u / 7 * 9) : 9
+            var decals = [glass(level, running && Int(u * 8) % 2 == 0)]
+            let blink = u.truncatingRemainder(dividingBy: 2.6) > 2.45 || (7.3..<7.45).contains(u)
+            decals.append(blink ? Decal(Props.closedEyesTurned, 9, 3) : Decal(Props.eyesDownTurned, 9, 3))
+            if !running, !blink { decals.removeLast() }  // done: back to looking straight ahead
+            return turned(rate: 8, decals: decals)!
         }
-    }
+    } }
 
-    /// Searching (code, files, the web): a deerstalker drops onto his head and he peers through a
-    /// magnifying glass with one eye narrowed, moving it about and edging along as he looks. Loops.
-    static let searching: Pastime? = ClawdAssets.pointing.map { sheet in
+    /// Searching (code, files, the web): in a deerstalker, turned aside, he peers through a magnifying
+    /// glass with one eye narrowed, moving it about and edging along as he looks. Loops.
+    static let searching: Pastime? = ClawdAssets.turning.map { _ in
         Pastime(duration: 2.4) { t in
-            let spots = [(18, 3), (19, 3), (19, 4), (18, 4)]
+            let spots = [(19, -1), (20, -1), (20, 0), (19, 0)]
             let spot = spots[Int(t / 0.6) % spots.count]
-            return Frame(sheet, 0, rate: 8, offsetX: t < 1.2 ? 0 : 1,
-                         decals: [Decal(Props.deerstalker, 2, -2), Decal(Props.squint, 16, 7), Decal(Props.magnifier, spot.0, spot.1)])
+            return turned(rate: 8, offsetX: t < 1.2 ? 0 : 1,
+                          decals: [Decal(Props.deerstalker, 2, -6), Decal(Props.squint, 17, 3), Decal(Props.magnifier, spot.0, spot.1)])!
         }
     }
 
-    /// Putting the hat on, before the first look: down onto his head from above.
+    /// Putting the hat on, before the first look: down onto his head from above as he turns aside.
     static func hatOn(_ t: TimeInterval) -> Frame? {
-        guard t < 0.3, let sheet = ClawdAssets.pointing else { return nil }
+        guard t < 0.3, let aside = turnAside else { return nil }
         let drop = Int((1 - t / 0.3) * 6)
-        return Frame(sheet, 0, rate: 16, decals: [Decal(Props.deerstalker, 2, -2 - drop)])
+        let hat = Decal(Props.deerstalker, 2, -6 - drop)
+        guard t >= aside.duration else {
+            // Facing you, his head's top row is where it is when he's turned.
+            var frame = Frame(aside, at: t)
+            frame.decals = [hat]
+            return frame
+        }
+        return turned(rate: 16, decals: [hat])
     }
 
     /// Waiting for you a long while: after a minute he looks around for you between waves; after five
@@ -109,13 +136,13 @@ extension ClawdAnimator {
         }
         // Pushed: with a launch button in his hand he presses it, the rocket beside him lights up, shakes
         // in a spray of sparks and smoke and shoots off, his eyes following it up; then he's delighted.
-        all[.rocket] = ClawdAssets.pointing.flatMap { sheet in
+        all[.rocket] = turnAside.flatMap { aside in
             let launch = Pastime(duration: 2.4) { t in
                 var decals: [Decal] = []
                 let lit = t >= 0.45
                 let lift = t < 1.0 ? 0 : Int(pow((t - 1.0) * 5, 2))
                 let shake = lit && lift == 0 ? (Int(t * 20) % 2 == 0 ? 1 : 0) : 0
-                let y = 6 - lift
+                let y = 2 - lift
                 decals.append(Decal(Props.rocket, 27 + shake, y))
                 if lit {
                     let flicker = Int(t * 14) % 2 == 0
@@ -125,19 +152,24 @@ extension ClawdAnimator {
                     for _ in 0..<5 {
                         let sparkY = y + 12 + Int.random(in: 0...4, using: &random)
                         let sparkX = 28 + Int.random(in: 0...6, using: &random) + shake
-                        if sparkY <= 20 { decals.append(Decal(Props.spark, sparkX, sparkY)) }  // not under the ground
+                        if sparkY <= 16 { decals.append(Decal(Props.spark, sparkX, sparkY)) }  // not under the ground
                     }
                 }
                 // Smoke at the pad, spreading out as it goes.
-                if (0.5..<1.2).contains(t) { decals += [Decal(Props.puff, 26, 18), Decal(Props.puff, 34, 18)] }
-                if (1.2..<1.9).contains(t) { decals += [Decal(Props.puffWide, 24, 17), Decal(Props.puffWide, 34, 17)] }
+                if (0.5..<1.2).contains(t) { decals += [Decal(Props.puff, 26, 14), Decal(Props.puff, 34, 14)] }
+                if (1.2..<1.9).contains(t) { decals += [Decal(Props.puffWide, 24, 13), Decal(Props.puffWide, 34, 13)] }
                 let pressing = (0.4..<0.65).contains(t)
-                decals.append(Decal(pressing || lit ? Props.remotePressed : Props.remote, 21, 9))
-                decals.append(Decal(t < 1.0 ? Props.eyesAside : Props.eyesUp, 6, 7))
-                return Frame(sheet, 0, rate: 14, offsetY: pressing ? 1 : 0, decals: decals)
+                decals.append(Decal(pressing || lit ? Props.remotePressed : Props.remote, 21, 5))
+                if t >= 1.0 { decals.append(Decal(Props.eyesUpTurned, 9, 2)) }
+                return turned(rate: 14, offsetY: pressing ? 1 : 0, decals: decals)!
+            }
+            let turnIn = Pastime(duration: aside.duration) { t in
+                var frame = Frame(aside, at: t)
+                frame.decals = [Decal(Props.rocket, 27, 2)]
+                return frame
             }
             let joy = ClawdAssets.excited.flatMap { Pastime([Clip(sheet: $0, frames: 2...21, fps: 14)]) }
-            return Pastime.sequence([launch, joy])
+            return Pastime.sequence([turnIn, launch, joy])
         }
         return all.compactMapValues { $0 }
     }()

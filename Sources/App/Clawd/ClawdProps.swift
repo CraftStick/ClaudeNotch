@@ -232,18 +232,40 @@ enum Props {
         "......l.l........l.l......",
     ], ["B": 0x2f_5a_a8_ff, "C": 0xf3_e3_c4_ff, "D": 0x1e_3c_78_ff, "l": 0xc8_cc_d2_ff])
 
-    // MARK: Moods (on Pointing frame 0 too, standing; the ground is y 20)
+    // MARK: Turned aside (Turning frame 8): eyes at x 9–10 and 17–18, y 3–4.
+
+    /// Eyes shut in a smile, "^ ^": at (8, 3).
+    static let happyEyesTurned = PixelArt("happyEyesTurned", [
+        "bxxb....bxxb",
+        "xbbx....xbbx",
+    ], ["b": body, "x": eye])
+
+    /// Eyes shut, "— —": at (9, 3).
+    static let closedEyesTurned = PixelArt("closedEyesTurned", [
+        "bb......bb",
+        "xx......xx",
+    ], ["b": body, "x": eye])
+
+    /// Eyes down, on something on the ground beside him: at (9, 3).
+    static let eyesDownTurned = PixelArt("eyesDownTurned", [
+        "bb......bb",
+        "xx......xx",
+        "xx......xx",
+    ], ["b": body, "x": eye])
+
+    /// Eyes up, after something rising beside him: at (9, 2).
+    static let eyesUpTurned = PixelArt("eyesUpTurned", [
+        "xx......xx",
+        "xx......xx",
+        "bb......bb",
+    ], ["b": body, "x": eye])
+
+    // MARK: Moods (the eyes on Pointing frame 0, standing; the rest beside him turned, on the ground at y 16)
 
     /// His eyes turned up, at something above him: at (6, 7).
     static let eyesUp = PixelArt("eyesUp", [
         "xx........xx",
         "bb........bb",
-    ], ["b": body, "x": eye])
-
-    /// His eyes turned aside, at something on the ground beside him: at (6, 7).
-    static let eyesAside = PixelArt("eyesAside", [
-        "bxx.......bxx",
-        "bxx.......bxx",
     ], ["b": body, "x": eye])
 
     /// A drop of sweat running down the back of his head while the context fills up.
@@ -258,27 +280,27 @@ enum Props {
         "B": 0xc9_96_5b_ff, "b": 0xd9_a8_6a_ff, "d": 0x9c_68_36_ff, "k": 0x4a_30_18_ff, "F": 0xe0_b4_78_ff, "t": 0xec_dc_b4_ff,
     ]
 
-    /// An open cardboard box on the ground beside him, his papers going into it: at (25, 13).
+    /// An open cardboard box on the ground beside him, his papers going into it: at (25, 9).
     static let box = PixelArt("box", [
         "F.........F",
         ".F.......F.",
-        "bkkkkkkkkkd",
-        "bBBBBBBBBBd",
-        "bBBBttBBBBd",
-        "bBBBBBBBBBd",
-        "bBBBBBBBBBd",
+        "dkkkkkkkkkb",
+        "dBBBBBBBBBb",
+        "dBBBttBBBBb",
+        "dBBBBBBBBBb",
+        "dBBBBBBBBBb",
         "ddddddddddd",
     ], cardboard)
 
-    /// The box shut with them in it: at (25, 13).
+    /// The box shut with them in it: at (25, 9).
     static let boxShut = PixelArt("boxShut", [
         "...........",
         "...........",
         "FFFFFFFFFFF",
-        "bBBBBttBBBd",
-        "bBBBttBBBBd",
-        "bBBBBBBBBBd",
-        "bBBBBBBBBBd",
+        "dBBBBttBBBb",
+        "dBBBttBBBBb",
+        "dBBBBBBBBBb",
+        "dBBBBBBBBBb",
         "ddddddddddd",
     ], cardboard)
 
@@ -312,7 +334,7 @@ enum Props {
     ].map { String($0.reversed()) }, ["q": 0xfa_f7_ef_ff, "Q": 0xd8_d2_c4_ff])
 
     /// An hourglass in a wooden frame beside him, `level` of its 9 grains of sand run down, a stream
-    /// through the neck while they fall: at (25, 10).
+    /// through the neck while they fall: at (25, 6).
     static func hourglass(_ level: Int, running: Bool) -> PixelArt {
         let level = max(0, min(9, level))
         var rows = ["WWWWWWWWW", "pgggggggp", "pg.....gp", "p.g...g.p", "p..g.g..p", "p...g...p",
@@ -328,23 +350,24 @@ enum Props {
         for (i, cell) in top.enumerated() where i >= level { put(cell.0, cell.1, "s") }
         for (i, cell) in bottom.enumerated() where i < level { put(cell.0, cell.1, "s") }
         if running, level < 9 { put(5, 4, "s") }
+        rows = rows.map { $0.first == "p" ? "q" + $0.dropFirst() : $0 }  // the post at the back in shadow
         return PixelArt("hourglass\(level)\(running ? "r" : "")", rows,
-                        ["W": 0x8f_55_20_ff, "p": 0xb8_74_2e_ff, "g": 0xc4_e0_ec_ff, "s": 0xf1_c8_77_ff])
+                        ["W": 0x8f_55_20_ff, "p": 0xb8_74_2e_ff, "q": 0x9a_5e_24_ff, "g": 0xc4_e0_ec_ff, "s": 0xf1_c8_77_ff])
     }
 
-    /// A rocket, white with a blue nose and fins and a porthole, standing beside him: at (27, 6), its
-    /// nozzle on y 16.
+    /// A rocket, white with a blue nose and fins and a porthole, standing beside him: at (27, 2), its
+    /// nozzle on y 12.
     static let rocket = PixelArt("rocket", [
         "....n....",
         "...nnn...",
-        "..nNnnn..",
-        "..wwwws..",
+        "..nnnNn..",
+        "..swwww..",
         "..wpppw..",
         "..wpLpw..",
         "..wpppw..",
-        "..wwwws..",
-        "f.wwwws.f",
-        "ffwwwwsff",
+        "..swwww..",
+        "f.swwww.f",
+        "ffswwwwff",
         "ff.kkk.ff",
     ], ["n": 0x3a_64_b8_ff, "N": 0x7a_a4_e8_ff, "w": 0xf6_f6_f2_ff, "s": 0xc8_cc_d4_ff, "p": 0x2c_4c_94_ff,
         "L": 0xc8_e8_ff_ff, "f": 0x2c_4c_94_ff, "k": 0x2a_2a_2e_ff])
@@ -353,17 +376,17 @@ enum Props {
     static let flameLong = PixelArt("flameLong", ["yYy", "yYy", ".y.", ".o."], ["y": 0xff_d0_4a_ff, "Y": 0xff_f6_c8_ff, "o": 0xf5_8a_2a_ff])
     static let spark = PixelArt("spark", ["y"], ["y": 0xff_d0_4a_ff])
 
-    /// The launch button in his hand: at (21, 9); pressed, the red button down and lit.
+    /// The launch button in his hand: at (21, 5); pressed, the red button down and lit.
     static let remote = PixelArt("remote", ["..r..", "kkkkk", "kKKKk"], ["r": 0xd8_3a_2a_ff, "k": 0x26_26_2a_ff, "K": 0x3c_3c_44_ff])
     static let remotePressed = PixelArt("remotePressed", [".....", "kkRkk", "kKKKk"], ["R": 0xff_5a_3a_ff, "k": 0x26_26_2a_ff, "K": 0x3c_3c_44_ff])
 
-    // MARK: Searching (Pointing frame 0)
+    // MARK: Searching (turned, Turning frame 8)
 
     private static let tweed: [Character: UInt32] = [
         "o": 0x2e_26_22_ff, "h": 0x7a_6a_5e_ff, "H": 0x5e_50_48_ff, "l": 0x94_84_76_ff, "b": 0x6a_5a_4e_ff,
     ]
 
-    /// A deerstalker, its brim on the top of his head, ear flaps tied up on top: at (2, -2).
+    /// A deerstalker, its brim on the top of his head, ear flaps tied up on top: at (2, -6).
     static let deerstalker = PixelArt("deerstalker", [
         "......oo....oo......",
         ".......oooooo.......",
@@ -376,21 +399,21 @@ enum Props {
     ], tweed)
 
     /// A big magnifying glass held up beside his narrowed eye, a glint on the glass, its handle down to
-    /// his hand: at (18, 3).
+    /// his hand: at (19, -1).
     static let magnifier = PixelArt("magnifier", [
         "..kkkk..",
-        ".kwwggk.",
-        "kwwgggGk",
-        "kwggggGk",
-        "kgggggGk",
-        "kggggGGk",
+        ".kggwwk.",
+        "kGgggwwk",
+        "kGggggwk",
+        "kGgggggk",
+        "kGGggggk",
         ".kGGGGk.",
         "..kkkk..",
         "...hh...",
         "...hh...",
-        "....hh..",
+        "..hh....",
     ], ["k": 0x26_26_2a_ff, "w": 0xff_ff_ff_ff, "g": 0xd8_e2_e8_ff, "G": 0xa8_b6_c0_ff, "h": 0x5a_3a_22_ff])
 
-    /// The eye behind the glass narrowed to a slit: at (16, 7).
+    /// The eye behind the glass narrowed to a slit: at (17, 3).
     static let squint = PixelArt("squint", ["bb", "xx"], ["b": body, "x": eye])
 }
