@@ -471,16 +471,30 @@ final class Store: ObservableObject {
             commit(s, expandFor: .infinity)
 
         case "PreCompact":
-            // Only mid-turn: a manual /compact between turns isn't Claude at work.
-            guard known, s.phase.isActive else { return }
+            // Mid-turn or a /compact of your own: either way Claude is busy summarising, so it shows.
+            if !s.phase.isActive {
+                s.startTurn(at: now)
+                s.compactingAlone = true
+                s.phase = .thinking
+            }
             s.activity = .compacting
             commit(s, expandFor: nil)
 
         case "PostCompact":
-            // Done compacting: back to work, rather than "Compacting" until the next tool.
-            guard known, s.phase.isActive, s.activity == .compacting else { return }
-            s.activity = s.currentTool ?? .thinking(about: s.thought)
-            commit(s, expandFor: nil)
+            guard known, s.activity == .compacting else { return }
+            if s.compactingAlone {
+                // Your own /compact: back to rest, with what it took.
+                s.compactingAlone = false
+                s.phase = .done
+                s.turnEnd = now
+                s.activity = Activity(symbol: "archivebox.fill", title: tr("Контекст сжат", "Context compacted"),
+                                      detail: summary(s, until: now))
+                commit(s, expandFor: 3)
+            } else {
+                // Done compacting: back to work, rather than "Compacting" until the next tool.
+                s.activity = s.currentTool ?? .thinking(about: s.thought)
+                commit(s, expandFor: nil)
+            }
 
         case "Stop":
             dropPrompts(for: id)

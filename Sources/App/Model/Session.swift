@@ -114,6 +114,8 @@ struct Session: Equatable {
     var failStreak = 0
     /// The turn ended at the rate limit.
     var rateLimited = false
+    /// A /compact you ran between turns: when it's done, the session is done again rather than at work.
+    var compactingAlone = false
     /// When the session last made a sound: a question comes as PreToolUse and PermissionRequest at
     /// once, and should sound once.
     var lastChime = Date.distantPast
@@ -252,6 +254,7 @@ struct Session: Equatable {
         turnOutputTokens = 0
         failStreak = 0
         rateLimited = false
+        compactingAlone = false
         agents.removeAll { $0.finished != nil }
     }
 }

@@ -213,6 +213,16 @@ struct StoreTests {
         #expect(session?.rateLimited == false)
     }
 
+    @Test func aCompactOfYourOwnShowsAndEndsAtRest() {
+        send("PreCompact", ["trigger": "manual"])
+        #expect(session?.phase == .thinking)
+        #expect(session?.desiredMotion(at: Date()) == .compacting)
+        send("SessionStart", ["source": "compact"])
+        send("PostCompact", ["trigger": "manual"])
+        #expect(session?.phase == .done)
+        #expect(session?.compactingAlone == false)
+    }
+
     @Test func editsAddUpTheirLines() {
         send("UserPromptSubmit", ["prompt": "Edit"])
         for _ in 0..<2 {
