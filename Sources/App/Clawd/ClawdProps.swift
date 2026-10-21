@@ -37,15 +37,25 @@ struct PixelArt: Hashable {
 /// that sheet's own pixels and orientation (the notch mirrors it along with him). It may reach outside
 /// the sheet: a hat above it, a frying pan beside it.
 struct Decal: Hashable {
+    /// In front of him; behind him, showing only where he isn't; or cutting him away where the art has
+    /// pixels, for an arm that's behind his back.
+    enum Layer: Hashable { case front, behind, cut }
+
     let art: PixelArt
     let x: Int
     let y: Int
+    let layer: Layer
 
-    init(_ art: PixelArt, _ x: Int, _ y: Int) {
+    init(_ art: PixelArt, _ x: Int, _ y: Int, _ layer: Layer = .front) {
         self.art = art
         self.x = x
         self.y = y
+        self.layer = layer
     }
+
+    func moved(_ dx: Int, _ dy: Int) -> Decal { Decal(art, x + dx, y + dy, layer) }
+
+    func on(_ layer: Layer) -> Decal { Decal(art, x, y, layer) }
 }
 
 /// Props for Clawd's pastimes, drawn after pictures of him with a mug of coffee, in headphones, as a
@@ -58,7 +68,10 @@ enum Props {
     // MARK: Standing (Pointing frame 0): head x 4–19 from y 5, eyes at x 6–7 and 16–17, y 7–8,
     // arms at y 9–12 out to x 0 and x 23. Raised (7–14), the hands' top row is y 0.
 
-    /// Held by its handle in the hand at x 23: put at (24, 8), or (23, 6) for a sip; (8, -6) on his raised hands.
+    /// An arm, to cut away while its hand is behind his back: at (0, 9) or (20, 9).
+    static let arm = PixelArt("arm", Array(repeating: "xxxx", count: 4), ["x": 0xff_ff_ff_ff])
+
+    /// Held by its handle in the hand at x 23: put at (24, 8), or (23, 6) for a sip.
     static let mug = PixelArt("mug", [
         "..rkkkkr",
         "hhwwwwww",
@@ -93,6 +106,16 @@ enum Props {
         "CCC................CCC",
     ], ["B": 0x2d_4f_9e_ff, "C": 0x23_40_8a_ff, "H": 0x4f_78_d0_ff])
 
+    /// The headphones folded up, narrow enough to be out of sight behind him: at (5, y).
+    static let headphonesFolded = PixelArt("headphonesFolded", [
+        "..BBBBBBBBBB..",
+        ".B..........B.",
+        "CCC........CCC",
+        "CHC........CHC",
+        "CHC........CHC",
+        "CCC........CCC",
+    ], ["B": 0x2d_4f_9e_ff, "C": 0x23_40_8a_ff, "H": 0x4f_78_d0_ff])
+
     /// "♪" the right way round once mirrored.
     static let note = PixelArt("note", [
         "nn.",
@@ -117,6 +140,20 @@ enum Props {
         "......BBBBBBBBBD....",
         ".....BBBBBBBBBBBD...",
         "DBBBBBBBBBBBBBBBBBBD",
+    ], ["B": 0x2f_4f_9a_ff, "D": 0x1c_32_68_ff, "Y": 0xf2_df_b5_ff])
+
+    /// The wizard's hat held behind him, the brim's tips out of sight: at (2, y) like the hat.
+    static let wizardHatTucked = PixelArt("wizardHatTucked", [
+        "............DD......",
+        "...........BD.......",
+        "..........BBD.......",
+        ".........BBBD.......",
+        "........BBBBBD......",
+        ".......BBBBBBD......",
+        "......YYYYYYYYY.....",
+        "......BBBBBBBBBD....",
+        ".....BBBBBBBBBBBD...",
+        "..DBBBBBBBBBBBBBBD..",
     ], ["B": 0x2f_4f_9a_ff, "D": 0x1c_32_68_ff, "Y": 0xf2_df_b5_ff])
 
     /// From the hand up and away: at (27, 4).

@@ -69,12 +69,12 @@ When a new task comes in, Clawd stops whatever he's doing and gets back to work.
 
 ## Living in the notch for good
 
-Switch on Clawd's menu → **Clawd stays in the notch** and he floats down into it under a parachute, waves, and never walks off: when Claude has nothing going on, he stays in the notch and keeps himself busy. Every few seconds he does something, in no fixed order. Nothing turns up out of thin air: he takes it down from above the screen and puts it back up there when he's done.
+Switch on Clawd's menu → **Clawd stays in the notch** and he floats down into it under a parachute, waves, and never walks off: when Claude has nothing going on, he stays in the notch and keeps himself busy. Every few seconds he does something, in no fixed order. Nothing turns up out of thin air: he takes it out from behind his back and puts it back there when he's done.
 
-- reaches up past the edge of the screen for a mug of coffee: steam curls up, and now and then he takes a sip with his eyes shut in a smile;
-- takes down headphones, puts them on and nods to the beat with his eyes shut, notes floating off;
-- takes down a wizard's hat and puts it on, holds out his hand, and a wand drops into it: sparkles fly off its star, and he winks;
-- takes down a chef's hat and puts it on, a frying pan drops into his hand, and he tosses a pancake;
+- brings a mug of coffee out from behind his back: steam curls up, and now and then he takes a sip with his eyes shut in a smile;
+- lifts headphones from behind his back over his head, puts them on and nods to the beat with his eyes shut, notes floating off;
+- lifts a wizard's hat from behind his back over his head and puts it on, then brings out a wand and holds it up: sparkles fly off its star, and he winks;
+- lifts a chef's hat from behind his back over his head and puts it on, then brings out a frying pan and tosses a pancake;
 - stands thinking with a hand on his chin, dots coming and going in a bubble;
 - looks around, sways, dances (once or twice), does the hula, hops twice, gets excited, breakdances (the whole routine, with a windmill and a headspin);
 - sits down for a nap under an open book and gets back up;

@@ -341,69 +341,99 @@ struct ClawdAnimator {
         let stroll = walkOff == nil || walkBack == nil ? nil : Pastime.sequence([walkOff, away(5), walkBack])
         let skydive = walkOff == nil || parachute == nil ? nil : Pastime.sequence([walkOff, away(3), parachute])
 
-        // Props from ClawdProps.swift, over his own frames. Nothing turns up out of thin air: props come from
-        // out of sight above the screen, the notch being at its top edge, and go back there. All of them are
-        // placed on the Pointing sheet: 0 stands (his head's top row at y 5, hands at x 0 and 23, y 9–12), 6
-        // raises his arms, 7–14 hold them up (hands' top row at y 0), 15 brings them down to his head (y 1),
-        // 16 squashes him as they come down to his sides, 17–18 turn him and 24 holds out his near arm.
-
-        // Out of sight: the top row an item of this height needs for all of it to be above the screen's edge,
-        // which is 10 px above the sheet in a 32-point notch and a few more in a taller one.
-        func hidden(_ height: Int) -> Int { -16 - height }
+        // Props from ClawdProps.swift, over his own frames. Nothing turns up out of thin air: he takes a prop
+        // out from behind his back, and puts it back there when he's done. All of them are placed on the
+        // Pointing sheet: 0 stands (his head's top row at y 5, his body x 4–19 down to y 16, arms at x 0–3
+        // and 20–23, y 9–12, cut away while a hand is behind his back), 6 raises his arms, 7–14 hold them up
+        // (hands' top row at y 0), 15 brings them down to his head (y 1), 16 squashes him as they come down
+        // to his sides, 17–18 turn him and 24 holds out his near arm.
+        // His arms as far out as `left` and `right` pixels (4 being all of each): the rest is behind his back.
+        func arms(left: Int = 4, right: Int = 4) -> [Decal] {
+            [Decal(Props.arm, -min(4, max(0, left)), 9, .cut), Decal(Props.arm, 20 + min(4, max(0, right)), 9, .cut)]
+        }
         func lerp(_ from: Int, _ to: Int, _ p: Double) -> Int { from + Int((Double(to - from) * min(1, max(0, p))).rounded()) }
-        func moved(_ decals: [Decal], _ dy: Int) -> [Decal] { decals.map { Decal($0.art, $0.x, $0.y + dy) } }
+        func smooth(_ p: Double) -> Double { let p = min(1, max(0, p)); return p * p * (3 - 2 * p) }
+        func moved(_ decals: [Decal], _ dx: Int, _ dy: Int) -> [Decal] { decals.map { $0.moved(dx, dy) } }
 
-        // Reaching up for `art` and taking it down: it comes down into his raised hands at x `x` (its top
-        // row at `overhead`), then he brings it down, to a place in each of the frames in `down`. And the
-        // other way round, putting it back up there.
-        func reach(_ sheet: PixelSheet, _ art: PixelArt, x: Int, overhead: Int,
-                   down: [(Int, Decal)]) -> (take: Pastime, putBack: Pastime) {
-            func armsUp(_ t: TimeInterval, _ y: Int) -> Frame {
-                Frame(sheet, 7 + min(7, Int(t * 12)), rate: 16, decals: [Decal(art, x, y)])
+        // Where his near hand holds things, just past its end at its top row: at his side (0), squashed
+        // while turning (17), turned (18) and with the arm out (24).
+        let grip: [Int: (x: Int, y: Int)] = [0: (24, 9), 17: (23, 12), 18: (25, 8), 24: (27, 8)]
+
+        // A hat or headphones: he puts both hands behind his back, lifts it up from there over his head, which
+        // hides it until it's past, raises his arms to take it and puts it on; and the other way round, back
+        // behind his back. `y` is its top row: `tucked` behind his back, `raising` in his hands as they go
+        // up (6), `overhead` held up (7–14), `lowering` as they come down (15), and `worn` while he stands.
+        // What's wider than him is `folded` while it's behind him, or it would show.
+        func headgear(_ sheet: PixelSheet, _ art: PixelArt, x: Int, folded: (art: PixelArt, x: Int)? = nil, tucked: Int,
+                      raising: Int, overhead: Int, lowering: Int, worn: Int) -> (take: Pastime, putBack: Pastime) {
+            func at(_ y: Int, _ layer: Decal.Layer = .front) -> [Decal] { [Decal(art, x, y, layer)] }
+            let behind = folded ?? (art, x)
+            func behindHim(arms out: Int, lifted p: Double) -> Frame {
+                Frame(sheet, 0, rate: 16, decals: arms(left: out, right: out)
+                    + [Decal(behind.art, behind.x, lerp(tucked, raising + 2, smooth(p)), .behind)])
             }
-            let raise = Pastime(duration: 0.08) { _ in Frame(sheet, 6, rate: 12) }
-            let steps = down.map { index, decal in Pastime(duration: 0.12) { _ in Frame(sheet, index, rate: 12, decals: [decal]) } }
+            let putOn = [
+                Pastime(duration: 0.08) { _ in Frame(sheet, 6, rate: 12, decals: at(raising)) },
+                Pastime(duration: 0.3) { t in Frame(sheet, 7 + min(7, Int(t * 12)), rate: 12, decals: at(overhead)) },
+                Pastime(duration: 0.12) { _ in Frame(sheet, 15, rate: 12, decals: at(lowering)) },
+                Pastime(duration: 0.12) { _ in Frame(sheet, 16, rate: 12, decals: at(worn + 1)) },
+            ]
             let take = Pastime.sequence([
-                raise,
-                // Arms up, and down it comes into his hands, slowing as it gets there.
-                Pastime(duration: 0.6) { t in
-                    let p = min(1, t / 0.45)
-                    return armsUp(t, lerp(hidden(art.height), overhead, 1 - (1 - p) * (1 - p)))
-                },
-            ] + steps)!
-            let putBack = Pastime.sequence(steps.reversed() + [
-                // Arms up, and up it goes, slowly at first.
-                Pastime(duration: 0.6) { t in
-                    let p = max(0, t - 0.15) / 0.45
-                    return armsUp(t, lerp(overhead, hidden(art.height), p * p))
-                },
-                raise,
+                Pastime(duration: 0.2) { t in behindHim(arms: lerp(4, 0, t / 0.2), lifted: 0) },
+                Pastime(duration: 0.15) { _ in behindHim(arms: 0, lifted: 0) },
+                Pastime(duration: 0.45) { t in behindHim(arms: 0, lifted: t / 0.45) },
+            ] + putOn)!
+            let putBack = Pastime.sequence(putOn.reversed() + [
+                Pastime(duration: 0.45) { t in behindHim(arms: 0, lifted: 1 - t / 0.45) },
+                Pastime(duration: 0.1) { _ in behindHim(arms: 0, lifted: 0) },
+                Pastime(duration: 0.2) { t in behindHim(arms: lerp(0, 4, t / 0.2), lifted: 0) },
             ])!
             return (take, putBack)
         }
 
-        // With `hat` on (where it sits while he stands), he turns and holds out his near arm, and `holding`
-        // drops into his hand from above; `act` gives what he holds for `seconds`; then he throws it back up
-        // and turns back.
-        func holdOut(_ sheet: PixelSheet, wearing hat: Decal, _ holding: [Decal], seconds: TimeInterval,
-                     _ act: @escaping (TimeInterval) -> [Decal]) -> Pastime {
-            func frame(_ index: Int, _ decals: [Decal] = []) -> Frame {
-                // The hat sits a pixel lower while he's squashed.
-                Frame(sheet, index, rate: 16, decals: moved([hat], index == 17 ? 1 : 0) + decals)
+        // Something he holds in his near hand, `held` placed as if the hand's grip were at (0, 0): he puts the
+        // hand behind his back and brings it out holding it, his arm coming out as it slides out from behind
+        // him; and later puts it back there. `wearing` stays on him meanwhile.
+        func handHeld(_ sheet: PixelSheet, _ held: [Decal], wearing: [Decal] = []) -> (take: Pastime, putBack: Pastime) {
+            let side = grip[0]!
+            let atSide = moved(held, side.x, side.y)
+            // Behind him, all of it within his body.
+            let dx = 6 - (atSide.map(\.x).min() ?? 0), dy = max(0, 7 - (atSide.map(\.y).min() ?? 0))
+            func emptyHand(out: Int) -> Frame { Frame(sheet, 0, rate: 16, decals: wearing + arms(right: out)) }
+            func sliding(_ p: Double) -> Frame {
+                let ox = lerp(dx, 0, smooth(p)), oy = lerp(dy, 0, smooth(p))
+                // The arm reaches as far as the hand holding it.
+                return Frame(sheet, 0, rate: 16, decals: wearing + arms(right: side.x + ox - 20)
+                    + moved(atSide, ox, oy).map { $0.on(.behind) })
             }
-            // How far up what he holds is out of sight, and how long it takes to fall from there.
-            let away = hidden(0) - (holding.map { $0.y + $0.art.height }.max() ?? 0)
-            let flight = Double(-away) / 60
+            let holding = Pastime(duration: 0.12) { _ in Frame(sheet, 0, rate: 12, decals: wearing + atSide) }
+            let take = Pastime.sequence([
+                Pastime(duration: 0.2) { t in emptyHand(out: lerp(4, 0, t / 0.2)) },
+                Pastime(duration: 0.15) { _ in sliding(0) },
+                Pastime(duration: 0.45) { t in sliding(t / 0.45) },
+                holding,
+            ])!
+            let putBack = Pastime.sequence([
+                holding,
+                Pastime(duration: 0.45) { t in sliding(1 - t / 0.45) },
+                Pastime(duration: 0.1) { _ in sliding(0) },
+                Pastime(duration: 0.2) { t in emptyHand(out: lerp(0, 4, t / 0.2)) },
+            ])!
+            return (take, putBack)
+        }
+
+        // Turning to hold out his near arm with `held` in his hand (placed as for `handHeld`), `act` giving
+        // what he holds out for `seconds`, and turning back. The hat sits a pixel lower while he's squashed.
+        func holdOut(_ sheet: PixelSheet, _ held: [Decal], hat: Decal, seconds: TimeInterval,
+                     _ act: @escaping (TimeInterval) -> [Decal]) -> Pastime {
+            func frame(_ index: Int, rate: Double = 12, _ decals: [Decal]? = nil) -> Frame {
+                let hand = grip[index]!
+                return Frame(sheet, index, rate: rate, decals: [hat.moved(0, index == 17 ? 1 : 0)] + (decals ?? moved(held, hand.x, hand.y)))
+            }
             return Pastime.sequence([
                 Pastime(duration: 0.08) { _ in frame(17) },
                 Pastime(duration: 0.08) { _ in frame(18) },
-                // Down it comes, and his hand gives a little as he catches it.
-                Pastime(duration: flight) { t in frame(24, moved(holding, lerp(away, 0, t / flight))) },
-                Pastime(duration: 0.1) { _ in frame(24, moved(holding, 1)) },
-                Pastime(duration: seconds) { t in frame(24, act(t)) },
-                // A flick of the wrist, and up it goes.
-                Pastime(duration: 0.1) { _ in frame(24, moved(holding, -1)) },
-                Pastime(duration: flight) { t in frame(24, moved(holding, lerp(-1, away, t / flight))) },
+                Pastime(duration: seconds) { t in frame(24, rate: 16, act(t)) },
                 Pastime(duration: 0.08) { _ in frame(18) },
                 Pastime(duration: 0.08) { _ in frame(17) },
             ])!
@@ -418,28 +448,25 @@ struct ClawdAnimator {
             }
         }
 
-        // A mug of coffee from up there, brought down to his side: steam curls up from it, and twice he takes a
-        // sip, eyes shut in a smile.
+        // A mug of coffee from behind his back: steam curls up from it, and twice he takes a sip, eyes shut in
+        // a smile.
         let coffee = ClawdAssets.pointing.map { sheet in
-            let mug = Props.mug
-            let (take, putBack) = reach(sheet, mug, x: 8, overhead: -mug.height,
-                                        down: [(15, Decal(mug, 17, 1 - mug.height)), (16, Decal(mug, 24, 9))])
+            let (take, putBack) = handHeld(sheet, [Decal(Props.mug, 0, -1)])
             let drinking = Pastime(duration: 8) { t in
                 let sip = (1.6..<3.0).contains(t) || (5.0..<6.4).contains(t)
                 let decals = sip
-                    ? [Decal(mug, 23, 6), Decal(Props.happyEyes, 5, 7)] + steam(t, x: 26, y: 5)
-                    : [Decal(mug, 24, 8)] + steam(t, x: 27, y: 7)
+                    ? [Decal(Props.mug, 23, 6), Decal(Props.happyEyes, 5, 7)] + steam(t, x: 26, y: 5)
+                    : [Decal(Props.mug, 24, 8)] + steam(t, x: 27, y: 7)
                 return Frame(sheet, 0, rate: 12, decals: decals)
             }
             return Pastime.sequence([take, drinking, putBack])!
         }
 
-        // Headphones from up there, held by the band: on they go, and he nods to the beat with his eyes shut
-        // while notes float off.
+        // Headphones from behind his back, over his head: on they go, and he nods to the beat with his eyes
+        // shut while notes float off.
         let music = ClawdAssets.pointing.map { sheet in
             let phones = Props.headphones
-            let (take, putBack) = reach(sheet, phones, x: 1, overhead: -1,
-                                        down: [(15, Decal(phones, 1, -1)), (16, Decal(phones, 1, 4))])
+            let (take, putBack) = headgear(sheet, phones, x: 1, folded: (Props.headphonesFolded, 5), tucked: 7, raising: 0, overhead: -1, lowering: -1, worn: 3)
             let listening = Pastime(duration: 9) { t in
                 var decals = [Decal(phones, 1, 3), Decal(Props.closedEyes, 5, 7)]
                 for i in 0..<2 {
@@ -452,15 +479,17 @@ struct ClawdAnimator {
             return Pastime.sequence([take, listening, putBack])!
         }
 
-        // A wizard's hat, and a wand that drops into his hand: sparkles fly off its star, and he winks.
+        // A wizard's hat, then a wand, from behind his back: he holds the wand up, sparkles fly off its star,
+        // and he winks.
         let wizard = ClawdAssets.pointing.map { sheet in
-            let hat = Props.wizardHat
-            let (take, putBack) = reach(sheet, hat, x: 2, overhead: -hat.height,
-                                        down: [(15, Decal(hat, 2, 1 - hat.height)), (16, Decal(hat, 2, -4))])
-            let wand = [Decal(Props.wand, 27, 4), Decal(Props.star, 30, 1)]
+            let hat = Props.wizardHat, worn = Decal(hat, 2, -5)
+            let (hatOn, hatOff) = headgear(sheet, hat, x: 2, folded: (Props.wizardHatTucked, 2), tucked: 6, raising: 2 - hat.height, overhead: -hat.height,
+                                           lowering: 1 - hat.height, worn: worn.y)
+            let wand = [Decal(Props.wand, 0, -4), Decal(Props.star, 3, -7)]
+            let (wandOut, wandAway) = handHeld(sheet, wand, wearing: [worn])
             let spots = [(34, 0), (33, 4), (29, -2), (35, 3), (32, -3), (36, 1)]
-            let magic = holdOut(sheet, wearing: Decal(hat, 2, -5), wand, seconds: 4) { u in
-                var decals = wand
+            let magic = holdOut(sheet, wand, hat: worn, seconds: 4) { u in
+                var decals = moved(wand, grip[24]!.x, grip[24]!.y)
                 for (i, spot) in spots.enumerated() {
                     let phase = (u * 3 + Double(i) * 0.5).truncatingRemainder(dividingBy: 3)
                     if phase < 0.5 {
@@ -472,18 +501,19 @@ struct ClawdAnimator {
                 if (2.0..<2.8).contains(u) { decals.append(Decal(Props.wink, 18, 7)) }
                 return decals
             }
-            return Pastime.sequence([take, magic, putBack])!
+            return Pastime.sequence([hatOn, wandOut, magic, wandAway, hatOff])!
         }
 
-        // A chef's hat, and a frying pan with a pancake in it that drops into his hand: he tosses the
-        // pancake, it turns over in the air and lands.
+        // A chef's hat, then a frying pan with a pancake in it, from behind his back: he tosses the pancake, it
+        // turns over in the air and lands.
         let chef = ClawdAssets.pointing.map { sheet in
-            let hat = Props.chefHat
-            let (take, putBack) = reach(sheet, hat, x: 4, overhead: -hat.height,
-                                        down: [(15, Decal(hat, 4, 1 - hat.height)), (16, Decal(hat, 4, -3))])
-            let pan = [Decal(Props.pan, 27, 8), Decal(Props.pancakeFlat, 32, 7)]
-            let cooking = holdOut(sheet, wearing: Decal(hat, 4, -4), pan, seconds: 3.9) { u in
-                guard u >= 0.3 else { return pan }  // a moment to get a grip
+            let hat = Props.chefHat, worn = Decal(hat, 4, -4)
+            let (hatOn, hatOff) = headgear(sheet, hat, x: 4, tucked: 6, raising: 2 - hat.height, overhead: -hat.height,
+                                           lowering: 1 - hat.height, worn: worn.y)
+            let pan = [Decal(Props.pan, 0, 0), Decal(Props.pancakeFlat, 5, -1)]
+            let (panOut, panAway) = handHeld(sheet, pan, wearing: [worn])
+            let cooking = holdOut(sheet, pan, hat: worn, seconds: 3.9) { u in
+                guard u >= 0.3 else { return moved(pan, grip[24]!.x, grip[24]!.y) }  // a moment to get a grip
                 let toss = (u - 0.3).truncatingRemainder(dividingBy: 1.2)
                 var decals = [Decal(Props.pan, 27, toss < 0.12 ? 7 : 8)]  // the pan jerks up to throw
                 if toss < 0.8 {
@@ -496,7 +526,7 @@ struct ClawdAnimator {
                 }
                 return decals
             }
-            return Pastime.sequence([take, cooking, putBack])!
+            return Pastime.sequence([hatOn, panOut, cooking, panAway, hatOff])!
         }
 
         return [pastime(clip(ClawdAssets.lookingAround, 4...30)), pastime(clip(ClawdAssets.swaying, 4...48)),

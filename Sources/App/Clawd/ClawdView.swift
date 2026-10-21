@@ -120,9 +120,12 @@ private enum SpriteImages {
         return (minX, minY, maxX - minX, maxY - minY)
     }
 
-    /// `mirrored`: facing left, the way Clawd usually stands in the notch. `decals` are drawn over him.
+    /// `mirrored`: facing left, the way Clawd usually stands in the notch. `decals` are drawn over him,
+    /// behind him or cut out of him, as their layer says.
     static func image(_ sheet: PixelSheet, _ index: Int, mirrored: Bool = true, decals: [Decal] = []) -> CGImage? {
-        let key = ("\(sheet.name)#\(index)\(mirrored ? "" : ">")" + decals.map { "|\($0.art.name)@\($0.x),\($0.y)" }.joined()) as NSString
+        let layers: [Decal.Layer: String] = [.front: "", .behind: "<", .cut: "-"]
+        let key = ("\(sheet.name)#\(index)\(mirrored ? "" : ">")"
+            + decals.map { "|\($0.art.name)@\($0.x),\($0.y)\(layers[$0.layer]!)" }.joined()) as NSString
         if let image = cache.object(forKey: key) { return image }
         let box = bounds(sheet, decals)
         var rgba = [UInt8](repeating: 0, count: box.width * box.height * 4)
@@ -140,14 +143,22 @@ private enum SpriteImages {
                 rgba.replaceSubrange(at..<(at + 4), with: colors[Int(v)])
             }
         }
-        for decal in decals {
-            let art = decal.art
-            for y in 0..<art.height {
-                for x in 0..<art.width {
-                    let from = (y * art.width + x) * 4
-                    guard art.rgba[from + 3] > 0 else { continue }
-                    let at = offset(decal.x + x, decal.y + y)
-                    rgba.replaceSubrange(at..<(at + 4), with: art.rgba[from..<(from + 4)])
+        // What's cut away first, so what's behind him shows there; then behind him, only where he isn't;
+        // then in front.
+        for layer in [Decal.Layer.cut, .behind, .front] {
+            for decal in decals where decal.layer == layer {
+                let art = decal.art
+                for y in 0..<art.height {
+                    for x in 0..<art.width {
+                        let from = (y * art.width + x) * 4
+                        guard art.rgba[from + 3] > 0 else { continue }
+                        let at = offset(decal.x + x, decal.y + y)
+                        switch layer {
+                        case .cut: rgba.replaceSubrange(at..<(at + 4), with: [0, 0, 0, 0])
+                        case .behind where rgba[at + 3] > 0: continue
+                        default: rgba.replaceSubrange(at..<(at + 4), with: art.rgba[from..<(from + 4)])
+                        }
+                    }
                 }
             }
         }
