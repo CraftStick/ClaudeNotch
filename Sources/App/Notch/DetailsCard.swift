@@ -119,11 +119,19 @@ struct DetailsCard: View {
                     }
                 }
             }
-            Text(footer)
-                .font(.system(size: 10.5))
-                .foregroundStyle(.white.opacity(0.32))
-                .lineLimit(1)
-                .frame(height: DetailsLayout.footer)
+            HStack(spacing: 5) {
+                Text(footer)
+                    .lineLimit(1)
+                if session.contextTokens > 0 {
+                    ContextRing(fill: contextFill)
+                    Text(tr("\(Int(contextFill * 100))% из ", "\(Int(contextFill * 100))% of ") + tokens(session.contextWindow))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
+            .font(.system(size: 10.5))
+            .foregroundStyle(.white.opacity(0.32))
+            .frame(height: DetailsLayout.footer)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 18)
@@ -147,7 +155,12 @@ struct DetailsCard: View {
         }
     }
 
-    /// Project · actions · lines changed · output tokens · context fill.
+    /// How full the context is, 0…1.
+    private var contextFill: Double {
+        min(1, Double(session.contextTokens) / Double(max(1, session.contextWindow)))
+    }
+
+    /// Project · actions · lines changed · output tokens; the context's ring and fill follow it.
     private var footer: String {
         var parts = [session.project]
         if session.actions > 0 {
@@ -159,11 +172,7 @@ struct DetailsCard: View {
         if session.turnOutputTokens > 0 {
             parts.append(tokens(session.turnOutputTokens) + tr(" ток.", " tokens"))
         }
-        if session.contextTokens > 0 {
-            let percent = min(100, session.contextTokens * 100 / max(1, session.contextWindow))
-            parts.append(tr("контекст \(percent)% из ", "context \(percent)% of ") + tokens(session.contextWindow))
-        }
-        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ") + (session.contextTokens > 0 ? " ·" : "")
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -381,5 +390,22 @@ private struct SessionRow: View {
         case .stopped: return tr("остановлено", "stopped")
         case .failed: return tr("ошибка", "error")
         }
+    }
+}
+
+/// How full the context is, as a ring like the Claude app's: blue, orange once it's nearly full.
+struct ContextRing: View {
+    let fill: Double
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(.white.opacity(0.16), lineWidth: 2)
+            Circle()
+                .trim(from: 0, to: max(0.03, fill))
+                .stroke(fill < 0.8 ? Color(red: 0.24, green: 0.52, blue: 0.96) : Color(red: 0.85, green: 0.47, blue: 0.34),
+                        style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: 10, height: 10)
     }
 }
