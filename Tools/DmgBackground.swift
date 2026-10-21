@@ -8,8 +8,10 @@ struct DmgBackground: View {
     static let size = CGSize(width: 600, height: 380)
     /// Taller than the window by a title bar: Finder may count it in the window's bounds or not.
     static let canvas = CGSize(width: size.width, height: size.height + 28)
-    static let left = CGPoint(x: 160, y: 175)
-    static let right = CGPoint(x: 440, y: 175)
+    /// High enough for all of it to show above Finder's path bar, which takes the bottom of the window when
+    /// it's switched on (View → Show Path Bar).
+    static let left = CGPoint(x: 160, y: 130)
+    static let right = CGPoint(x: 440, y: 130)
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -28,9 +30,9 @@ struct DmgBackground: View {
                     .foregroundStyle(Color(white: 0.45))
             }
             .frame(width: Self.size.width)
-            .position(x: Self.size.width / 2, y: 290)
+            .position(x: Self.size.width / 2, y: 245)
             // Apple hasn't notarized the app: the first launch needs a click in System Settings, and few
-            // people read the release notes. Inside the window's 380 points either way.
+            // people read the release notes.
             VStack(spacing: 3) {
                 Text("Первый запуск: Настройки → Конфиденциальность и безопасность → «Всё равно открыть»")
                     .font(.system(size: 11, weight: .medium))
@@ -42,7 +44,7 @@ struct DmgBackground: View {
             .padding(.horizontal, 14)
             .frame(height: 42)
             .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color(red: 0.85, green: 0.47, blue: 0.34).opacity(0.1)))
-            .position(x: Self.size.width / 2, y: 344)
+            .position(x: Self.size.width / 2, y: 300)
         }
         .frame(width: Self.canvas.width, height: Self.canvas.height)
     }

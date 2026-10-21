@@ -46,8 +46,8 @@ tell application "Finder"
         set icon size of options to 128
         set text size of options to 13
         set background picture of options to file ".background:background.tiff"
-        set position of item "ClaudeNotch.app" of container window to {160, 175}
-        set position of item "Applications" of container window to {440, 175}
+        set position of item "ClaudeNotch.app" of container window to {160, 130}
+        set position of item "Applications" of container window to {440, 130}
         close
         open
         update without registering applications
@@ -60,9 +60,6 @@ EOF
 # Finder writes the layout into .DS_Store a moment after the window closes.
 for _ in {1..20}; do [[ -f "$MOUNT/.DS_Store" ]] && break; sleep 0.5; done
 [[ -f "$MOUNT/.DS_Store" ]] || { echo "Finder saved no layout." >&2; exit 1; }
-# The disk shows the app's icon. Only now: laying the window out, Finder deletes the icon file.
-cp Resources/ClaudeNotch.icns "$MOUNT/.VolumeIcon.icns"
-SetFile -a C "$MOUNT"
 rm -rf "$MOUNT/.fseventsd"
 chmod -Rf go-w "$MOUNT" || true
 sync
