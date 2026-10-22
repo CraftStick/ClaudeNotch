@@ -65,6 +65,8 @@ enum QuickReply {
                                 + String(format: "%.1f s", Date().timeIntervalSince(start) + 0.1))
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: then)
             } else if tries > 0 {
+                // Something else in focus, like the button you last clicked: put the cursor in the message field.
+                if needsTextField, !role.isEmpty, let app { focusMessageField(app.processIdentifier) }
                 whenReady(host, needsTextField: needsTextField, since: start, tries: tries - 1, then: then)
             } else {
                 EventLog.append(app?.bundleIdentifier == host
@@ -75,6 +77,28 @@ enum QuickReply {
     }
 
     private static let textRoles: Set<String> = [kAXTextAreaRole, kAXTextFieldRole, kAXComboBoxRole]
+
+    /// Puts the cursor in the window's message field: its last text area, as the field you write in is
+    /// at the bottom of a chat. Looks a few hundred elements deep at most.
+    private static func focusMessageField(_ pid: pid_t) {
+        let app = AXUIElementCreateApplication(pid)
+        var window: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &window) == .success,
+              let window, CFGetTypeID(window) == AXUIElementGetTypeID() else { return }
+        var queue = [window as! AXUIElement], field: AXUIElement?, seen = 0
+        while !queue.isEmpty, seen < 3000 {
+            let element = queue.removeFirst()
+            seen += 1
+            var role: CFTypeRef?
+            AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
+            if role as? String == kAXTextAreaRole { field = element }
+            var children: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children) == .success {
+                queue += children as? [AXUIElement] ?? []
+            }
+        }
+        if let field { AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue) }
+    }
 
     /// The role of what has the keyboard in the app, "" when it can't be told. An Electron app like
     /// Claude's only tells once asked to, with AXManualAccessibility.
