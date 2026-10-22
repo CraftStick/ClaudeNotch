@@ -21,6 +21,9 @@ And Clawd lives in the notch.
 </tr>
 </table>
 
+<a href="docs/demo.mp4"><img src="docs/demo-poster.png" width="640" alt="The notch showing a new task, with Clawd under a light bulb: click to watch the demo video"></a><br>
+<a href="docs/demo.mp4"><b>▶ Watch the 2-minute demo: every reaction of Clawd's in the notch</b></a>
+
 </div>
 
 ## Install

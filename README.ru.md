@@ -21,6 +21,9 @@
 </tr>
 </table>
 
+<a href="docs/demo.mp4"><img src="docs/demo-poster.png" width="640" alt="Чёлка показывает новую задачу, над Clawd лампочка: нажми, чтобы посмотреть демо-видео"></a><br>
+<a href="docs/demo.mp4"><b>▶ Посмотреть демо на 2 минуты: все реакции Clawd в чёлке</b></a>
+
 </div>
 
 ## Установка
