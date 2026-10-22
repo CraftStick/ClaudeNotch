@@ -89,5 +89,5 @@ Clawd is Anthropic's character, and his sprites aren't in this repository: the a
 
 ## Demo
 
-<a href="docs/demo.mp4"><img src="docs/demo-poster.png" width="640" alt="The notch showing a new task, with Clawd under a light bulb: click to watch the demo video"></a><br>
-<a href="docs/demo.mp4"><b>▶ Watch the 2-minute demo: every reaction of Clawd's in the notch</b></a>
+<img src="docs/demo.gif" width="830" alt="Demo, twice as fast: every reaction of Clawd's in the notch"><br>
+<a href="docs/demo.mp4">Full video, at normal speed</a>
