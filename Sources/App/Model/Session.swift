@@ -55,6 +55,12 @@ struct Activity: Equatable {
     }
 }
 
+/// A button that answers a finished turn: what it says, and what it types into the session.
+struct Reply: Equatable {
+    var label: String
+    var text: String
+}
+
 /// A subagent Claude started with the Task/Agent tool. Its tool calls arrive with the parent's
 /// session id plus an `agent_id`.
 struct SubAgent: Equatable {
@@ -128,6 +134,9 @@ struct Session: Equatable {
     var task = ""
     /// Claude's task list for this turn.
     var tasks = TaskList()
+    /// The answers Claude offered at the end of this turn, as buttons (in the Claude app it offers
+    /// them when it wraps up); none: the usual Continue and Commit.
+    var replies: [Reply] = []
     /// What Claude is thinking about: the gist of its thinking or of what it wrote, and when it wrote
     /// it. The next tool takes it as its reason.
     var thought = ""
@@ -251,6 +260,7 @@ struct Session: Equatable {
         currentTool = nil
         thought = ""
         tasks = TaskList()
+        replies = []
         linesAdded = 0
         linesRemoved = 0
         turnOutputTokens = 0

@@ -462,6 +462,7 @@ final class Store: ObservableObject {
             }
             s.actions += 1
             if TaskList.handles(toolName) { s.tasks.apply(toolName, toolInput, useID: json["tool_use_id"] as? String) }
+            if let replies = Describe.replies(toolName, toolInput) { s.replies = replies }
             let previousTool = s.recentTools.last ?? .distantPast
             s.recentTools = Array((s.recentTools + [now]).suffix(8))
             if toolName == "Task" || toolName == "Agent" {

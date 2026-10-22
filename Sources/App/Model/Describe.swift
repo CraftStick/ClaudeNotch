@@ -222,6 +222,18 @@ enum Describe {
             .replacingOccurrences(of: "&#39;", with: "'").replacingOccurrences(of: "&amp;", with: "&")
     }
 
+    /// The answers Claude offers when it wraps up a turn in the Claude app (its `wrap_up` tool): each
+    /// button's label and the message it sends. Buttons for the app's own actions (commit, open a PR…)
+    /// send no message and are left out. Nil for any other tool.
+    static func replies(_ name: String, _ input: [String: Any]) -> [Reply]? {
+        guard name.hasPrefix("mcp__"), name.hasSuffix("__wrap_up") else { return nil }
+        return (input["actions"] as? [[String: Any]] ?? []).compactMap { action in
+            guard action["action"] == nil, let label = (action["label"] as? String).map(oneLine), !label.isEmpty else { return nil }
+            let message = (action["message"] as? String).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+            return Reply(label: label, text: message.isEmpty ? label : message)
+        }
+    }
+
     /// Tools that stop and wait for the user to answer.
     static func question(_ name: String, _ input: [String: Any]) -> Activity? {
         switch name {

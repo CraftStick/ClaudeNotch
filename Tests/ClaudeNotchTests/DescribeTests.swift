@@ -38,6 +38,20 @@ struct DescribeTests {
         }
     }
 
+    // MARK: - Replies Claude offers
+
+    @Test func theButtonsClaudeOffersBecomeReplies() {
+        let input: [String: Any] = ["recap": "Done.", "ask": "Release it?", "actions": [
+            ["label": "Release 0.1.7", "message": "Release 0.1.7 and update the cask"],
+            ["label": "Not now"],
+            ["action": "commit", "label": "Commit"],
+        ]]
+        #expect(Describe.replies("mcp__ccd_turn__wrap_up", input) == [
+            Reply(label: "Release 0.1.7", text: "Release 0.1.7 and update the cask"), Reply(label: "Not now", text: "Not now")])
+        #expect(Describe.replies("mcp__ccd_turn__wrap_up", ["recap": "Done."]) == [])
+        #expect(Describe.replies("Bash", input) == nil)
+    }
+
     // MARK: - How Clawd takes a prompt
 
     @Test func thanksAndRudenessAreToldApart() {
