@@ -300,7 +300,8 @@ extension ClawdAnimator {
         }
         guard session.phase.isActive, [.typing, .pondering, .desktop, .running, .searching].contains(session.motion) else { return frame }
         if hour < 6, session.motion != .searching, let head = Self.head(frame.sheet, frame.index) {
-            frame.decals.append(Decal(Props.nightcap, head.x, head.y - 4))
+            // Thinking, his bubble is up where the tip would droop.
+            frame.decals.append(Decal(session.motion == .pondering ? Props.nightcapOtherWay : Props.nightcap, head.x, head.y - 4))
         }
         let t = date.timeIntervalSince(session.motionStart)
         let full = session.contextWindow > 0 ? Double(session.contextTokens) / Double(session.contextWindow) : 0

@@ -36,7 +36,7 @@ struct ClawdTests {
                      Props.chefHat, Props.pan, Props.pancakeFlat, Props.pancakeEdge, Props.book, Props.parachute,
                      Props.arm, Props.headphonesFolded, Props.wizardHatTucked, Props.heart, Props.heartFading, Props.smallHeart,
                      Props.blush, Props.squeezedEyes, Props.eyesDown, Props.breath, Props.breathFading, Props.broom,
-                     Props.wideEyes, Props.exclamation, Props.thumbUp, Props.winkShut, Props.nightcap, Props.teaMug]
+                     Props.wideEyes, Props.exclamation, Props.thumbUp, Props.winkShut, Props.nightcap, Props.nightcapOtherWay, Props.teaMug]
         #expect(Set(props.map(\.name)).count == props.count)
         for art in props {
             #expect(art.width > 0 && art.height > 0, "\(art.name)")

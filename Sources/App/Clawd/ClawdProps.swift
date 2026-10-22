@@ -542,6 +542,15 @@ enum Props {
         "wwwwwwwwwwwwwwww",
     ], ["b": 0x3a_4f_9a_ff, "w": 0xf4_f0_e6_ff, "p": 0xf4_f0_e6_ff])
 
+    /// The nightcap with its tip drooping the other way: where his thought bubble is on the side it would.
+    static let nightcapOtherWay = PixelArt("nightcapOtherWay", [
+        "...............p",
+        "...........bbbb.",
+        ".....bbbbbbbb...",
+        ".bbbbbbbbbbbbb..",
+        "wwwwwwwwwwwwwwww",
+    ], ["b": 0x3a_4f_9a_ff, "w": 0xf4_f0_e6_ff, "p": 0xf4_f0_e6_ff])
+
     /// The coffee mug with tea in it instead, its tag hanging over the rim: late at night.
     static let teaMug = PixelArt("teaMug", [
         "..roooor.",
