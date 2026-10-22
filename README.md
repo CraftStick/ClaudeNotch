@@ -64,4 +64,4 @@ Everything stays on your Mac, with no network. The one exception is a check for 
 
 Clawd is Anthropic's character, and his sprites aren't in this repository: the app reads them from the Claude app on your Mac, and draws a simpler Clawd if it isn't there. This project isn't affiliated with or endorsed by Anthropic.
 
-[MIT License](LICENSE)
+[PolyForm Strict License 1.0.0](LICENSE), for every version, 0.1.0 to 0.1.6 included: you may use Claude Notch for any noncommercial purpose, but not share it or make changes or new works based on it.
