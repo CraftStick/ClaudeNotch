@@ -12,6 +12,15 @@ And Clawd lives in the notch.
 
 <img src="docs/notch.gif" width="640" alt="The notch during a task: Clawd gets out his laptop and types, a command runs, Done">
 
+<table>
+<tr>
+<td align="center" valign="top"><img src="docs/clawd/coffee.gif" width="120" alt="Clawd sipping a mug of coffee"><br><b>Coffee</b></td>
+<td align="center" valign="top"><img src="docs/clawd/music.gif" width="120" alt="Clawd nodding along in headphones"><br><b>Music</b></td>
+<td align="center" valign="top"><img src="docs/clawd/wizard.gif" width="120" alt="Clawd as a wizard, sparkles flying off his wand"><br><b>Magic</b></td>
+<td align="center" valign="top"><img src="docs/clawd/chef.gif" width="120" alt="Clawd in a chef's hat tossing a pancake"><br><b>Pancakes</b></td>
+</tr>
+</table>
+
 </div>
 
 ## Install

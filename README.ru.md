@@ -12,6 +12,15 @@
 
 <img src="docs/ru/notch.gif" width="640" alt="Чёлка во время задачи: Clawd достаёт ноутбук, печатает, выполняется команда, «Готово»">
 
+<table>
+<tr>
+<td align="center" valign="top"><img src="docs/clawd/coffee.gif" width="120" alt="Clawd пьёт кофе из кружки"><br><b>Кофе</b></td>
+<td align="center" valign="top"><img src="docs/clawd/music.gif" width="120" alt="Clawd в наушниках кивает в такт"><br><b>Музыка</b></td>
+<td align="center" valign="top"><img src="docs/clawd/wizard.gif" width="120" alt="Clawd-волшебник, с палочки сыплются искры"><br><b>Волшебство</b></td>
+<td align="center" valign="top"><img src="docs/clawd/chef.gif" width="120" alt="Clawd в поварском колпаке подбрасывает блин"><br><b>Блины</b></td>
+</tr>
+</table>
+
 </div>
 
 ## Установка

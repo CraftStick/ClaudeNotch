@@ -88,6 +88,15 @@ When a new task comes in, Clawd stops whatever he's doing and gets back to work.
 
 Switch on **Clawd stays in the notch** in the settings (Clawd's menu → Settings…) and he floats down into it under a parachute, waves, and never walks off: when Claude has nothing going on, he stays in the notch and keeps himself busy. Every few seconds he does something, in no fixed order, and nothing comes back until six other things have gone by. Nothing turns up out of thin air: he takes it out from behind his back and puts it back there when he's done.
 
+<table>
+<tr>
+<td align="center" valign="top"><img src="coffee.gif" width="120" alt="Clawd sipping a mug of coffee"><br><b>Coffee</b></td>
+<td align="center" valign="top"><img src="music.gif" width="120" alt="Clawd nodding along in headphones"><br><b>Music</b></td>
+<td align="center" valign="top"><img src="wizard.gif" width="120" alt="Clawd as a wizard, sparkles flying off his wand"><br><b>Magic</b></td>
+<td align="center" valign="top"><img src="chef.gif" width="120" alt="Clawd in a chef's hat tossing a pancake"><br><b>Pancakes</b></td>
+</tr>
+</table>
+
 - brings a mug of coffee out from behind his back: steam curls up, and now and then he takes a sip with his eyes shut in a smile;
 - lifts headphones from behind his back over his head, puts them on and nods to the beat with his eyes shut, notes floating off;
 - lifts a wizard's hat from behind his back over his head and puts it on, then brings out a wand and holds it up: sparkles fly off its star, and he winks;
