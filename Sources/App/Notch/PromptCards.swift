@@ -179,7 +179,7 @@ private struct ShortcutLabel: View {
     }
 }
 
-private struct NotchButtonStyle: ButtonStyle {
+struct NotchButtonStyle: ButtonStyle {
     enum Kind { case primary, secondary, plain }
     let kind: Kind
 

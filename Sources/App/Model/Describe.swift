@@ -169,7 +169,7 @@ enum Describe {
         func tag(_ name: String) -> String? {
             guard let open = text.range(of: "<\(name)>"),
                   let close = text.range(of: "</\(name)>", range: open.upperBound..<text.endIndex) else { return nil }
-            return String(text[open.upperBound..<close.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            return unescaped(String(text[open.upperBound..<close.lowerBound])).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         if text.contains("<task-notification>") {
             // "Background command "Build the app" completed (exit code 0)": what's in quotes is what it was.
@@ -192,7 +192,15 @@ enum Describe {
         // Reminders go whole; other tags leave their words.
         let plain = text.replacingOccurrences(of: #"<system-reminder>[\s\S]*?</system-reminder>"#, with: " ", options: .regularExpression)
             .replacingOccurrences(of: #"</?[A-Za-z][\w-]*(\s[^>]*)?>"#, with: " ", options: .regularExpression)
-        return (words(plain), nil)
+        return (words(unescaped(plain)), nil)
+    }
+
+    /// What's inside Claude Code's tags is escaped like XML: "sleep 5 &amp;&amp; make" is "sleep 5 && make".
+    private static func unescaped(_ text: String) -> String {
+        guard text.contains("&") else { return text }
+        return text.replacingOccurrences(of: "&lt;", with: "<").replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"").replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&#39;", with: "'").replacingOccurrences(of: "&amp;", with: "&")
     }
 
     /// Tools that stop and wait for the user to answer.

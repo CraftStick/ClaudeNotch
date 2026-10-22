@@ -54,6 +54,7 @@ struct SettingsView: View {
     @AppStorage(Store.soundsKey) private var sounds = true
     @AppStorage(Store.rimKey) private var rim = true
     @AppStorage(Store.aliveKey) private var alive = false
+    @AppStorage(Store.quietKey) private var quiet = false
     @AppStorage(HotKeyChoice.key) private var hotKeys = HotKeyChoice.controlOptionCommand.rawValue
     @AppStorage(Language.key) private var language = ""
 
@@ -107,6 +108,12 @@ struct SettingsView: View {
                     Label(tr("Переливающаяся обводка", "Glowing rim"), systemImage: "sparkles")
                 }
                 .onChange(of: rim) { actions.changed() }
+                Toggle(isOn: $quiet) {
+                    Label(tr("Тихая чёлка", "Quiet notch"), systemImage: "moon")
+                    Text(tr("Чёлка пустая, пока Claude работает: появляется, только когда он ждёт тебя или закончил.",
+                            "The notch stays empty while Claude works: it shows up only when Claude waits for you or is done."))
+                }
+                .onChange(of: quiet) { actions.changed() }
                 Toggle(isOn: Binding(get: { alive }, set: { alive = $0; actions.setAlive($0) })) {
                     Label(tr("Clawd живёт в чёлке всегда", "Clawd stays in the notch"), systemImage: "pawprint")
                     Text(tr("Когда у Claude нет дел, он остаётся и сам находит себе занятие.",

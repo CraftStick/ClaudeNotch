@@ -75,6 +75,16 @@ struct DescribeTests {
 
     // MARK: - Prompts
 
+    @Test func aNoticeIsUnescaped() {
+        let notice = Describe.prompt("""
+            <task-notification>
+            <status>completed</status>
+            <summary>Background command "sleep 5 &amp;&amp; ./Tools/demo.sh" completed (exit code 0)</summary>
+            </task-notification>
+            """)
+        #expect(notice.notice?.detail == "sleep 5 && ./Tools/demo.sh")
+    }
+
     @Test func aTypedPromptIsShownAsTyped() {
         let said = Describe.prompt("  fix\n the   bug ")
         #expect(said.text == "fix the bug")

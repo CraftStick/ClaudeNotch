@@ -80,11 +80,13 @@ enum AppFocus {
     /// In Terminal and iTerm, the very tab the session runs in; elsewhere, or when macOS says no, the app.
     /// osascript runs in the background: the first time, macOS asks whether Claude Notch may control the
     /// terminal, and that question mustn't hold up the notch.
-    static func show(host: String?, folder: String, tty: String?) {
-        guard let host, let tty, let script = tabScripts[host],
-              tty.range(of: #"^/dev/ttys?[0-9]+$"#, options: .regularExpression) != nil,
+    /// `found` comes on the main thread: whether it was that very tab.
+    static func show(host: String?, folder: String, tty: String?, found: ((Bool) -> Void)? = nil) {
+        guard let host, let tty, canShowTab(host: host, tty: tty),
+              let script = tabScripts[host],
               !NSRunningApplication.runningApplications(withBundleIdentifier: host).isEmpty else {
             show(host: host, folder: folder)
+            found?(false)
             return
         }
         let osascript = Process()
@@ -94,10 +96,22 @@ enum AppFocus {
         osascript.standardOutput = output
         osascript.standardError = FileHandle.nullDevice
         osascript.terminationHandler = { _ in
-            let found = output.fileHandleForReading.readDataToEndOfFile().starts(with: Data("found".utf8))
-            if !found { DispatchQueue.main.async { show(host: host, folder: folder) } }
+            let tab = output.fileHandleForReading.readDataToEndOfFile().starts(with: Data("found".utf8))
+            DispatchQueue.main.async {
+                if !tab { show(host: host, folder: folder) }
+                found?(tab)
+            }
         }
-        do { try osascript.run() } catch { show(host: host, folder: folder) }
+        do { try osascript.run() } catch {
+            show(host: host, folder: folder)
+            found?(false)
+        }
+    }
+
+    /// Terminal or iTerm, and a tty that looks like one: the session's very tab can be brought forward.
+    static func canShowTab(host: String?, tty: String?) -> Bool {
+        guard let host, let tty else { return false }
+        return tabScripts[host] != nil && tty.range(of: #"^/dev/ttys?[0-9]+$"#, options: .regularExpression) != nil
     }
 
     static func show(host: String?, folder: String) {
@@ -119,12 +133,14 @@ enum AppFocus {
 
     /// Opens a session that runs in the Claude app at that very session, not just the app; `otherwise`
     /// runs when the app keeps no record of it. Looked up off the main thread: it reads a file per session.
-    static func openInClaudeApp(_ sessionID: String, otherwise: @escaping () -> Void) {
+    /// `opened` runs once it was asked to open that session.
+    static func openInClaudeApp(_ sessionID: String, opened: (() -> Void)? = nil, otherwise: @escaping () -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             let local = claudeAppSession(for: sessionID)
             DispatchQueue.main.async {
                 guard let local, let url = URL(string: "claude://code/continue?session=\(local)") else { return otherwise() }
                 NSWorkspace.shared.open(url, configuration: activating)
+                opened?()
             }
         }
     }

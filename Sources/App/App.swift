@@ -48,7 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.buildMenu()
             self?.shortcuts = nil
             self?.updateHotKeys()
-            self?.store.objectWillChange.send()  // the notch again, in its language, with or without the rim
+            self?.store.settingsChanged()  // the notch again, in its language, with or without the rim, quiet or not
         }), updates: updates)
     private var promptsObserver: AnyCancellable?
     private var visibilityObserver: AnyCancellable?

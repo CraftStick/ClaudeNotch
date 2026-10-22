@@ -160,7 +160,7 @@ struct NotchView: View {
                         .frame(height: Self.permissionHeight, alignment: .top)
                 }
             case .details:
-                DetailsCard(session: s, others: others) { store.pick($0) }
+                DetailsCard(session: s, others: others, pick: { store.pick($0) }, reply: { store.reply(s.id, $0) })
                     .frame(height: DetailsLayout.height(s, others: others.count), alignment: .top)
             default:
                 EmptyView()

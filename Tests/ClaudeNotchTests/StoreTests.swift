@@ -56,6 +56,19 @@ struct StoreTests {
         ["question": "Which props?", "multiSelect": true, "options": [["label": "Mug"], ["label": "Book"], ["label": "Pan"]]],
     ]]
 
+    @Test func aQuietNotchShowsUpOnlyWhenNeeded() {
+        UserDefaults.standard.set(true, forKey: Store.quietKey)
+        defer { UserDefaults.standard.removeObject(forKey: Store.quietKey) }
+        send("UserPromptSubmit", ["prompt": "fix it"])
+        #expect(store.mode == .hidden)  // at work: nothing to see
+        send("PreToolUse", ["tool_name": "AskUserQuestion", "tool_input": Self.questions])
+        #expect(store.mode != .hidden)  // waiting for you
+        send("PostToolUse", ["tool_name": "AskUserQuestion", "tool_input": Self.questions])
+        #expect(store.mode != .compact)  // answered: it closes, and doesn't stay as a compact notch
+        send("Stop")
+        #expect(store.mode != .hidden)  // done, for a minute
+    }
+
     @Test func openSessionsWaitingForATaskAreListed() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("notch-sessions-\(UUID())").path
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)

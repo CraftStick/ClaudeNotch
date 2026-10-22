@@ -13,6 +13,11 @@ final class Store: ObservableObject {
     /// rest. Off unless switched on in the menu.
     static let aliveKey = "alwaysAlive"
     static var alive: Bool { UserDefaults.standard.bool(forKey: aliveKey) }
+    /// A quiet notch: empty while all goes well, it shows up only when Claude waits for you, and for
+    /// `quietLinger` after a turn ends. Pointing at the notch still shows the card. Off unless switched on.
+    static let quietKey = "quiet"
+    static var quiet: Bool { UserDefaults.standard.bool(forKey: quietKey) }
+    static let quietLinger: TimeInterval = 60
 
     @Published private(set) var sessions: [String: Session] = [:] { didSet { syncTicking() } }
     @Published private(set) var expanded = false
@@ -84,6 +89,7 @@ final class Store: ObservableObject {
                 guard let self else { return }
                 self.motionTimer = nil
                 self.ticking = nil
+                self.objectWillChange.send()  // a quiet notch may have to go
                 self.tick()
                 self.syncTicking()
             }
@@ -99,7 +105,12 @@ final class Store: ObservableObject {
         var ends = sessions.values.map { $0.turnEnd ?? $0.lastEvent }
         if let g = greeting, !Self.alive { ends.append(g.lastEvent) }
         // A moment past the end: the rest is over once it has lasted longer than `restDuration`.
-        return ends.min().map { .at($0.addingTimeInterval(Self.restDuration + 0.05)) }
+        var wakes = ends.map { $0.addingTimeInterval(Self.restDuration + 0.05) }
+        if Self.quiet {  // and a quiet notch goes once a turn has been over for a minute
+            let now = Date()
+            wakes += sessions.values.compactMap { $0.turnEnd?.addingTimeInterval(Self.quietLinger + 0.05) }.filter { $0 > now }
+        }
+        return wakes.min().map { .at($0) }
     }
 
     /// Sessions where Claude is busy or waiting, most recent first.
@@ -147,9 +158,18 @@ final class Store: ObservableObject {
         if prompt != nil { return .permission }
         if hovering, detailsSession != nil { return .details }
         if expanded, let id = focusID, sessions[id] != nil { return .expanded }
-        if !working.isEmpty || resting != nil { return .compact }
+        if !working.isEmpty || resting != nil { return Self.quiet && !needsYou ? .hidden : .compact }
         guard greeting != nil else { return .hidden }
-        return expanded || hovering ? .expanded : .compact  // the greeting opens while new or under the pointer
+        if expanded || hovering { return .expanded }  // the greeting opens while new or under the pointer
+        return Self.quiet ? .hidden : .compact
+    }
+
+    /// For a quiet notch: Claude waits for you, or a turn ended within the last `quietLinger`.
+    var needsYou: Bool {
+        let now = Date()
+        return sessions.values.contains { s in
+            s.phase == .waiting || (!s.phase.isActive && now.timeIntervalSince(s.turnEnd ?? .distantPast) < Self.quietLinger)
+        }
     }
 
     /// The other sessions for the hover card, most recent first, then those waiting for a task.
@@ -191,6 +211,13 @@ final class Store: ObservableObject {
         } else {
             AppFocus.show(host: s.host, folder: s.cwd, tty: s.tty)
         }
+    }
+
+    /// A button under a finished turn: types `text` into the session, as if you had.
+    func reply(_ id: String, _ text: String) {
+        guard let s = sessions[id], !s.phase.isActive else { return }
+        hovering = false
+        QuickReply.send(text, to: s)
     }
 
     /// Sessions Claude was already at work in when the app started: shown now rather than at their
@@ -246,6 +273,11 @@ final class Store: ObservableObject {
 
     /// "Stays in the notch" was switched on or off: the greeting now stays, or leaves when its rest is over.
     func aliveChanged() {
+        settingsChanged()
+    }
+
+    /// A setting that changes what the notch shows was switched.
+    func settingsChanged() {
         objectWillChange.send()
         syncTicking()
     }
@@ -821,6 +853,8 @@ final class Store: ObservableObject {
 
     private func commit(_ s: Session, expandFor seconds: TimeInterval?) {
         var s = s
+        // A quiet notch doesn't open for what Claude does along the way: only when it needs you or is done.
+        let seconds = Self.quiet && (s.phase == .thinking || s.phase == .tool) ? nil : seconds
         s.syncMotion(at: Date())
         sessions[s.id] = s
         // Claude is here, and the greeting gives way. Living in the notch for good, Clawd stays on in
