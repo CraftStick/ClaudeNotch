@@ -28,17 +28,23 @@ enum QuickReply {
             return false
         }
         EventLog.append("Quick reply")
+        let start = Date()
         if inClaudeApp(s) {
+            // Asked now, Electron has its text fields ready to tell about by the time it's looked.
+            NSRunningApplication.runningApplications(withBundleIdentifier: AppFocus.claudeBundleID).forEach {
+                AXUIElementSetAttributeValue(AXUIElementCreateApplication($0.processIdentifier), "AXManualAccessibility" as CFString,
+                                             kCFBooleanTrue)
+            }
             // Only once that very session was opened, and has had a moment to come up: until then the
             // cursor may be in another one's field.
             AppFocus.openInClaudeApp(s.id, opened: {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    whenReady(AppFocus.claudeBundleID, needsTextField: true) { type(text) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    whenReady(AppFocus.claudeBundleID, needsTextField: true, since: start) { type(text) }
                 }
             }, otherwise: { AppFocus.show(host: s.host, folder: s.cwd, tty: s.tty) })
         } else if let host = s.host {
             AppFocus.show(host: host, folder: s.cwd, tty: s.tty) { found in
-                if found { whenReady(host, needsTextField: false) { type(text) } }
+                if found { whenReady(host, needsTextField: false, since: start) { type(text) } }
             }
         }
         return true
@@ -46,18 +52,20 @@ enum QuickReply {
 
     /// Runs `then` once `host` is in front (and, if asked, has the cursor in a text field), checking
     /// every 0.1 s for up to 3 s; never if it doesn't get there.
-    private static func whenReady(_ host: String, needsTextField: Bool, tries: Int = 30, then: @escaping () -> Void) {
+    private static func whenReady(_ host: String, needsTextField: Bool, since start: Date, tries: Int = 30,
+                                  then: @escaping () -> Void) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             let app = NSWorkspace.shared.frontmostApplication
             let role = needsTextField && app?.bundleIdentifier == host ? focusedRole(app!.processIdentifier) : ""
             // The Claude app often tells of nothing in focus even with the cursor in its field: keys typed with
             // nothing in focus go nowhere, so only something else in focus (a button Return would press) stops it.
             if app?.bundleIdentifier == host, !needsTextField || role.isEmpty || textRoles.contains(role) {
-                // A moment more: a tab that just came forward may still be taking the keyboard.
-                EventLog.append("Quick reply: typed into \(host)\(role.isEmpty ? "" : " (\(role))")")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: then)
+                // A moment more: a window that just came forward may still be taking the keyboard.
+                EventLog.append("Quick reply: typed into \(host)\(role.isEmpty ? "" : " (\(role))") after "
+                                + String(format: "%.1f s", Date().timeIntervalSince(start) + 0.1))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: then)
             } else if tries > 0 {
-                whenReady(host, needsTextField: needsTextField, tries: tries - 1, then: then)
+                whenReady(host, needsTextField: needsTextField, since: start, tries: tries - 1, then: then)
             } else {
                 EventLog.append(app?.bundleIdentifier == host
                     ? "Quick reply: not typed, the cursor isn't in a text field (\(role.isEmpty ? "nothing focused" : role))"
