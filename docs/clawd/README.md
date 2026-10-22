@@ -62,7 +62,7 @@ Short reactions play over whatever Clawd was doing.
 
 ## Resting
 
-After a task Clawd stays in the notch for 15 more minutes, so you can see that Claude is done. Every 30 seconds he does one of these, in no fixed order and never the same twice in a row: looks around, sways, dances, does the hula.
+After a task Clawd stays in the notch for 15 more minutes, so you can see that Claude is done. Every 30 seconds he does one of these, in no fixed order and never the same twice in a row: looks around, sways, dances, does the hula. In between he doesn't freeze: he breathes, blinks (now and then twice) and sometimes glances aside or up. So he does whenever he stands still, living in the notch for good too.
 
 <table>
 <tr>
