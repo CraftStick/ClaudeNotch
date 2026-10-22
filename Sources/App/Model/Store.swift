@@ -22,6 +22,9 @@ final class Store: ObservableObject {
     @Published private(set) var hovering = false
     /// A session clicked in the card's list of others: the card shows it until the pointer leaves.
     @Published private(set) var pickedID: String?
+    /// Sessions open in Claude Code that the hooks haven't told about (yet, or since their rest): for
+    /// the card's list of others. Looked up when the card opens.
+    @Published private(set) var idle: [Session] = []
     /// Shown when the app is opened and nothing else is in the notch: "Ready to work", a click opens Claude.
     @Published private(set) var greeting: Session? { didSet { syncTicking() } }
     static let greetingID = "greeting"
@@ -114,7 +117,11 @@ final class Store: ObservableObject {
 
     /// Shows another session in the card; a click on the card then opens that one.
     func pick(_ id: String) {
-        guard sessions[id] != nil else { return }
+        guard sessions[id] != nil else {
+            // Nothing to show about one waiting for a task: go to it.
+            if idle.contains(where: { $0.id == id }) { focus(id) }
+            return
+        }
         pickedID = id
     }
 
@@ -145,9 +152,26 @@ final class Store: ObservableObject {
         return expanded || hovering ? .expanded : .compact  // the greeting opens while new or under the pointer
     }
 
-    /// The other sessions for the hover card, most recent first.
+    /// The other sessions for the hover card, most recent first, then those waiting for a task.
     func others(than id: String?) -> [Session] {
-        Array(sessions.values.filter { $0.id != id }.sorted { $0.lastEvent > $1.lastEvent }.prefix(DetailsLayout.maxOtherRows))
+        let known = sessions.values.filter { $0.id != id }.sorted { $0.lastEvent > $1.lastEvent }
+        let waiting = idle.filter { $0.id != id && sessions[$0.id] == nil }
+        return Array((known + waiting).prefix(DetailsLayout.maxOtherRows))
+    }
+
+    /// Looks up the sessions open in Claude Code with nothing going on.
+    func findIdle(in dir: String = SessionRegistry.dir) {
+        let found = SessionRegistry.open(in: dir).filter { sessions[$0.id] == nil }.map { open in
+            var s = Session(id: open.id, turnStart: open.started ?? .distantPast, lastEvent: open.started ?? .distantPast)
+            s.cwd = open.cwd
+            s.project = (open.cwd as NSString).lastPathComponent
+            s.entrypoint = open.entrypoint
+            s.host = open.entrypoint == "claude-desktop" ? AppFocus.claudeBundleID : AppFocus.lastHost
+            s.task = open.name
+            s.waitingForTask = true
+            return s
+        }.sorted { $0.lastEvent > $1.lastEvent }
+        if found != idle { idle = found }
     }
 
     /// Brings the app the session runs in to the front; the greeting opens Claude and goes away.
@@ -161,7 +185,7 @@ final class Store: ObservableObject {
             if let app = AppFocus.claudeApp { AppFocus.open(app) }
             return
         }
-        guard let s = sessions[id] else { return }
+        guard let s = sessions[id] ?? idle.first(where: { $0.id == id }) else { return }
         if s.host == AppFocus.claudeBundleID || s.entrypoint == "claude-desktop" {
             AppFocus.openInClaudeApp(id) { AppFocus.show(host: s.host, folder: s.cwd, tty: s.tty) }
         } else {
@@ -260,6 +284,7 @@ final class Store: ObservableObject {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.hoverWork = nil
+            if wanted { self.findIdle() }
             self.hovering = wanted
             if !wanted {
                 self.pickedID = nil

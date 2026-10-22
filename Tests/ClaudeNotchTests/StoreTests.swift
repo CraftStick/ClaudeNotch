@@ -56,6 +56,29 @@ struct StoreTests {
         ["question": "Which props?", "multiSelect": true, "options": [["label": "Mug"], ["label": "Book"], ["label": "Pan"]]],
     ]]
 
+    @Test func openSessionsWaitingForATaskAreListed() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("notch-sessions-\(UUID())").path
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        func write(_ name: String, _ json: [String: Any]) throws {
+            try JSONSerialization.data(withJSONObject: json).write(to: URL(fileURLWithPath: dir + "/" + name))
+        }
+        let me = Int(getpid())
+        try write("1.json", ["pid": me, "sessionId": "open", "cwd": "/tmp/waiting", "status": "idle", "entrypoint": "cli"])
+        try write("2.json", ["pid": me, "sessionId": "busy", "cwd": "/tmp/busy", "status": "busy"])
+        try write("3.json", ["pid": 999_999, "sessionId": "gone", "cwd": "/tmp/gone", "status": "idle"])
+        try write("4.json", ["pid": me, "sessionId": "s1", "cwd": "/tmp/notch-project", "status": "idle"])
+        try "x".write(toFile: dir + "/1.abc.key", atomically: true, encoding: .utf8)
+        send("UserPromptSubmit", ["prompt": "fix it"])
+
+        store.findIdle(in: dir)
+        #expect(store.idle.map(\.id) == ["open"])  // not one at work, gone, or known through the hooks
+        #expect(store.idle.first?.project == "waiting")
+        #expect(store.idle.first?.waitingForTask == true)
+        #expect(store.others(than: "s1").map(\.id) == ["open"])
+        #expect(store.working.map(\.id) == ["s1"])  // the notch itself doesn't show it
+    }
+
     @Test func aQuestionIsAnsweredFromTheNotch() throws {
         send("PreToolUse", ["tool_name": "AskUserQuestion", "tool_input": Self.questions])
         #expect(session?.phase == .waiting)

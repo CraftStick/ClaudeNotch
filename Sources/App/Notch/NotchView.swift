@@ -36,6 +36,15 @@ struct NotchView: View {
         .frame(width: size.width, height: size.height)
         .clipShape(shape)
         .contentShape(shape)
+        .background(alignment: .top) {
+            // Claude waits for you: the island glows, open or not.
+            if mode != .hidden, store.onScreen, store.prompt != nil || session?.phase == .waiting {
+                NotchGlow(island: size, radius: isOpen ? 20 : 10)
+                    .frame(width: 640, height: Self.maxHeight(notch: notch))
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
         .onTapGesture {  // buttons inside win over this
             if let session { store.focus(session.id) }
         }

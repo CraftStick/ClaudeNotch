@@ -38,6 +38,41 @@ struct DescribeTests {
         }
     }
 
+    // MARK: - Commands in plain words
+
+    @Test func aCommandSaysWhatItDoes() {
+        let kinds: [(String, Describe.CommandKind?)] = [
+            ("npm run build && git add . && git commit -m 'x'", .commit),
+            ("cd app && npm run build", .build),
+            ("./build.sh 2>&1 | tail -5", .build),
+            ("git -C repo push -u origin main", .push),
+            ("swift test --filter Describe", .tests),
+            ("CI=1 npm test", .tests),
+            ("sudo apt-get install -y jq", .install),
+            ("pnpm install", .install),
+            ("git status && git diff", .changes),
+            ("git checkout -b feature", .branches),
+            ("gh pr create --fill", .github),
+            ("curl -s https://example.com | jq .", .request),
+            ("python3 scripts/gen.py", .script),
+            ("rg -n TODO Sources", .search),
+            ("ls -la && cat README.md", .look),
+            ("npm run dev", .server),
+            ("echo hi", nil),
+            ("cd somewhere", nil),
+        ]
+        for (command, kind) in kinds {
+            #expect(Describe.CommandKind.of(command) == kind, "\(command)")
+        }
+    }
+
+    @Test func aCommandItCantTellKeepsTheGeneralTitle() {
+        let known = Describe.tool("Bash", ["command": "swift build"])
+        #expect(known.title == Describe.CommandKind.build.title)
+        #expect(known.detail == "swift build")
+        #expect(Describe.tool("Bash", ["command": "echo hi"]).title != Describe.CommandKind.build.title)
+    }
+
     // MARK: - Prompts
 
     @Test func aTypedPromptIsShownAsTyped() {

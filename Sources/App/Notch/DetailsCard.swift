@@ -365,7 +365,7 @@ private struct SessionRow: View {
     var body: some View {
         HStack(spacing: 7) {
             Circle()
-                .fill(phaseColor(session.phase == .tool ? .thinking : session.phase))
+                .fill(session.waitingForTask ? .white.opacity(0.3) : phaseColor(session.phase == .tool ? .thinking : session.phase))
                 .frame(width: 7, height: 7)
                 .frame(width: 13)
             Text(session.project.isEmpty ? tr("сессия", "session") : session.project)
@@ -387,6 +387,7 @@ private struct SessionRow: View {
     }
 
     private var status: String {
+        if session.waitingForTask { return tr("ждёт задачу", "waiting for a task") }
         if let minutes = session.quietMinutes(at: Date()) { return tr("тихо уже \(minutes) мин", "quiet for \(minutes) min") }
         switch session.phase {
         case .thinking: return session.thought.isEmpty ? tr("думает", "thinking") : session.thought

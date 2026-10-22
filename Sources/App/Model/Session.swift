@@ -95,6 +95,8 @@ struct Session: Equatable {
     /// CLAUDE_CODE_ENTRYPOINT: "cli" in a terminal, something else in the desktop app or an IDE.
     var entrypoint = ""
     var transcriptPath: String?
+    /// Open in Claude Code with nothing going on: found in its list of sessions, not through hooks.
+    var waitingForTask = false
     /// Not working until an event says so: a session first seen through, say, a manual /compact
     /// mustn't show Clawd at work.
     var phase = Phase.done

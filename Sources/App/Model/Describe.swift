@@ -13,13 +13,100 @@ enum Describe {
         return tests.contains(where: has) ? .sparkler : nil
     }
 
+    /// What a shell command does, in a few plain words, for the title over it: "npm run build && git
+    /// add . && git commit" is "Committing". Of the commands in a chain the one that matters most wins.
+    enum CommandKind: CaseIterable {
+        case push, commit, tests, build, install, server, pull, branches, changes, staging, github, lint, docker,
+             remote, request, stop, script, files, search, look, wait
+
+        /// Tried in `allCases` order, which is also what matters most first.
+        private var pattern: String {
+            let git = #"git(\s+-C\s+\S+|\s+-c\s+\S+|\s+--?[\w-]+(=\S+)?)*\s+"#
+            switch self {
+            case .push: return git + #"push\b"#
+            case .commit: return git + #"commit\b"#
+            case .tests:
+                return #"((npm|pnpm|yarn|bun)\s+(run\s+)?test\b|swift\s+test\b|pytest\b|go\s+test\b|cargo\s+(test|nextest)\b|"#
+                    + #"xcodebuild\b.*\btest\b|(npx\s+)?(jest|vitest|rspec|phpunit|playwright\s+test)\b|(mvn|gradle|\./gradlew)\s+test\b|"#
+                    + #"make\s+(test|check)\b|python3?\s+-m\s+(pytest|unittest)\b)"#
+            case .build:
+                return #"((npm|pnpm|yarn|bun)\s+run\s+build\b|swift\s+build\b|xcodebuild\b|cargo\s+build\b|go\s+build\b|make\b|"#
+                    + #"\S*build\.sh\b|(mvn|gradle|\./gradlew)\s+(build|assemble|package)\b|(npx\s+)?(tsc|vite\s+build|next\s+build|webpack)\b|"#
+                    + #"docker\s+(compose\s+)?build\b)"#
+            case .install:
+                return #"((npm|pnpm|yarn|bun)\s+(install|i|ci|add)\b|(yarn|pnpm|bun)$|pip3?\s+install\b|python3?\s+-m\s+pip\s+install\b|"#
+                    + #"uv\s+(add|sync|pip\s+install)\b|brew\s+(install|upgrade)\b|cargo\s+(add|install)\b|go\s+(get|mod)\b|"#
+                    + #"(apt|apt-get)\s+install\b|gem\s+install\b|bundle(\s+install)?$|pod\s+install\b|swift\s+package\s+(resolve|update)\b)"#
+            case .server:
+                return #"((npm|pnpm|yarn|bun)\s+(run\s+)?(dev|start|serve)\b|python3?\s+-m\s+http\.server\b|(npx\s+)?(vite|next\s+dev)$)"#
+            case .pull: return git + #"(pull|fetch|clone)\b"#
+            case .branches: return git + #"(checkout|switch|branch|merge|rebase|cherry-pick|stash|reset|tag)\b"#
+            case .changes: return git + #"(status|diff|log|show|blame)\b"#
+            case .staging: return git + #"(add|rm|mv|restore)\b"#
+            case .github: return #"gh\s+\w+"#
+            case .lint:
+                return #"((npm|pnpm|yarn|bun)\s+run\s+(lint|format)\b|(npx\s+)?(eslint|prettier|biome)\b|swiftlint\b|swift-format\b|"#
+                    + #"ruff\b|black\b|flake8\b|mypy\b|gofmt\b|cargo\s+(fmt|clippy)\b)"#
+            case .docker: return #"(docker|docker-compose|podman|kubectl)\b"#
+            case .remote: return #"(ssh|scp|rsync|sftp)\b"#
+            case .request: return #"(curl|wget|http|https)\b"#
+            case .stop: return #"(kill|pkill|killall)\b"#
+            case .script: return #"(python3?|node|ruby|perl|php|deno|bun|tsx|ts-node|npx|swift|bash|sh|zsh|osascript)\s+\S"#
+            case .files: return #"(rm|mv|cp|mkdir|touch|chmod|chown|ln|unzip|tar|zip)\b"#
+            case .search: return #"(grep|rg|ag|find|fd|mdfind)\b"#
+            case .look: return #"(cat|head|tail|less|ls|tree|wc|stat|file|du|sed\s+-n|jq|which|pwd|ps|lsof|defaults\s+read)\b"#
+            case .wait: return #"sleep\b"#
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .push: return tr("Отправляет в git", "Pushing to git")
+            case .commit: return tr("Делает коммит", "Committing")
+            case .tests: return tr("Запускает тесты", "Running tests")
+            case .build: return tr("Собирает проект", "Building the project")
+            case .install: return tr("Ставит зависимости", "Installing dependencies")
+            case .server: return tr("Запускает сервер", "Starting a server")
+            case .pull: return tr("Скачивает из git", "Pulling from git")
+            case .branches: return tr("Работает с ветками", "Working with branches")
+            case .changes: return tr("Смотрит изменения", "Looking at changes")
+            case .staging: return tr("Готовит коммит", "Staging changes")
+            case .github: return tr("Работает с GitHub", "Working with GitHub")
+            case .lint: return tr("Проверяет код", "Checking the code")
+            case .docker: return tr("Работает с контейнерами", "Working with containers")
+            case .remote: return tr("Работает с сервером", "Working on a server")
+            case .request: return tr("Делает запрос", "Making a request")
+            case .stop: return tr("Останавливает процесс", "Stopping a process")
+            case .script: return tr("Запускает скрипт", "Running a script")
+            case .files: return tr("Работает с файлами", "Moving files around")
+            case .search: return tr("Ищет в файлах", "Searching files")
+            case .look: return tr("Смотрит файлы", "Looking at files")
+            case .wait: return tr("Ждёт", "Waiting")
+            }
+        }
+
+        /// The kind that matters most among the commands chained in `command`; nil for one it can't tell.
+        static func of(_ command: String) -> CommandKind? {
+            // Each command in the chain, without what goes before the program: sudo, env vars, `time`…
+            let parts = command.components(separatedBy: CharacterSet(charactersIn: ";|&\n()")).map { part in
+                part.trimmingCharacters(in: .whitespaces).replacingOccurrences(
+                    of: #"^((sudo|time|nohup|env|command|exec|caffeinate(\s+-\w+)*|timeout\s+\S+|[A-Za-z_]\w*=("[^"]*"|'[^']*'|\S*))\s+)+"#,
+                    with: "", options: .regularExpression)
+            }.filter { !$0.isEmpty }
+            return allCases.first { kind in
+                parts.contains { $0.range(of: "^" + kind.pattern, options: .regularExpression) != nil }
+            }
+        }
+    }
+
     static func tool(_ name: String, _ input: [String: Any]) -> Activity {
         func str(_ key: String) -> String { input[key] as? String ?? "" }
         func file(_ key: String = "file_path") -> String { (str(key) as NSString).lastPathComponent }
 
         switch name {
         case "Bash":
-            return Activity(symbol: "terminal", title: tr("Выполняет команду", "Running a command"), detail: flat(str("command")),
+            let title = CommandKind.of(str("command"))?.title ?? tr("Выполняет команду", "Running a command")
+            return Activity(symbol: "terminal", title: title, detail: flat(str("command")),
                             monospaced: true, note: oneLine(str("description")), command: true)
         case "BashOutput":
             return Activity(symbol: "terminal", title: tr("Смотрит вывод команды", "Reading command output"), detail: "")
