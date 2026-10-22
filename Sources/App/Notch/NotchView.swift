@@ -173,15 +173,23 @@ func phaseColor(_ phase: Phase) -> Color {
 
 /// Claude itself (Clawd). In the compact notch, where there is no detail row, a small hint
 /// says how the turn ended; while it works or waits for you, Clawd typing or waving says enough.
+/// The check for a finished turn only shows for a moment: Clawd's hop says it too.
 private struct ClawdBadge: View {
     let session: Session
     let showsHint: Bool
     let moving: Bool
 
-    private var hint: String? {
+    static let doneFor: TimeInterval = 3
+
+    /// Until when a finished turn shows its check.
+    private var doneUntil: Date? {
+        session.phase == .done ? session.turnEnd?.addingTimeInterval(Self.doneFor) : nil
+    }
+
+    private func hint(at date: Date) -> String? {
         guard showsHint else { return nil }
         switch session.phase {
-        case .done: return "checkmark"
+        case .done: return date < (doneUntil ?? .distantPast) ? "checkmark" : nil
         case .stopped: return "stop.fill"
         case .failed: return "exclamationmark.triangle.fill"
         case .thinking, .tool, .waiting: return nil
@@ -189,15 +197,20 @@ private struct ClawdBadge: View {
     }
 
     var body: some View {
-        HStack(spacing: 5) {
-            ClawdView(session: session, moving: moving)
-            if let hint {
-                Image(systemName: hint)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(phaseColor(session.phase))
-                    .contentTransition(.symbolEffect(.replace))
-                    .transition(.scale.combined(with: .opacity))
+        // Drawn again once, when the check is due to go.
+        TimelineView(.explicit(doneUntil.map { [$0] } ?? [])) { context in
+            let hint = hint(at: context.date)
+            HStack(spacing: 5) {
+                ClawdView(session: session, moving: moving)
+                if let hint {
+                    Image(systemName: hint)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(phaseColor(session.phase))
+                        .contentTransition(.symbolEffect(.replace))
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
+            .animation(.easeOut(duration: 0.3), value: hint)
         }
     }
 }
