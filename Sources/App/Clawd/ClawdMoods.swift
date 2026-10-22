@@ -249,16 +249,59 @@ extension ClawdAnimator {
                 return Frame(sheet, 0, rate: 8, decals: decals)
             }
         }
+        // A huge output or file: eyes wide, a "!" pops up, and he jumps back a step, then edges in again.
+        all[.surprise] = ClawdAssets.pointing.map { sheet in
+            Pastime(duration: 1.9) { t in
+                if t < 0.06 { return Frame(sheet, 0, rate: 12) }
+                let pop = t < 0.2 ? 2 : 0
+                let back = t < 0.5 ? 2 : (t < 1.2 ? 1 : 0)
+                var decals = [Decal(Props.wideEyes, 5, 6)]
+                if t < 1.5 { decals.append(Decal(Props.exclamation, 11, -5 + pop)) }
+                return Frame(sheet, 0, rate: 12, offsetX: CGFloat(back), offsetY: t < 0.2 ? -1 : 0, decals: decals)
+            }
+        }
+        // You allowed something: a thumb up and a wink, with a glint on the thumb.
+        all[.thumbs] = ClawdAssets.pointing.map { sheet in
+            Pastime(duration: 1.8) { t in
+                guard t > 0.08 else { return Frame(sheet, 0, rate: 12) }
+                let rise = t < 0.2 ? 2 : 0
+                var decals = [Decal(Props.thumbUp, 21, 3 + rise)]
+                if (0.35..<1.4).contains(t) { decals.append(Decal(Props.winkShut, 16, 7)) }
+                if (0.3..<0.6).contains(t) { decals.append(Decal(t < 0.45 ? Props.bigSparkle : Props.sparkle, 24, 1)) }
+                return Frame(sheet, 0, rate: 12, offsetY: (0.9..<1.1).contains(t) ? -1 : 0, decals: decals)
+            }
+        }
+        // The first task of the day: he stretches, arms up high, with a big yawn, and lowers them again.
+        all[.stretch] = ClawdAssets.pointing.map { sheet in
+            let up = Clip(sheet: sheet, frames: 3...10, fps: 12), down = Clip(sheet: sheet, frames: [10, 9, 8, 7, 6, 5, 4, 3, 0], fps: 14)
+            return Pastime(duration: up.duration + 1.6 + down.duration) { t in
+                if t < up.duration { return Frame(up, at: t) }
+                let held = t - up.duration
+                if held < 1.6 {
+                    return Frame(sheet, 10, rate: 8, offsetY: held < 1.2 ? -1 : 0,
+                                 decals: yawn(sheet, 10, wide: (0.3..<1.2).contains(held)))
+                }
+                return Frame(down, at: held - 1.6)
+            }
+        }
         return all.compactMapValues { $0 }
     }()
 
     // MARK: Over what he does
 
     /// While Claude works: a drop of sweat from 85% of the context, and a little sway from 95%; a yawn
-    /// now and then at the laptop between 1 and 5 at night.
+    /// now and then at the laptop between 1 and 5 at night; a clock over his head and the odd yawn while a
+    /// command runs for over a minute. After midnight, till 6, a nightcap at work, and tea instead of coffee.
     func mood(_ frame: Frame, at date: Date) -> Frame {
-        guard session.phase.isActive, [.typing, .pondering, .desktop, .running, .searching].contains(session.motion) else { return frame }
+        let hour = Calendar.current.component(.hour, from: date)
         var frame = frame
+        if hour < 6 {
+            frame.decals = frame.decals.map { $0.art == Props.mug ? Decal(Props.teaMug, $0.x, $0.y, $0.layer) : $0 }
+        }
+        guard session.phase.isActive, [.typing, .pondering, .desktop, .running, .searching].contains(session.motion) else { return frame }
+        if hour < 6, session.motion != .searching, let head = Self.head(frame.sheet, frame.index) {
+            frame.decals.append(Decal(Props.nightcap, head.x, head.y - 4))
+        }
         let t = date.timeIntervalSince(session.motionStart)
         let full = session.contextWindow > 0 ? Double(session.contextTokens) / Double(session.contextWindow) : 0
         if full >= 0.85, let head = Self.head(frame.sheet, frame.index) {
@@ -268,7 +311,14 @@ extension ClawdAnimator {
             if full >= 0.95 { frame.offsetX += sin(t * 2.4) > 0.6 ? 1 : 0 }
             frame.rate = max(frame.rate, 8)
         }
-        let hour = Calendar.current.component(.hour, from: date)
+        // Bored: a command that's been running for over a minute.
+        let waited = date.timeIntervalSince(session.lastEvent)
+        if session.phase == .tool, session.activity.command, waited > 60, let head = Self.head(frame.sheet, frame.index) {
+            frame.decals.append(Decal(Props.clock(Int(waited * 2)), head.x + 5, head.y - (hour < 6 ? 13 : 9)))
+            let w = waited.truncatingRemainder(dividingBy: 25)
+            if (12..<13.8).contains(w) { frame.decals += Self.yawn(frame.sheet, frame.index, wide: w > 12.4 && w < 13.4) }
+            frame.rate = max(frame.rate, 2)
+        }
         if session.motion == .typing, (1..<5).contains(hour) {
             let w = t.truncatingRemainder(dividingBy: 90)
             if (30..<31.8).contains(w) { frame.decals += Self.yawn(frame.sheet, frame.index, wide: w > 30.4 && w < 31.4) }

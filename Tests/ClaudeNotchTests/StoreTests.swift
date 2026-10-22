@@ -40,6 +40,10 @@ private final class Hook {
 struct StoreTests {
     private let store = Store()
 
+    init() {
+        UserDefaults.standard.set(Date(), forKey: Store.lastPromptKey)  // not the first task of the day: no stretch
+    }
+
     @discardableResult
     private func send(_ event: String, _ fields: [String: Any] = [:]) -> Hook {
         let hook = Hook()
@@ -55,6 +59,23 @@ struct StoreTests {
         ["question": "Which animation?", "multiSelect": false, "options": [["label": "Wizard"], ["label": "Chef"]]],
         ["question": "Which props?", "multiSelect": true, "options": [["label": "Mug"], ["label": "Book"], ["label": "Pan"]]],
     ]]
+
+    @Test func clawdIsSurprisedByAHugeOutput() {
+        send("UserPromptSubmit", ["prompt": "build it"])
+        send("PreToolUse", ["tool_name": "Bash", "tool_input": ["command": "make"]])
+        send("PostToolUse", ["tool_name": "Bash", "tool_input": ["command": "make"],
+                             "tool_response": ["stdout": String(repeating: "x", count: 25_000), "stderr": ""]])
+        #expect(session?.cue == .surprise)
+        #expect(!Store.isHuge(["stdout": "ok", "stderr": ""]))
+        #expect(Store.isHuge(["type": "text", "file": ["content": "x", "numLines": 2000]]))
+    }
+
+    @Test func theFirstTaskOfTheDayGetsAStretch() {
+        let now = Date()
+        UserDefaults.standard.set(now.addingTimeInterval(-26 * 3600), forKey: Store.lastPromptKey)
+        #expect(Store.firstPromptOfTheDay(at: now))
+        #expect(!Store.firstPromptOfTheDay(at: now.addingTimeInterval(60)))  // the second one isn't
+    }
 
     @Test func aQuietNotchShowsUpOnlyWhenNeeded() {
         UserDefaults.standard.set(true, forKey: Store.quietKey)

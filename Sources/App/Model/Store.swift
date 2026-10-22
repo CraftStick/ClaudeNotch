@@ -220,6 +220,30 @@ final class Store: ObservableObject {
         QuickReply.send(text, to: s)
     }
 
+    /// When you last gave Claude a task, in any session.
+    static let lastPromptKey = "lastPrompt"
+
+    /// The first task you give Claude on a new day, from 5 in the morning: Clawd stretches.
+    static func firstPromptOfTheDay(at now: Date) -> Bool {
+        let calendar = Calendar.current
+        let last = UserDefaults.standard.object(forKey: lastPromptKey) as? Date
+        UserDefaults.standard.set(now, forKey: lastPromptKey)
+        // The day starts at 5: a task at 2 at night still belongs to the day before.
+        func day(_ date: Date) -> Date { calendar.startOfDay(for: date.addingTimeInterval(-5 * 3600)) }
+        return last.map { day($0) < day(now) } ?? false
+    }
+
+    /// A tool's output too big to take in at a glance: a command that printed 20,000+ characters, a file
+    /// of 1,500+ lines read whole.
+    static func isHuge(_ response: Any?) -> Bool {
+        if let text = response as? String { return text.count >= 20_000 }
+        guard let response = response as? [String: Any] else { return false }
+        let printed = [response["stdout"], response["stderr"]].compactMap { $0 as? String }.reduce(0) { $0 + $1.count }
+        let file = response["file"] as? [String: Any]
+        let lines = (file?["numLines"] as? NSNumber)?.intValue ?? 0
+        return printed >= 20_000 || lines >= 1500 || ((file?["content"] as? String)?.count ?? 0) >= 60_000
+    }
+
     /// Sessions Claude was already at work in when the app started: shown now rather than at their
     /// next hook event, which may be a while off if Claude is writing a long answer.
     func adopt(_ running: [TranscriptWatcher.Running]) {
@@ -426,7 +450,8 @@ final class Store: ObservableObject {
             } else {
                 s.task = said.text
                 s.activity = Activity(symbol: "sparkle", title: tr("Взялся за задачу", "New task"), detail: said.text, prose: true)
-                s.play(Describe.reaction(to: said.text) ?? .idea, at: now)
+                let morning = Self.firstPromptOfTheDay(at: now)
+                s.play(Describe.reaction(to: said.text) ?? (morning ? .stretch : .idea), at: now)
             }
             commit(s, expandFor: 3)
 
@@ -486,6 +511,8 @@ final class Store: ObservableObject {
                         s.play(cue, at: now)
                     } else if toolName == "Bash", struggled {
                         s.play(.phew, at: now)  // it works at last
+                    } else if Self.isHuge(json["tool_response"]), s.cue != .surprise || now.timeIntervalSince(s.cueStart) > 20 {
+                        s.play(.surprise, at: now)  // once in 20 s at most: one big file after another isn't news each time
                     }
                 } else if failed {
                     s.toolFailed(at: now)
@@ -760,7 +787,7 @@ final class Store: ObservableObject {
             }
             prompt.reply.send(Self.permissionOutput(output))
             update(id) { s, now in
-                s.play(.excited, at: now)
+                s.play(decision == .allowAlways ? .excited : .thumbs, at: now)
                 s.lastEvent = now  // the tool starts now, not when it asked
                 s.phase = .tool
                 // Back to what the agent was doing: the approved tool, or a Task whose subagent asked.

@@ -501,4 +501,67 @@ enum Props {
         "sSsSs",
         "s.s.s",
     ], ["h": 0x9a_62_32_ff, "t": 0xc0_3a_2e_ff, "s": 0xe0_bc_5a_ff, "S": 0xc8_9c_3c_ff])
+
+    /// Eyes wide in surprise, round and a pixel bigger each way: over both eyes, at (5, 6).
+    static let wideEyes = PixelArt("wideEyes", [
+        "bxxb......bxxb",
+        "xxxx......xxxx",
+        "xxxx......xxxx",
+        "bxxb......bxxb",
+    ], ["b": body, "x": eye])
+
+    /// "!" over his head: at (11, -5).
+    static let exclamation = PixelArt("exclamation", [
+        "ee",
+        "ee",
+        "ee",
+        "ee",
+        "..",
+        "ee",
+    ], ["e": 0xff_d0_4a_ff])
+
+    /// A thumb up in the hand at the end of his arm: at (21, 3), over the arm at y 9.
+    static let thumbUp = PixelArt("thumbUp", [
+        ".bb.",
+        ".bb.",
+        "bbbb",
+        "bbbs",
+        "bbbs",
+        "bbbs",
+    ], ["b": body, "s": 0xb8_5f_44_ff])
+
+    /// One eye shut, a wink: over the eye at x 16–17, at (16, 7).
+    static let winkShut = PixelArt("winkShut", ["bb", "xx"], ["b": body, "x": eye])
+
+    /// A little clock over his head, its hand going round: `tick` 0–3 points it up, right, down, left. At
+    /// about (head x + 5, head top − 9).
+    static func clock(_ tick: Int) -> PixelArt {
+        let hands = [
+            [".wwwww.", "ww.k.ww", "w..k..w", "w..k..w", "w.....w", "ww...ww", ".wwwww."],
+            [".wwwww.", "ww...ww", "w.....w", "w..kkkw", "w.....w", "ww...ww", ".wwwww."],
+            [".wwwww.", "ww...ww", "w.....w", "w..k..w", "w..k..w", "ww.k.ww", ".wwwww."],
+            [".wwwww.", "ww...ww", "w.....w", "wkkk..w", "w.....w", "ww...ww", ".wwwww."],
+        ]
+        return PixelArt("clock\(tick % 4)", hands[tick % 4], ["w": 0xf4_f0_e6_ff, "k": 0x26_26_2a_ff])
+    }
+
+    /// A nightcap on top of his head, its tip drooping behind him with a pompom: at (head x, head top − 4).
+    static let nightcap = PixelArt("nightcap", [
+        "p...............",
+        ".bbbb...........",
+        "...bbbbbbbb.....",
+        "..bbbbbbbbbbbbb.",
+        "wwwwwwwwwwwwwwww",
+    ], ["b": 0x3a_4f_9a_ff, "w": 0xf4_f0_e6_ff, "p": 0xf4_f0_e6_ff])
+
+    /// The coffee mug with tea in it instead, its tag hanging over the rim: late at night.
+    static let teaMug = PixelArt("teaMug", [
+        "..roooor.",
+        "hhwwwwwwt",
+        "h.wwwwwwT",
+        "hhwwwwww.",
+        "..swwwws.",
+        "...ssss..",
+    ], ["r": 0xe2_cb_a3_ff, "o": 0xb8_6a_1c_ff, "w": 0xf6_e7_cc_ff, "s": 0xd2_b9_8f_ff, "h": 0xe2_cb_a3_ff,
+        "t": 0xc8_c8_c0_ff, "T": 0x6a_9a_4a_ff])
 }

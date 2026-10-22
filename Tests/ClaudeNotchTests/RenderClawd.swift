@@ -13,8 +13,14 @@ struct RenderClawd {
     @Test(.enabled(if: folder != nil)) func render() throws {
         let folder = try #require(Self.folder)
         let pointing = try #require(ClawdAssets.pointing)
-        try write(grid(pointing, 0), "\(folder)/pointing0.png")
-        for cue in [Cue.thanks, .flinch, .phew, .proud, .sweep] {
+        for i in [0, 3, 7, 10, 14] { try write(grid(pointing, i), "\(folder)/pointing\(i).png") }
+        if let laptop = ClawdAssets.laptop { try write(grid(laptop, 20), "\(folder)/laptop20.png") }
+        if let laptop = ClawdAssets.laptop, let head = ClawdAnimator.head(laptop, 20) {
+            let night = ClawdAnimator.Frame(laptop, 20, decals: [Decal(Props.nightcap, head.x, head.y - 4),
+                                                                 Decal(Props.clock(1), head.x + 5, head.y - 13)])
+            try write(strip([night]), "\(folder)/night.png")
+        }
+        for cue in [Cue.surprise, .thumbs, .stretch] {
             let reaction = try #require(ClawdAnimator.moodReactions[cue], "\(cue)")
             let times = stride(from: 0.0, to: reaction.duration, by: reaction.duration / 12).map { $0 }
             try write(strip(times.map { reaction.frame($0) }), "\(folder)/\(cue).png")
