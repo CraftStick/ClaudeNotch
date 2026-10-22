@@ -290,8 +290,8 @@ extension ClawdAnimator {
     // MARK: Over what he does
 
     /// While Claude works: a drop of sweat from 85% of the context, and a little sway from 95%; a yawn
-    /// now and then at the laptop between 1 and 5 at night; a clock over his head and the odd yawn while a
-    /// command runs for over a minute. After midnight, till 6, a nightcap at work, and tea instead of coffee.
+    /// now and then at the laptop between 1 and 5 at night; a yawn every 25 s while a command runs for over a
+    /// minute. After midnight, till 6, a nightcap at work, and tea instead of coffee.
     func mood(_ frame: Frame, at date: Date) -> Frame {
         let hour = Calendar.current.component(.hour, from: date)
         var frame = frame
@@ -313,8 +313,7 @@ extension ClawdAnimator {
         }
         // Bored: a command that's been running for over a minute.
         let waited = date.timeIntervalSince(session.lastEvent)
-        if session.phase == .tool, session.activity.command, waited > 60, let head = Self.head(frame.sheet, frame.index) {
-            frame.decals.append(Decal(Props.clock(Int(waited * 2)), head.x + 5, head.y - (hour < 6 ? 13 : 9)))
+        if session.phase == .tool, session.activity.command, waited > 60 {
             let w = waited.truncatingRemainder(dividingBy: 25)
             if (12..<13.8).contains(w) { frame.decals += Self.yawn(frame.sheet, frame.index, wide: w > 12.4 && w < 13.4) }
             frame.rate = max(frame.rate, 2)
@@ -326,10 +325,15 @@ extension ClawdAnimator {
         return frame
     }
 
-    /// The top of his head in a frame: its row, and the column it starts at.
+    /// The top of his head in a frame: its row, and the column it starts at. Found by his orange, lit or in
+    /// shadow: what he has beside him (a desk with its screen, a speech bubble) may reach higher.
     static func head(_ sheet: PixelSheet, _ index: Int) -> (x: Int, y: Int)? {
         let pixels = sheet.frames[min(index, sheet.frames.count - 1)]
-        guard let first = pixels.firstIndex(where: { $0 != 255 }) else { return nil }
+        let skin = Set(sheet.palette.indices.filter { i in
+            let c = sheet.palette[i]
+            return c.r > 0.55 && c.r > c.g + 0.2 && c.g > c.b && c.b < 0.5
+        }.map(UInt8.init))
+        guard let first = pixels.firstIndex(where: { skin.contains($0) }) else { return nil }
         return (first % sheet.width, first / sheet.width)
     }
 

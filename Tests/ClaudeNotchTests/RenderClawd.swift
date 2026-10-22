@@ -15,11 +15,14 @@ struct RenderClawd {
         let pointing = try #require(ClawdAssets.pointing)
         for i in [0, 3, 7, 10, 14] { try write(grid(pointing, i), "\(folder)/pointing\(i).png") }
         if let laptop = ClawdAssets.laptop { try write(grid(laptop, 20), "\(folder)/laptop20.png") }
-        if let laptop = ClawdAssets.laptop, let head = ClawdAnimator.head(laptop, 20) {
-            let night = ClawdAnimator.Frame(laptop, 20, decals: [Decal(Props.nightcap, head.x, head.y - 4),
-                                                                 Decal(Props.clock(1), head.x + 5, head.y - 13)])
-            try write(strip([night]), "\(folder)/night.png")
+        // The nightcap on each pose he works in.
+        let poses = [(ClawdAssets.laptop, 20), (ClawdAssets.desktop, 30), (ClawdAssets.thinking, 30), (ClawdAssets.running, 8)]
+        let night = poses.compactMap { sheet, index in
+            sheet.flatMap { sheet in ClawdAnimator.head(sheet, index).map { head in
+                ClawdAnimator.Frame(sheet, index, decals: [Decal(Props.nightcap, head.x, head.y - 4)])
+            } }
         }
+        try write(strip(night), "\(folder)/night.png")
         for cue in [Cue.surprise, .thumbs, .stretch] {
             let reaction = try #require(ClawdAnimator.moodReactions[cue], "\(cue)")
             let times = stride(from: 0.0, to: reaction.duration, by: reaction.duration / 12).map { $0 }

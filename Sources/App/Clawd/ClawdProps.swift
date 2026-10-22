@@ -533,18 +533,6 @@ enum Props {
     /// One eye shut, a wink: over the eye at x 16–17, at (16, 7).
     static let winkShut = PixelArt("winkShut", ["bb", "xx"], ["b": body, "x": eye])
 
-    /// A little clock over his head, its hand going round: `tick` 0–3 points it up, right, down, left. At
-    /// about (head x + 5, head top − 9).
-    static func clock(_ tick: Int) -> PixelArt {
-        let hands = [
-            [".wwwww.", "ww.k.ww", "w..k..w", "w..k..w", "w.....w", "ww...ww", ".wwwww."],
-            [".wwwww.", "ww...ww", "w.....w", "w..kkkw", "w.....w", "ww...ww", ".wwwww."],
-            [".wwwww.", "ww...ww", "w.....w", "w..k..w", "w..k..w", "ww.k.ww", ".wwwww."],
-            [".wwwww.", "ww...ww", "w.....w", "wkkk..w", "w.....w", "ww...ww", ".wwwww."],
-        ]
-        return PixelArt("clock\(tick % 4)", hands[tick % 4], ["w": 0xf4_f0_e6_ff, "k": 0x26_26_2a_ff])
-    }
-
     /// A nightcap on top of his head, its tip drooping behind him with a pompom: at (head x, head top − 4).
     static let nightcap = PixelArt("nightcap", [
         "p...............",
