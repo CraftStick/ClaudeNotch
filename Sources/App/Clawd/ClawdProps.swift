@@ -427,4 +427,16 @@ enum Props {
 
     /// The eye behind the glass narrowed to a slit: at (17, 3).
     static let squint = PixelArt("squint", ["bb", "xx"], ["b": body, "x": eye])
+
+    // MARK: Standing (Laptop frame 0): eyes at x 6–7 and 16–17, y 9–10.
+
+    /// Both eyes a pixel towards his near side, or his far side: at (5, 9).
+    static let eyesAsideNear = PixelArt("eyesAsideNear", [
+        "bbxxbbbbbbbbxx",
+        "bbxxbbbbbbbbxx",
+    ], ["b": body, "x": eye])
+    static let eyesAsideFar = PixelArt("eyesAsideFar", [
+        "xxbbbbbbbbxxbb",
+        "xxbbbbbbbbxxbb",
+    ], ["b": body, "x": eye])
 }

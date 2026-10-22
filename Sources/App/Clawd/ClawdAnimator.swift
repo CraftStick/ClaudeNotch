@@ -157,13 +157,13 @@ struct ClawdAnimator {
                 if t < hourglass.duration { return hourglass.frame(t) }
                 t -= hourglass.duration
             }
-            return Store.alive ? life(at: date, restingSince: date.addingTimeInterval(-t)) : idle(t, sinceRest: sinceMotion)
+            return Store.alive ? life(at: date, restingSince: date.addingTimeInterval(-t)) : idle(t, sinceRest: sinceMotion, at: date)
         case .done, .stopped, .failed:
             if previous != nil, let ending = ending(motion) {
                 if t < ending.duration { return Frame(ending, at: t) }
                 t -= ending.duration
             }
-            return Store.alive ? life(at: date, restingSince: date.addingTimeInterval(-t)) : idle(t, sinceRest: sinceMotion)
+            return Store.alive ? life(at: date, restingSince: date.addingTimeInterval(-t)) : idle(t, sinceRest: sinceMotion, at: date)
         }
     }
 
@@ -214,9 +214,9 @@ struct ClawdAnimator {
         }
     }
 
-    /// Mostly standing still; every 30 s a little fidget; after `sleepAfter` sits down and dozes;
+    /// Mostly standing still (breathing, blinking); every 30 s a little fidget; after `sleepAfter` sits down and dozes;
     /// at the very end of the rest wakes up and walks off out of the notch.
-    private func idle(_ t: TimeInterval, sinceRest: TimeInterval) -> Frame {
+    private func idle(_ t: TimeInterval, sinceRest: TimeInterval, at date: Date) -> Frame {
         let leaveAt = Store.restDuration - Self.walkOff
         if sinceRest >= leaveAt, let walking = ClawdAssets.walking {
             let w = sinceRest - leaveAt
@@ -242,7 +242,8 @@ struct ClawdAnimator {
         // Standing still until the next fidget, or until he sits down or walks off: no look before then.
         let nextFidget = Double(intoFidget < 0 ? n : n + 1) * window + 10 - t
         let next = [nextFidget, Self.sleepAfter - sinceRest, Store.restDuration - Self.walkOff - sinceRest].filter { $0 > 0 }.min()
-        return Frame(laptop, 0, rate: 1 / max(next ?? 1, 1.0 / 16))
+        let now = date.timeIntervalSinceReferenceDate
+        return Self.alive(laptop, now, until: now + (next ?? 1))
     }
 
     private static let fidgets: [Clip] = [
@@ -642,7 +643,81 @@ struct ClawdAnimator {
     /// Standing still until `until`, in seconds of the clock as `now` is: the next look comes right
     /// then, so a pastime starts on time rather than up to half a second into it.
     private func standing(until: TimeInterval, _ now: TimeInterval) -> Frame {
-        Frame(laptop, 0, rate: 1 / max(until - now, 1.0 / 16))
+        Self.alive(laptop, now, until: until)
+    }
+
+    // MARK: - Standing still
+
+    /// What his eyes do while he stands: open, shut for a blink, glancing a pixel aside, or up.
+    enum Eyes: Equatable { case open, shut, aside(Int), up }
+
+    /// One breath: in for the first half, out (`exhaled`) for the second.
+    static let breath: TimeInterval = 4
+    private static let blinkSlot: TimeInterval = 4.5
+    private static let glanceSlot: TimeInterval = 11
+
+    /// Still, but alive: he breathes, blinks every few seconds (now and then twice), and once in a while
+    /// glances aside or up. From the clock alone, like his life in the notch, so it plays out the same
+    /// however often he's drawn; and he's drawn again only when something changes, or at `until`.
+    static func alive(_ laptop: PixelSheet, _ now: TimeInterval, until: TimeInterval) -> Frame {
+        let state = liveliness(at: now)
+        let sheet = state.exhaled ? (exhaled ?? laptop) : laptop
+        let down = sheet.name == laptop.name ? 0 : 1  // breathing out his head sinks a pixel
+        // Laptop 0: eyes at x 6–7 and 16–17, y 9–10.
+        var decals: [Decal] = []
+        switch state.eyes {
+        case .open: break
+        case .shut: decals = [Decal(Props.closedEyes, 5, 9 + down)]
+        case .aside(let dx): decals = [Decal(dx > 0 ? Props.eyesAsideNear : Props.eyesAsideFar, 5, 9 + down)]
+        case .up: decals = [Decal(Props.eyesUp, 6, 9 + down)]
+        }
+        let next = min(state.next, until)
+        return Frame(sheet, 0, rate: 1 / max(next - now, 1.0 / 16), decals: decals)
+    }
+
+    /// How he breathes and where he looks at `now`, and when that next changes.
+    static func liveliness(at now: TimeInterval) -> (exhaled: Bool, eyes: Eyes, next: TimeInterval) {
+        let half = breath / 2
+        var changes = [((now / half).rounded(.down) + 1) * half]
+        let exhaled = now.truncatingRemainder(dividingBy: breath) >= half
+
+        var eyes = Eyes.open
+        let glance = (now / glanceSlot).rounded(.down)
+        for slot in [glance, glance + 1] {
+            var random = SeededRandom(seed: UInt64(slot) &* 0x9E37 ^ 0x6C61)
+            guard Double.random(in: 0..<1, using: &random) < 0.45 else { continue }
+            let start = slot * glanceSlot + Double.random(in: 1...6, using: &random)
+            let end = start + Double.random(in: 1.2...2.4, using: &random)
+            let look: Eyes = [.aside(-1), .aside(1), .up][Int.random(in: 0..<3, using: &random)]
+            if (start..<end).contains(now) { eyes = look }
+            changes += [start, end]
+        }
+        let blink = (now / blinkSlot).rounded(.down)
+        for slot in [blink, blink + 1] {
+            var random = SeededRandom(seed: UInt64(slot) &* 0x9E37 ^ 0x626C)
+            let at = slot * blinkSlot + Double.random(in: 0.3...3.8, using: &random)
+            var shut = [at]
+            if Double.random(in: 0..<1, using: &random) < 0.25 { shut.append(at + 0.35) }  // a double blink
+            for start in shut {
+                if (start..<(start + 0.15)).contains(now) { eyes = .shut }
+                changes += [start, start + 0.15]
+            }
+        }
+        return (exhaled, eyes, changes.filter { $0 > now }.min() ?? now + 1)
+    }
+
+    /// The standing frame breathed out: everything above his legs a pixel lower, on legs a pixel shorter.
+    static let exhaled: PixelSheet? = ClawdAssets.laptop.map { sheet in
+        let pixels = sheet.frames[0], w = sheet.width
+        func row(_ y: Int) -> ArraySlice<UInt8> { pixels[(y * w)..<((y + 1) * w)] }
+        // The legs: the rows at the bottom that are all like the last one.
+        var legs = sheet.height - 1
+        while legs > 0, row(legs - 1) == row(sheet.height - 1) { legs -= 1 }
+        var out = [UInt8](repeating: 255, count: pixels.count)
+        for y in 1...legs { out.replaceSubrange((y * w)..<((y + 1) * w), with: row(y - 1)) }
+        for y in (legs + 1)..<sheet.height { out.replaceSubrange((y * w)..<((y + 1) * w), with: row(y)) }
+        return PixelSheet(name: sheet.name + "-exhaled", width: w, height: sheet.height, palette: sheet.palette,
+                          frames: [out], anchor: sheet.anchor)
     }
 }
 
