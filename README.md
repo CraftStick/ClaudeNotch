@@ -31,6 +31,14 @@ You need macOS 14 or later and Claude Code, in a terminal or in the Claude app.
 2. Click **Move**: it copies itself to Applications and opens from there.
 3. When it asks to connect to Claude Code, click **Connect**. It adds its hooks to `~/.claude/settings.json` and keeps the original next to it.
 
+**Or with [Homebrew](https://brew.sh):**
+
+```bash
+brew install craftstick/tap/claude-notch
+```
+
+Then open Claude Notch from Applications (the first time: **Done**, then **System Settings → Privacy & Security → Open Anyway**) and click **Connect**. Update with `brew upgrade claude-notch`.
+
 **Update:** open the new one from its disk image and click **Move**: it quits the old one and takes its place.<br>
 **Uninstall:** move the app to the Trash and click **Remove All**: its hooks, login item, settings and data go with it.
 
