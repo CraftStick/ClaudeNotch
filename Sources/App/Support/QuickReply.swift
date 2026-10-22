@@ -6,7 +6,7 @@ import ApplicationServices
 ///
 /// Typing for you needs Accessibility access, asked for the first time. It types nothing unless it's sure
 /// where the keys go: in Terminal and iTerm the session's very tab must have come forward; in the Claude app
-/// that session must have opened and the cursor be in a text field. Elsewhere (an editor's terminal, say)
+/// that session must have opened, with the cursor in a text field or nothing in focus. Elsewhere (an editor's terminal, say)
 /// the keys could land in your code, so there are no buttons there.
 enum QuickReply {
     /// The session runs where a reply can be typed safely.
@@ -22,7 +22,11 @@ enum QuickReply {
     @discardableResult
     static func send(_ text: String, to s: Session) -> Bool {
         let ask = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        guard supports(s), AXIsProcessTrustedWithOptions(ask) else { return false }
+        guard supports(s) else { return false }
+        guard AXIsProcessTrustedWithOptions(ask) else {
+            EventLog.append("Quick reply: no Accessibility access yet, macOS asked for it")
+            return false
+        }
         EventLog.append("Quick reply")
         if inClaudeApp(s) {
             // Only once that very session was opened, and has had a moment to come up: until then the
@@ -44,25 +48,37 @@ enum QuickReply {
     /// every 0.1 s for up to 3 s; never if it doesn't get there.
     private static func whenReady(_ host: String, needsTextField: Bool, tries: Int = 30, then: @escaping () -> Void) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            if let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier == host,
-               !needsTextField || hasTextFieldFocused(app.processIdentifier) {
+            let app = NSWorkspace.shared.frontmostApplication
+            let role = needsTextField && app?.bundleIdentifier == host ? focusedRole(app!.processIdentifier) : ""
+            // The Claude app often tells of nothing in focus even with the cursor in its field: keys typed with
+            // nothing in focus go nowhere, so only something else in focus (a button Return would press) stops it.
+            if app?.bundleIdentifier == host, !needsTextField || role.isEmpty || textRoles.contains(role) {
                 // A moment more: a tab that just came forward may still be taking the keyboard.
+                EventLog.append("Quick reply: typed into \(host)\(role.isEmpty ? "" : " (\(role))")")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: then)
             } else if tries > 0 {
                 whenReady(host, needsTextField: needsTextField, tries: tries - 1, then: then)
             } else {
-                EventLog.append("Quick reply: not typed, \(host) didn't come forward")
+                EventLog.append(app?.bundleIdentifier == host
+                    ? "Quick reply: not typed, the cursor isn't in a text field (\(role.isEmpty ? "nothing focused" : role))"
+                    : "Quick reply: not typed, \(host) didn't come forward (\(app?.bundleIdentifier ?? "nothing") is)")
             }
         }
     }
 
-    private static func hasTextFieldFocused(_ pid: pid_t) -> Bool {
+    private static let textRoles: Set<String> = [kAXTextAreaRole, kAXTextFieldRole, kAXComboBoxRole]
+
+    /// The role of what has the keyboard in the app, "" when it can't be told. An Electron app like
+    /// Claude's only tells once asked to, with AXManualAccessibility.
+    private static func focusedRole(_ pid: pid_t) -> String {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
         var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXFocusedUIElementAttribute as CFString,
-                                            &focused) == .success, let element = focused else { return false }
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID() else { return "" }
         var role: CFTypeRef?
         AXUIElementCopyAttributeValue(element as! AXUIElement, kAXRoleAttribute as CFString, &role)
-        return [kAXTextAreaRole, kAXTextFieldRole].contains(role as? String ?? "")
+        return role as? String ?? ""
     }
 
     /// The text as typed characters, a few at a time, then Return.
