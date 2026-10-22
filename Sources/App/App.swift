@@ -282,7 +282,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let zoneMode: DisplayMode = mode == .details || mode == .permission || greeting ? mode : .compact
         let details = store.detailsSession
         let size = NotchView.size(of: zoneMode, session: details,
-                                  others: store.others(than: details?.id).count, prompt: store.prompt, notch: notch)
+                                  others: store.others(than: details?.id).count, prompt: store.prompt, notch: notch,
+                                  busy: store.working.count)
         let zone = NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
                           width: size.width, height: size.height).insetBy(dx: -4, dy: -4)
         let inside = zone.contains(location)

@@ -9,8 +9,8 @@ struct NotchView: View {
 
     static let permissionHeight: CGFloat = 104
     private static let ear: CGFloat = 6
-    /// Room on each side of the notch: Clawd (36) and his hint icon (~14) on the left must fit,
-    /// or the icon slides under the camera.
+    /// Room on each side of the notch when it's open: Clawd (36) and his hint icon (~14) on the left must
+    /// fit, or the icon slides under the camera.
     private static let wing: CGFloat = 72
     private static let detailHeight: CGFloat = 54
     private var ear: CGFloat { Self.ear }
@@ -18,17 +18,25 @@ struct NotchView: View {
     private var detailHeight: CGFloat { Self.detailHeight }
 
     var body: some View {
+        // Drawn again when a finished turn's check goes, and the island with it gets narrower.
+        let checkGoes = store.focused.flatMap { s in s.phase == .done ? s.turnEnd?.addingTimeInterval(ClawdBadge.doneFor) : nil }
+        TimelineView(.explicit(checkGoes.map { [$0] } ?? [])) { context in island(at: context.date) }
+    }
+
+    private func island(at date: Date) -> some View {
         let mode = store.mode
         let session = store.focused
         let others = store.others(than: session?.id)
-        let size = Self.size(of: mode, session: session, others: others.count, prompt: store.prompt, notch: notch)
+        let busy = store.working.count
+        let size = Self.size(of: mode, session: session, others: others.count, prompt: store.prompt, notch: notch, busy: busy, at: date)
+        let wing = mode == .compact ? Self.compactWing(session, busy: busy, at: date) : Self.wing
         let isOpen = mode == .expanded || mode == .permission || mode == .details
         let shape = NotchShape(topRadius: ear, bottomRadius: isOpen ? 20 : 10)
 
-        ZStack(alignment: .top) {
+        return ZStack(alignment: .top) {
             shape.fill(Color.black)
             if let session, mode != .hidden {
-                content(session, others: others, mode: mode)
+                content(session, others: others, mode: mode, wing: wing)
                     .padding(.horizontal, ear)
                     .transition(.opacity)
             }
@@ -85,13 +93,14 @@ struct NotchView: View {
 
     /// Outer size of the black shape (including the small top curves) for `mode`.
     static func size(of mode: DisplayMode, session: Session?, others: Int = 0, prompt: PermissionPrompt? = nil,
-                     notch: NotchMetrics) -> CGSize {
+                     notch: NotchMetrics, busy: Int = 0, at date: Date = Date()) -> CGSize {
         let body: CGSize
         switch mode {
         case .hidden: body = CGSize(width: notch.width, height: notch.height)
+        case .compact:
+            body = CGSize(width: notch.width + 2 * compactWing(session, busy: busy, at: date), height: notch.height + NotchRim.width + 2)
         // A little deeper than the camera housing: the rim along the bottom runs inside the edge and
         // must clear the cut-out, where the screen has no pixels, with a sliver of black above it.
-        case .compact: body = CGSize(width: notch.width + 2 * wing, height: notch.height + NotchRim.width + 2)
         case .expanded: body = CGSize(width: max(notch.width + 2 * wing + 150, 420), height: notch.height + detailHeight)
         case .permission: body = CGSize(width: max(notch.width + 2 * wing + 190, 470), height: notch.height + promptHeight(prompt))
         case .details:
@@ -99,6 +108,24 @@ struct NotchView: View {
                           height: notch.height + (session.map { DetailsLayout.height($0, others: others) } ?? detailHeight))
         }
         return CGSize(width: body.width + 2 * ear, height: body.height)
+    }
+
+    /// Room on each side of the notch in the compact island, no more than what it shows needs, so it
+    /// covers as little of the menu bar as it can: Clawd on the left (8 + 36 + 4), and his hint icon after a
+    /// turn that ended (5 + 14 more); on the right how many sessions are at work and the time, at most
+    /// "59:59" (or "1:02:03" past 50 minutes) while it runs. The same on both sides: the island is centred.
+    static func compactWing(_ s: Session?, busy: Int, at date: Date) -> CGFloat {
+        guard let s else { return 48 }
+        let hint: Bool
+        switch s.phase {
+        case .stopped, .failed: hint = !s.isGreeting
+        case .done: hint = !s.isGreeting && date < (s.turnEnd ?? .distantPast).addingTimeInterval(ClawdBadge.doneFor)
+        case .thinking, .tool, .waiting: hint = false
+        }
+        let time = s.isGreeting ? "" : s.turnEnd.map { formatElapsed($0.timeIntervalSince(s.turnStart)) }
+            ?? (date.timeIntervalSince(s.turnStart) < 3000 ? "59:59" : "1:02:03")
+        let right = 10 + CGFloat(time.count) * 7.2 + (busy > 1 ? 20 : 0)
+        return max(hint ? 72 : 48, right.rounded(.up))
     }
 
     /// Tallest the shape can get, for sizing the window.
@@ -111,7 +138,7 @@ struct NotchView: View {
         prompt?.form.map(QuestionCard.height) ?? permissionHeight
     }
 
-    private func content(_ s: Session, others: [Session], mode: DisplayMode) -> some View {
+    private func content(_ s: Session, others: [Session], mode: DisplayMode, wing: CGFloat) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 ClawdBadge(session: s, showsHint: mode == .compact && !s.isGreeting, moving: store.onScreen)
@@ -183,7 +210,7 @@ func phaseColor(_ phase: Phase) -> Color {
 /// Claude itself (Clawd). In the compact notch, where there is no detail row, a small hint
 /// says how the turn ended; while it works or waits for you, Clawd typing or waving says enough.
 /// The check for a finished turn only shows for a moment: Clawd's hop says it too.
-private struct ClawdBadge: View {
+struct ClawdBadge: View {
     let session: Session
     let showsHint: Bool
     let moving: Bool
