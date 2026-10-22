@@ -21,9 +21,6 @@ And Clawd lives in the notch.
 </tr>
 </table>
 
-<a href="docs/demo.mp4"><img src="docs/demo-poster.png" width="640" alt="The notch showing a new task, with Clawd under a light bulb: click to watch the demo video"></a><br>
-<a href="docs/demo.mp4"><b>▶ Watch the 2-minute demo: every reaction of Clawd's in the notch</b></a>
-
 </div>
 
 ## Install
@@ -89,3 +86,8 @@ Have an idea for what to add, or found something that doesn't work? [Open an iss
 Clawd is Anthropic's character, and his sprites aren't in this repository: the app reads them from the Claude app on your Mac, and draws a simpler Clawd if it isn't there. This project isn't affiliated with or endorsed by Anthropic.
 
 [PolyForm Strict License 1.0.0](LICENSE), for every version, 0.1.0 to 0.1.6 included: you may use Claude Notch for any noncommercial purpose and share unchanged copies of it for free, but not make changes or new works based on it.
+
+## Demo
+
+<a href="docs/demo.mp4"><img src="docs/demo-poster.png" width="640" alt="The notch showing a new task, with Clawd under a light bulb: click to watch the demo video"></a><br>
+<a href="docs/demo.mp4"><b>▶ Watch the 2-minute demo: every reaction of Clawd's in the notch</b></a>
