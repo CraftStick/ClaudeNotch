@@ -60,6 +60,10 @@ cd ~/ClaudeNotch && ./install.sh
 - **Клик открывает терминал, но не ту вкладку:** разреши Claude Notch в Системных настройках → Конфиденциальность и безопасность → Автоматизация.
 - **Что доходит до приложения:** `tail -f ~/Library/Application\ Support/ClaudeNotch/events.log`.
 
+## Идеи
+
+Есть идея, что добавить, или что-то не работает? [Напиши в issue](https://github.com/CraftStick/ClaudeNotch/issues/new) — расскажи об этом.
+
 ## Про Clawd
 
 Clawd — персонаж Anthropic, и его спрайтов в этом репозитории нет: приложение берёт их из установленного у тебя Claude.app, а без него рисует упрощённого Clawd. Проект не связан с Anthropic и не одобрен ей.

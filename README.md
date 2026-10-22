@@ -60,6 +60,10 @@ Everything stays on your Mac, with no network. The one exception is a check for 
 - **A click opens the terminal but not the session's tab:** allow Claude Notch in System Settings → Privacy & Security → Automation.
 - **What reaches the app:** `tail -f ~/Library/Application\ Support/ClaudeNotch/events.log`.
 
+## Ideas
+
+Have an idea for what to add, or found something that doesn't work? [Open an issue](https://github.com/CraftStick/ClaudeNotch/issues/new) and tell me about it.
+
 ## About Clawd
 
 Clawd is Anthropic's character, and his sprites aren't in this repository: the app reads them from the Claude app on your Mac, and draws a simpler Clawd if it isn't there. This project isn't affiliated with or endorsed by Anthropic.
