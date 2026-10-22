@@ -13,6 +13,25 @@ enum Describe {
         return tests.contains(where: has) ? .sparkler : nil
     }
 
+    /// How Clawd takes a prompt: a flinch at a rude one (shouting, swearing, "wtf"), a heart for thanks;
+    /// nil for any other.
+    static func reaction(to prompt: String) -> Cue? {
+        let text = prompt.lowercased()
+        func has(_ pattern: String) -> Bool { text.range(of: pattern, options: .regularExpression) != nil }
+        let letters = prompt.filter(\.isLetter)
+        let shouting = letters.count >= 8 && Double(letters.filter(\.isUppercase).count) / Double(letters.count) > 0.7
+        if shouting || has(#"(^|[^а-яё])(бля|сука|нахуй|хуйн|хуя|пизд|еба[нт]|ёба|заеба|дебил|идиот|тупой|тупая|дурак)"#)
+            || has(#"\b(wtf|wth|fuck|fucking|shit|stupid|idiot|dumb)\b"#) || has(#"[?!]{3,}"#)
+            || has(#"(опять|снова|до сих пор|всё ещё|все еще) не работает"#) {
+            return .flinch
+        }
+        if has(#"(^|[^а-яё])(спасибо|спс|благодарю|пасиб|ты лучший|красава|молодец|умница)"#)
+            || has(#"\b(thanks|thank you|thx|ty|great job|good job|well done|you rock|awesome)\b"#) {
+            return .thanks
+        }
+        return nil
+    }
+
     /// What a shell command does, in a few plain words, for the title over it: "npm run build && git
     /// add . && git commit" is "Committing". Of the commands in a chain the one that matters most wins.
     enum CommandKind: CaseIterable {

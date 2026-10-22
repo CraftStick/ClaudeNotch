@@ -82,7 +82,7 @@ enum Motion: Equatable {
 /// confetti after a big task, a hop and a wave when the app is opened, a parachute when he
 /// moves into the notch for good. Head in his hands after failures in a row, a shrug when auto mode
 /// turns something down, a sparkler when tests pass, a rocket after a push.
-enum Cue: Hashable { case idea, excited, facepalm, celebrate, hello, arrive, despair, shrug, sparkler, rocket }
+enum Cue: Hashable { case idea, excited, facepalm, celebrate, hello, arrive, despair, shrug, sparkler, rocket, thanks, flinch, phew, proud, sweep }
 
 struct Session: Equatable {
     let id: String

@@ -171,6 +171,84 @@ extension ClawdAnimator {
             let joy = ClawdAssets.excited.flatMap { Pastime([Clip(sheet: $0, frames: 2...21, fps: 14)]) }
             return Pastime.sequence([turnIn, launch, joy])
         }
+        // You said thanks: he goes shy, eyes smiling and cheeks pink, rocking a little, while a heart rises
+        // over his head and a small one after it.
+        all[.thanks] = ClawdAssets.pointing.map { sheet in
+            Pastime(duration: 2.8) { t in
+                guard t > 0.1 else { return Frame(sheet, 0, rate: 12) }
+                var decals = [Decal(Props.happyEyes, 5, 7), Decal(Props.blush, 5, 9)]
+                let rise = { (start: Double) -> Int? in t >= start ? -1 - Int((t - start) * 3.2) : nil }
+                if let y = rise(0.25) { decals.append(Decal(t < 2.2 ? Props.heart : Props.heartFading, 8, y)) }
+                if let y = rise(1.1), t < 2.5 { decals.append(Decal(Props.smallHeart, 15, y + 2)) }
+                let rock = Int((sin(t * 6) * 1.2).rounded())
+                return Frame(sheet, 0, rate: 12, offsetX: CGFloat(rock), decals: decals)
+            }
+        }
+        // Spoken to rudely: he flinches back with his eyes squeezed shut, then hunches, eyes down, a drop
+        // of sweat running down his head.
+        all[.flinch] = ClawdAssets.pointing.map { sheet in
+            Pastime(duration: 2.6) { t in
+                if t < 0.08 { return Frame(sheet, 0, rate: 12) }
+                if t < 0.7 {
+                    let jolt = t < 0.2
+                    return Frame(sheet, 0, rate: 12, offsetX: jolt ? 2 : 1, offsetY: 1, decals: [Decal(Props.squeezedEyes, 5, 6)])
+                }
+                let p = ((t - 0.7) / 1.4).truncatingRemainder(dividingBy: 1)
+                var decals = [Decal(Props.eyesDown, 6, 7)]
+                if p < 0.85 { decals.append(Decal(Props.sweat, 1, 4 + Int(p * 5))) }
+                return Frame(sheet, 0, rate: 10, offsetX: 1, offsetY: 1, decals: decals)
+            }
+        }
+        // It works after a run of failures: eyes shut, he sags with a long breath out, shakes a drop of
+        // sweat off, and perks up, smiling.
+        all[.phew] = ClawdAssets.pointing.map { sheet in
+            Pastime(duration: 2.6) { t in
+                if t < 0.1 { return Frame(sheet, 0, rate: 12) }
+                if t < 1.3 {
+                    var decals = [Decal(Props.closedEyes, 5, 7)]
+                    if (0.35..<1.3).contains(t) { decals.append(Decal(t < 0.95 ? Props.breath : Props.breathFading, 24 + Int((t - 0.35) * 4), 8)) }
+                    return Frame(sheet, 0, rate: 12, offsetY: t > 0.35 ? 1 : 0, decals: decals)
+                }
+                var decals = [Decal(Props.happyEyes, 5, 7)]
+                if t < 1.8 {  // the drop flies off behind him
+                    let p = (t - 1.3) / 0.5
+                    decals.append(Decal(Props.sweat, 2 - Int(p * 6), 4 - Int(4 * p * (1 - p) * 3) + Int(p * 3)))
+                }
+                let shake = t < 1.6 ? (Int(t * 20) % 2 == 0 ? 1 : -1) : 0
+                return Frame(sheet, 0, rate: 14, offsetX: CGFloat(shake), offsetY: (2.0..<2.25).contains(t) ? -1 : 0, decals: decals)
+            }
+        }
+        // A big change (300+ lines): he stands tall, smiling, bobbing proudly, with sparkles twinkling round him.
+        all[.proud] = ClawdAssets.pointing.map { sheet in
+            Pastime(duration: 2.6) { t in
+                guard t > 0.1 else { return Frame(sheet, 0, rate: 12) }
+                var decals = [Decal(Props.happyEyes, 5, 7)]
+                let spots = [(-2, 3), (24, 1), (26, 12), (-4, 14), (11, -1)]
+                for (i, spot) in spots.enumerated() {
+                    let phase = (t * 2.5 + Double(i) * 0.37).truncatingRemainder(dividingBy: 1)
+                    if phase < 0.35 { decals.append(Decal(Props.bigSparkle, spot.0, spot.1)) }
+                    else if phase < 0.6 { decals.append(Decal(Props.sparkle, spot.0 + 1, spot.1 + 1)) }
+                }
+                let bob = Int(t * 3) % 2 == 0 ? -1 : 0
+                return Frame(sheet, 0, rate: 12, offsetY: CGFloat(bob), decals: decals)
+            }
+        }
+        // More taken out than put in: a tidy-up. With a broom he sweeps in front of him, dust flying, eyes on
+        // the floor; then a glint where it's clean, and he's pleased.
+        all[.sweep] = ClawdAssets.pointing.map { sheet in
+            Pastime(duration: 3.0) { t in
+                if t < 2.2 {
+                    let stroke = Int(t * 5) % 2  // back and forth
+                    var decals = [Decal(Props.broom, 19 + stroke * 2, 7), Decal(Props.eyesDown, 6, 7)]
+                    let dust = (t * 5).truncatingRemainder(dividingBy: 1)
+                    if stroke == 1, dust < 0.6 { decals.append(Decal(dust < 0.3 ? Props.puff : Props.puffWide, 27 + Int(dust * 6), 18 - Int(dust * 3))) }
+                    return Frame(sheet, 0, rate: 10, decals: decals)
+                }
+                var decals = [Decal(Props.broom, 19, 7), Decal(Props.happyEyes, 5, 7)]
+                if t < 2.7 { decals.append(Decal(Int(t * 8) % 2 == 0 ? Props.bigSparkle : Props.sparkle, 29, 16)) }
+                return Frame(sheet, 0, rate: 8, decals: decals)
+            }
+        }
         return all.compactMapValues { $0 }
     }()
 

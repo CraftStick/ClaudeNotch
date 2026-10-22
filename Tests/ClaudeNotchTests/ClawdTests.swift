@@ -34,7 +34,8 @@ struct ClawdTests {
         let props = [Props.mug, Props.steam, Props.steamFading, Props.happyEyes, Props.closedEyes, Props.headphones,
                      Props.note, Props.wizardHat, Props.wand, Props.star, Props.sparkle, Props.bigSparkle, Props.wink,
                      Props.chefHat, Props.pan, Props.pancakeFlat, Props.pancakeEdge, Props.book, Props.parachute,
-                     Props.arm, Props.headphonesFolded, Props.wizardHatTucked]
+                     Props.arm, Props.headphonesFolded, Props.wizardHatTucked, Props.heart, Props.heartFading, Props.smallHeart,
+                     Props.blush, Props.squeezedEyes, Props.eyesDown, Props.breath, Props.breathFading, Props.broom]
         #expect(Set(props.map(\.name)).count == props.count)
         for art in props {
             #expect(art.width > 0 && art.height > 0, "\(art.name)")
@@ -83,7 +84,7 @@ struct ClawdTests {
     func everyPastimeAndReactionHasItsFrames() {
         #expect(ClawdAnimator.pastimes.count >= 10)
         #expect(Set(ClawdAnimator.reactions.keys) == [.idea, .excited, .facepalm, .celebrate, .hello, .arrive])
-        #expect(Set(ClawdAnimator.moodReactions.keys) == [.despair, .shrug, .sparkler, .rocket])
+        #expect(Set(ClawdAnimator.moodReactions.keys) == [.despair, .shrug, .sparkler, .rocket, .thanks, .flinch, .phew, .proud, .sweep])
         let moods = [("compacting", ClawdAnimator.compacting), ("rate limit", ClawdAnimator.rateLimit), ("searching", ClawdAnimator.searching)].compactMap { name, pastime in
             pastime.map { (name, $0) }
         }

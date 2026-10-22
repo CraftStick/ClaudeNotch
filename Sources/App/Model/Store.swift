@@ -426,7 +426,7 @@ final class Store: ObservableObject {
             } else {
                 s.task = said.text
                 s.activity = Activity(symbol: "sparkle", title: tr("Взялся за задачу", "New task"), detail: said.text, prose: true)
-                s.play(.idea, at: now)
+                s.play(Describe.reaction(to: said.text) ?? .idea, at: now)
             }
             commit(s, expandFor: 3)
 
@@ -480,8 +480,13 @@ final class Store: ObservableObject {
                 if event == "PostToolUse" {
                     s.linesAdded += tool.added
                     s.linesRemoved += tool.removed
+                    let struggled = s.failStreak >= 2
                     s.failStreak = 0
-                    if toolName == "Bash", let cue = Describe.cheer(for: toolInput["command"] as? String ?? "") { s.play(cue, at: now) }
+                    if toolName == "Bash", let cue = Describe.cheer(for: toolInput["command"] as? String ?? "") {
+                        s.play(cue, at: now)
+                    } else if toolName == "Bash", struggled {
+                        s.play(.phew, at: now)  // it works at last
+                    }
                 } else if failed {
                     s.toolFailed(at: now)
                 }
@@ -606,8 +611,13 @@ final class Store: ObservableObject {
             s.activity = last.isEmpty
                 ? Activity(symbol: "checkmark.circle.fill", title: tr("Готово", "Done"), detail: summary(s, until: now))
                 : Activity(symbol: "checkmark.circle.fill", title: tr("Готово", "Done"), detail: last, note: summary(s, until: now), prose: true)
-            // A big task (5+ minutes or 150+ changed lines) gets confetti instead of a hop.
-            if now.timeIntervalSince(s.turnStart) >= 300 || s.linesAdded + s.linesRemoved >= 150 {
+            // A tidy-up (much more taken out than put in) gets a broom, 300+ new lines pride, and another big
+            // task (5+ minutes or 150+ changed lines) confetti, instead of a hop.
+            if s.linesRemoved >= 80, s.linesRemoved > 2 * s.linesAdded {
+                s.play(.sweep, at: now)
+            } else if s.linesAdded >= 300 {
+                s.play(.proud, at: now)
+            } else if now.timeIntervalSince(s.turnStart) >= 300 || s.linesAdded + s.linesRemoved >= 150 {
                 s.play(.celebrate, at: now)
             }
             // If you're in another app, the result stays up longer, with a sound.

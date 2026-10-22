@@ -439,4 +439,66 @@ enum Props {
         "xxbbbbbbbbxxbb",
         "xxbbbbbbbbxxbb",
     ], ["b": body, "x": eye])
+
+    // MARK: Moods (Pointing frame 0 again)
+
+    /// A heart rising over his head when you say thanks: at about (8, -2), full, then fading.
+    static let heart = PixelArt("heart", [
+        ".rr.rr.",
+        "rRrrrrr",
+        "rrrrrrr",
+        ".rrrrr.",
+        "..rrr..",
+        "...r...",
+    ], ["r": 0xe8_4a_5f_ff, "R": 0xff_b0_bc_ff])
+    static let heartFading = PixelArt("heartFading", [
+        ".rr.rr.",
+        "rrrrrrr",
+        "rrrrrrr",
+        ".rrrrr.",
+        "..rrr..",
+        "...r...",
+    ], ["r": 0x8a_3a_46_ff])
+    static let smallHeart = PixelArt("smallHeart", ["r.r", "rrr", ".r."], ["r": 0xe8_4a_5f_ff])
+
+    /// Pink cheeks, just under the eyes: at (5, 9).
+    static let blush = PixelArt("blush", [
+        "pp..........pp",
+    ], ["p": 0xf2_9a_a0_ff])
+
+    /// Eyes squeezed shut, "> <": over both eyes, at (5, 6).
+    static let squeezedEyes = PixelArt("squeezedEyes", [
+        "xbb........bbx",
+        "bxx........xxb",
+        "xbb........bbx",
+    ], ["b": body, "x": eye])
+
+    /// Eyes down, sheepish: at (6, 7).
+    static let eyesDown = PixelArt("eyesDown", [
+        "bb........bb",
+        "xx........xx",
+        "xx........xx",
+    ], ["b": body, "x": eye])
+
+    /// A breath out in front of him: "~" at (24, 8).
+    static let breath = PixelArt("breath", [".ww.w", "w..w."], ["w": 0xe6_ee_f4_ff])
+    static let breathFading = PixelArt("breathFading", [".ww.w", "w..w."], ["w": 0x8c_94_9a_ff])
+
+    /// A broom held in the hand at x 23, its bristles on the ground: at (19, 7), moved a pixel or two to sweep.
+    static let broom = PixelArt("broom", [
+        "..h..",
+        "..h..",
+        "..h..",
+        "..h..",
+        "..h..",
+        "..h..",
+        "..h..",
+        "..h..",
+        "..h..",
+        "..h..",
+        ".ttt.",
+        "sSsSs",
+        "sSsSs",
+        "s.s.s",
+    ], ["h": 0x9a_62_32_ff, "t": 0xc0_3a_2e_ff, "s": 0xe0_bc_5a_ff, "S": 0xc8_9c_3c_ff])
 }

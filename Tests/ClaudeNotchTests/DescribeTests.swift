@@ -38,6 +38,20 @@ struct DescribeTests {
         }
     }
 
+    // MARK: - How Clawd takes a prompt
+
+    @Test func thanksAndRudenessAreToldApart() {
+        for prompt in ["Спасибо!", "спс, теперь сделай тесты", "thanks a lot", "Great job, ship it", "ты лучший"] {
+            #expect(Describe.reaction(to: prompt) == .thanks, "\(prompt)")
+        }
+        for prompt in ["ПОЧЕМУ ЭТО НЕ РАБОТАЕТ", "бля, опять", "wtf is this", "опять не работает", "why???", "что за тупой код"] {
+            #expect(Describe.reaction(to: prompt) == .flinch, "\(prompt)")
+        }
+        for prompt in ["fix the tests", "Сделай README", "OK", "истребляй баги", "Добавь API"] {
+            #expect(Describe.reaction(to: prompt) == nil, "\(prompt)")
+        }
+    }
+
     // MARK: - Commands in plain words
 
     @Test func aCommandSaysWhatItDoes() {
