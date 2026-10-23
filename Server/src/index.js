@@ -74,8 +74,8 @@ async function api(request, env, route) {
   if (route === "link" && request.method === "DELETE") {
     if (linked) {
       await env.DB.prepare("UPDATE devices SET chat_id = NULL, chat_name = NULL WHERE id = ?").bind(device).run()
-      await send(env, row.chat_id, say(null, "Mac отключён: уведомления Claude Notch сюда больше не придут.",
-                                       "The Mac is unlinked: Claude Notch's notifications won't come here any more."))
+      await send(env, row.chat_id, say(null, `${EMOJI.unlinked} Mac отключён: уведомления Claude Notch сюда больше не придут.`,
+                                       `${EMOJI.unlinked} The Mac is unlinked: Claude Notch's notifications won't come here any more.`), true)
     }
     return json({ linked: false })
   }
@@ -149,8 +149,8 @@ async function webhook(request, env) {
   if (/^\/stop(@\w+)?$/i.test(text)) {
     const { meta } = await env.DB.prepare("UPDATE devices SET chat_id = NULL, chat_name = NULL WHERE chat_id = ?").bind(chat).run()
     await send(env, chat, meta.changes > 0
-      ? say(lang, "Готово: Mac отключён, уведомления больше не придут.", "Done: the Mac is unlinked, no more notifications.")
-      : say(lang, "К этому чату не подключён ни один Mac.", "No Mac is linked to this chat."))
+      ? say(lang, `${EMOJI.done} Готово: Mac отключён, уведомления больше не придут.`, `${EMOJI.done} Done: the Mac is unlinked, no more notifications.`)
+      : say(lang, "К этому чату не подключён ни один Mac.", "No Mac is linked to this chat."), true)
     return new Response("")
   }
 
@@ -166,8 +166,8 @@ async function webhook(request, env) {
         await send(env, chat, alreadyLinked(lang), true, menu(lang))
         return new Response("")
       }
-      await send(env, chat, say(lang, "Код не подошёл или уже устарел. Возьми новый: Claude Notch → Настройки → Уведомления.",
-                                      "That code didn't work or has expired. Get a new one: Claude Notch → Settings → Notifications."))
+      await send(env, chat, say(lang, `${EMOJI.warning} Код не подошёл или уже устарел. Возьми новый: Claude Notch → Настройки → Уведомления.`,
+                                      `${EMOJI.warning} That code didn't work or has expired. Get a new one: Claude Notch → Settings → Notifications.`), true)
       return new Response("")
     }
     const from = message.from || {}
@@ -177,8 +177,8 @@ async function webhook(request, env) {
       env.DB.prepare("DELETE FROM codes WHERE device_id = ?").bind(found.device_id),
     ])
     await send(env, chat, say(lang,
-      "Готово, Mac подключён! Сюда будут приходить уведомления Claude Notch. Какие именно, выбирается здесь, в «Функциях», или в настройках приложения.",
-      "Done, the Mac is linked! Claude Notch's notifications will come here. Pick which ones here, under Features, or in the app's settings."), false, menu(lang))
+      `${EMOJI.done} Готово, Mac подключён! Сюда будут приходить уведомления Claude Notch. Какие именно, выбирается здесь, в «Функциях», или в настройках приложения.`,
+      `${EMOJI.done} Done, the Mac is linked! Claude Notch's notifications will come here. Pick which ones here, under Features, or in the app's settings.`), true, menu(lang))
     return new Response("")
   }
 
@@ -187,8 +187,8 @@ async function webhook(request, env) {
     return new Response("")
   }
   await send(env, chat, say(lang,
-    "Привет! Я присылаю уведомления Claude Notch: например, когда закончились лимиты Claude.\n\nЧтобы подключить Mac, открой Claude Notch → Настройки → Уведомления, нажми «Получить код» и пришли его сюда.",
-    "Hi! I send Claude Notch's notifications: say, when your Claude limits run out.\n\nTo link your Mac, open Claude Notch → Settings → Notifications, click Get Code and send it here."))
+    `${EMOJI.crab} Привет! Я присылаю уведомления Claude Notch: например, когда закончились лимиты Claude.\n\n<blockquote><i>Чтобы подключить Mac, открой Claude Notch → Настройки → Уведомления, нажми «Получить код» и пришли его сюда.</i></blockquote>`,
+    `${EMOJI.crab} Hi! I send Claude Notch's notifications: say, when your Claude limits run out.\n\n<blockquote><i>To link your Mac, open Claude Notch → Settings → Notifications, click Get Code and send it here.</i></blockquote>`), true)
   return new Response("")
 }
 
@@ -259,9 +259,9 @@ async function menuPressed(query, env, chat, action, lang) {
     Object.assign(message, { text: alreadyLinked(lang), parse_mode: "HTML", reply_markup: menu(lang) })
   } else if (action === "unlink") {
     await env.DB.prepare("UPDATE devices SET chat_id = NULL, chat_name = NULL WHERE chat_id = ?").bind(chat).run()
-    Object.assign(message, { text: say(lang, "🔌 Mac отключён: уведомления больше не придут. Подключить снова: Claude Notch → Настройки → Уведомления.",
-                                             "🔌 The Mac is unlinked: no more notifications. To link it again: Claude Notch → Settings → Notifications."),
-                             reply_markup: { inline_keyboard: [] } })
+    Object.assign(message, { text: say(lang, `${EMOJI.unlinked} Mac отключён: уведомления больше не придут. Подключить снова: Claude Notch → Настройки → Уведомления.`,
+                                             `${EMOJI.unlinked} The Mac is unlinked: no more notifications. To link it again: Claude Notch → Settings → Notifications.`),
+                             parse_mode: "HTML", reply_markup: { inline_keyboard: [] } })
   }
   await telegram(env, "editMessageText", message)
   await telegram(env, "answerCallbackQuery", { callback_query_id: query.id, text: toast })
@@ -324,12 +324,23 @@ function telegram(env, method, body) {
 
 // MARK: - Bits
 
+// Telegram's animated emoji, each with the plain one shown where it can't be.
+const EMOJI = {
+  crab: animated("5296674469677409218", "🦀"),
+  done: animated("5222021113369893480", "✅"),
+  warning: animated("5276240711795107620", "⚠️"),
+  unlinked: animated("5222333585125582195", "❌"),
+}
+
+function animated(id, plain) {
+  return `<tg-emoji emoji-id="${id}">${plain}</tg-emoji>`
+}
+
 // What a linked chat hears when it sends /start or a code again.
 function alreadyLinked(lang) {
-  const crab = '<tg-emoji emoji-id="5296674469677409218">🦀</tg-emoji>'
   return say(lang,
-    `${crab} Привет! Это чат с уведомлениями Claude Notch.\n\n<blockquote><i>Какие именно, выбирается в «Функциях» или в настройках приложения.</i></blockquote>`,
-    `${crab} Hi! This is the chat for Claude Notch's notifications.\n\n<blockquote><i>Pick which ones under Features or in the app's settings.</i></blockquote>`)
+    `${EMOJI.crab} Привет! Это чат с уведомлениями Claude Notch.\n\n<blockquote><i>Какие именно, выбирается в «Функциях» или в настройках приложения.</i></blockquote>`,
+    `${EMOJI.crab} Hi! This is the chat for Claude Notch's notifications.\n\n<blockquote><i>Pick which ones under Features or in the app's settings.</i></blockquote>`)
 }
 
 function say(lang, ru, en) {
