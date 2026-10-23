@@ -328,8 +328,8 @@ function telegram(env, method, body) {
 function alreadyLinked(lang) {
   const crab = '<tg-emoji emoji-id="5296674469677409218">🦀</tg-emoji>'
   return say(lang,
-    `${crab} Привет! Это чат с уведомлениями Claude Notch. Какие именно, выбирается в «Функциях» или в настройках приложения.`,
-    `${crab} Hi! This is the chat for Claude Notch's notifications. Pick which ones under Features or in the app's settings.`)
+    `${crab} Привет! Это чат с уведомлениями Claude Notch.\n\n<blockquote>Какие именно, выбирается в «Функциях» или в настройках приложения.</blockquote>`,
+    `${crab} Hi! This is the chat for Claude Notch's notifications.\n\n<blockquote>Pick which ones under Features or in the app's settings.</blockquote>`)
 }
 
 function say(lang, ru, en) {
