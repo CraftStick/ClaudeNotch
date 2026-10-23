@@ -221,7 +221,7 @@ const NOTES = [
 
 function menu(lang) {
   return { inline_keyboard: [[
-    { text: say(lang, "⚙️ Функции", "⚙️ Features"), callback_data: "menu:features" },
+    { text: say(lang, "Функции", "Features"), callback_data: "menu:features", icon_custom_emoji_id: EMOJI_IDS.features },
     { text: say(lang, "🔌 Отключиться", "🔌 Unlink"), callback_data: "menu:unlink" },
   ]] }
 }
@@ -233,11 +233,11 @@ async function chatPrefs(env, chat) {
 }
 
 function featuresPage(lang, enabled) {
-  const text = say(lang, "⚙️ Что присылать в этот чат. Нажми, чтобы включить или выключить:",
-                         "⚙️ What to send to this chat. Tap to switch on or off:")
+  const text = say(lang, `${EMOJI.features} Что присылать в этот чат. Нажми, чтобы включить или выключить:`,
+                         `${EMOJI.features} What to send to this chat. Tap to switch on or off:`)
   const rows = NOTES.map((n) => [{ text: `${enabled.includes(n.key) ? "✅" : "▫️"} ${say(lang, n.ru, n.en)}`, callback_data: `menu:toggle:${n.key}` }])
   rows.push([{ text: say(lang, "← Назад", "← Back"), callback_data: "menu:back" }])
-  return { text, reply_markup: { inline_keyboard: rows } }
+  return { text, parse_mode: "HTML", reply_markup: { inline_keyboard: rows } }
 }
 
 async function menuPressed(query, env, chat, action, lang) {
@@ -325,7 +325,9 @@ function telegram(env, method, body) {
 // MARK: - Bits
 
 // Telegram's animated emoji, each with the plain one shown where it can't be.
+const EMOJI_IDS = { features: "5429499996913278461" }
 const EMOJI = {
+  features: animated(EMOJI_IDS.features, "🫵"),
   crab: animated("5296674469677409218", "🦀"),
   done: animated("5222021113369893480", "✅"),
   warning: animated("5276240711795107620", "⚠️"),
