@@ -70,6 +70,8 @@ final class Telegram: ObservableObject {
 
     /// Who the Mac is linked to ("@name"), nil while it isn't.
     @Published private(set) var chat: String? = UserDefaults.standard.string(forKey: chatKey)
+    /// The Mac was just linked: what's true now (a limit that ran out) can be told.
+    var onLinked: () -> Void = {}
     @Published private(set) var linking = Linking.idle
     private var watch: Timer?
 
@@ -144,9 +146,10 @@ final class Telegram: ObservableObject {
         set(chat: nil)
     }
 
-    /// Sends `text`, Telegram's HTML (`escapeHTML` the rest), if the Mac is linked and `note` is switched on.
+    /// Sends `text`, Telegram's HTML (`escapeHTML` the rest), if the Mac is linked. Whether `note` is
+    /// switched on the bot decides: it's switched in the chat too, and the settings here may be behind.
     func send(_ note: TelegramNote, _ text: String) {
-        guard linked, note.enabled else { return }
+        guard linked else { return }
         EventLog.append("Telegram \(note.rawValue)")
         post(text, kind: note)
     }
@@ -199,8 +202,10 @@ final class Telegram: ObservableObject {
             linking = .idle
         }
         guard chat != self.chat else { return }
+        let linkedNow = self.chat == nil && chat != nil
         self.chat = chat
         UserDefaults.standard.set(chat, forKey: Self.chatKey)
+        if linkedNow { onLinked() }
     }
 
     /// The Mac's own secret, made the first time it's needed.

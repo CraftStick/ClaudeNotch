@@ -85,8 +85,9 @@ async function api(request, env, route) {
     const body = await request.json().catch(() => ({}))
     const text = typeof body.text === "string" ? body.text.trim().slice(0, 3500) : ""
     if (!text) return json({ error: "empty" }, 400)
-    // Switched off in the chat since the app last looked: dropped here.
-    if (typeof body.kind === "string" && row.prefs && !JSON.parse(row.prefs).includes(body.kind)) return json({ ok: true, skipped: true })
+    // What's switched on is decided here, where the chat's Features switch it too: the app sends every kind.
+    const enabled = row.prefs ? JSON.parse(row.prefs) : NOTES.filter((n) => n.on).map((n) => n.key)
+    if (typeof body.kind === "string" && !enabled.includes(body.kind)) return json({ ok: true, skipped: true })
     const markup = keyboard(body.buttons)
     const hour = now - (now % 3600)
     const count = row.sent_window === hour ? row.sent_count + 1 : 1

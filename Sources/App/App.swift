@@ -444,22 +444,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.questionsGoFar = { [weak self] in self?.questions.active == true }
         if telegram.linked { telegram.refresh() }
         telegram.watchPrefs()
+        // A limit that ran out before the Mac was linked: the chat hears of it at once, not only at the next one.
+        telegram.onLinked = { [weak self] in
+            guard let self else { return }
+            for limit in self.limits.limits where limit.exhausted { self.telegram.send(.limitReached, Self.exhausted(limit)) }
+        }
     }
 
     /// A limit ran out: the notch opens on Clawd by his hourglass, and Telegram hears of it. It's back: a hop.
     private func limitChanged(_ change: PlanLimits.Change) {
         switch change {
         case .exhausted(let limit):
-            let title = tr("\(limit.name) исчерпан", "\(limit.name) reached")
-            let reset = limit.resetText()
-            store.show(notice: Activity(symbol: "hourglass", title: title, detail: reset), limited: true)
-            telegram.send(.limitReached, "\(TelegramEmoji.limit) \(escapeHTML(title))" + (reset.isEmpty ? "" : "\n\(escapeHTML(reset))"))
+            store.show(notice: Activity(symbol: "hourglass", title: tr("\(limit.name) исчерпан", "\(limit.name) reached"),
+                                        detail: limit.resetText()), limited: true)
+            telegram.send(.limitReached, Self.exhausted(limit))
         case .restored(let limit):
             let title = tr("\(limit.name) снова доступен", "\(limit.name) is back")
             let detail = tr("Claude может работать дальше", "Claude can get back to work")
             store.show(notice: Activity(symbol: "battery.100.bolt", title: title, detail: detail), limited: false, for: 5)
             telegram.send(.limitBack, "\(TelegramEmoji.back) \(escapeHTML(title))\n\(escapeHTML(detail))")
         }
+    }
+
+    /// "📊 Weekly limit reached", and when it resets.
+    private static func exhausted(_ limit: PlanLimit) -> String {
+        let reset = limit.resetText()
+        return "\(TelegramEmoji.limit) " + escapeHTML(tr("\(limit.name) исчерпан", "\(limit.name) reached")) + (reset.isEmpty ? "" : "\n" + escapeHTML(reset))
     }
 
     private func news(_ news: Store.News) {
