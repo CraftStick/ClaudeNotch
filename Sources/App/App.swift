@@ -449,12 +449,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let title = tr("\(limit.name) исчерпан", "\(limit.name) reached")
             let reset = limit.resetText()
             store.show(notice: Activity(symbol: "hourglass", title: title, detail: reset), limited: true)
-            telegram.send(.limitReached, "⏳ \(title)" + (reset.isEmpty ? "" : "\n\(reset)"))
+            telegram.send(.limitReached, "\(TelegramEmoji.limit) \(escapeHTML(title))" + (reset.isEmpty ? "" : "\n\(escapeHTML(reset))"))
         case .restored(let limit):
             let title = tr("\(limit.name) снова доступен", "\(limit.name) is back")
             let detail = tr("Claude может работать дальше", "Claude can get back to work")
             store.show(notice: Activity(symbol: "battery.100.bolt", title: title, detail: detail), limited: false, for: 5)
-            telegram.send(.limitBack, "🟢 \(title)\n\(detail)")
+            telegram.send(.limitBack, "\(TelegramEmoji.back) \(escapeHTML(title))\n\(escapeHTML(detail))")
         }
     }
 
@@ -462,7 +462,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch news {
         case .done(let s):
             limits.lookAgain()
-            telegram.send(.done, Self.message("✅ " + tr("Готово", "Done"), s))
+            telegram.send(.done, Self.message(TelegramEmoji.done, tr("Готово", "Done"), s))
         case .failed(let s) where s.rateLimited:
             limits.lookAgain(urgent: true)
             // Without fresh limits to go by (Claude Code's login in the keychain expired: it's renewed
@@ -475,28 +475,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in  // after the turn's own word
                 self?.store.show(notice: Activity(symbol: "hourglass", title: title, detail: s.activity.detail), limited: true)
             }
-            telegram.send(.limitReached, "⏳ \(title)" + (s.project.isEmpty ? "" : " · \(s.project)")
-                          + (s.activity.detail.isEmpty ? "" : "\n\(s.activity.detail)"))
+            telegram.send(.limitReached, "\(TelegramEmoji.limit) \(escapeHTML(title))" + (s.project.isEmpty ? "" : " · \(escapeHTML(s.project))")
+                          + (s.activity.detail.isEmpty ? "" : "\n\(escapeHTML(s.activity.detail))"))
         case .failed(let s):
             limits.lookAgain()
-            telegram.send(.failed, Self.message("⚠️ " + s.activity.title, s))
+            telegram.send(.failed, Self.message(TelegramEmoji.failed, s.activity.title, s))
         case .waiting(let s):
             // Only if it's still waiting half a minute later, with nothing new since: a request answered
             // at the Mac needs no message. A question comes twice at once; the later one goes.
             DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
                 guard let self, let now = self.store.sessions[s.id], now.phase == .waiting, now.lastEvent == s.lastEvent else { return }
-                self.telegram.send(.waiting, Self.message("✋ " + now.activity.title, now))
+                self.telegram.send(.waiting, Self.message(TelegramEmoji.waiting, now.activity.title, now))
             }
         }
     }
 
-    /// "✅ Done · ClaudeNotch", then the task and how it ended.
-    private static func message(_ head: String, _ s: Session) -> String {
-        var lines = [s.project.isEmpty ? head : "\(head) · \(s.project)"]
-        if !s.task.isEmpty { lines.append("📝 " + String(s.task.prefix(300))) }
+    /// "✅ Done · ClaudeNotch", then how long it took and how many actions, as Telegram's HTML. Nothing of
+    /// what you or Claude wrote: it's a nudge, not a copy of the session.
+    private static func message(_ emoji: String, _ title: String, _ s: Session) -> String {
+        var lines = ["\(emoji) " + escapeHTML(s.project.isEmpty ? title : "\(title) · \(s.project)")]
+        // A turn that ended has its summary ("in 9s · 3 actions"): the note under Claude's last line, or
+        // the detail without one. Mid-turn (a permission request) there's none.
         let a = s.activity
-        if !a.detail.isEmpty, a.detail != s.task { lines.append(a.detail) }
-        if !a.note.isEmpty { lines.append(a.note) }
+        let summary = s.turnEnd == nil ? "" : !a.note.isEmpty ? a.note : a.detail
+        if !summary.isEmpty { lines.append(escapeHTML(summary)) }
         return lines.joined(separator: "\n")
     }
 

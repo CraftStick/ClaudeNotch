@@ -32,6 +32,25 @@ enum TelegramNote: String, CaseIterable {
     static let defaults: [String: Any] = [limitReached.key: true, limitBack.key: true]
 }
 
+/// The emoji in the messages: Telegram's animated ones, each with the plain one it shows where it can't.
+enum TelegramEmoji {
+    static let limit = animated("5278778882848220741", "📊")
+    static let back = animated("5318983530540212017", "🟢")
+    static let done = animated("5222021113369893480", "✅")
+    static let waiting = animated("5222237691390762213", "⏱️")
+    static let failed = animated("5276240711795107620", "⚠️")
+    static let hello = animated("5222459157084411333", "👋")
+
+    private static func animated(_ id: String, _ plain: String) -> String {
+        "<tg-emoji emoji-id=\"\(id)\">\(plain)</tg-emoji>"
+    }
+}
+
+/// Text as it reads in Telegram's HTML.
+func escapeHTML(_ text: String) -> String {
+    text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+}
+
 /// Notifications in Telegram, through Claude Notch's bot (Server/ in the repository). The Mac has a
 /// random secret of its own; the bot hands it a one-time code, you send the code to the bot, and the
 /// Mac's messages go to your chat from then on. Used on the main thread.
@@ -97,7 +116,7 @@ final class Telegram: ObservableObject {
         set(chat: nil)
     }
 
-    /// Sends `text` if the Mac is linked and `note` is switched on.
+    /// Sends `text`, Telegram's HTML (`escapeHTML` the rest), if the Mac is linked and `note` is switched on.
     func send(_ note: TelegramNote, _ text: String) {
         guard linked, note.enabled else { return }
         EventLog.append("Telegram \(note.rawValue)")
@@ -105,11 +124,11 @@ final class Telegram: ObservableObject {
     }
 
     func sendTest() {
-        post(tr("👋 Это Claude Notch: уведомления работают.", "👋 It's Claude Notch: notifications work."))
+        post("\(TelegramEmoji.hello) " + tr("Это Claude Notch: уведомления работают.", "It's Claude Notch: notifications work."))
     }
 
     private func post(_ text: String) {
-        call("notify", method: "POST", body: ["text": text]) { [weak self] _, status in
+        call("notify", method: "POST", body: ["text": text, "html": true]) { [weak self] _, status in
             if status == 410 { self?.set(chat: nil) }  // unlinked in Telegram with /stop
         }
     }

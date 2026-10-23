@@ -4,7 +4,7 @@
 // The app's side (all under /v1/, with `Authorization: Bearer <the Mac's own random secret>`):
 //   POST   /v1/code    a new code to send the bot (good for 15 minutes)
 //   GET    /v1/status  whether the Mac is linked to a chat, and to whose
-//   POST   /v1/notify  {"text": "…"}: a message to the linked chat
+//   POST   /v1/notify  {"text": "…", "html": true}: a message to the linked chat, in Telegram's HTML if asked
 //   DELETE /v1/link    unlinks it
 // Telegram's side: POST /telegram, the bot's webhook, set up once with POST /setup.
 //
@@ -70,13 +70,15 @@ async function api(request, env, route) {
   if (route === "notify" && request.method === "POST") {
     if (!linked) return json({ error: "not_linked" }, 410)
     const body = await request.json().catch(() => ({}))
-    const text = typeof body.text === "string" ? body.text.trim().slice(0, 1500) : ""
+    const text = typeof body.text === "string" ? body.text.trim().slice(0, 3500) : ""
     if (!text) return json({ error: "empty" }, 400)
     const hour = now - (now % 3600)
     const count = row.sent_window === hour ? row.sent_count + 1 : 1
     if (count > HOURLY_MESSAGES) return json({ error: "too_many" }, 429)
     await env.DB.prepare("UPDATE devices SET sent_window = ?, sent_count = ? WHERE id = ?").bind(hour, count, device).run()
-    const sent = await send(env, row.chat_id, text)
+    let sent = await send(env, row.chat_id, text, body.html === true)
+    // HTML Telegram won't take (cut short, say): the same as plain text, the animated emoji as plain ones.
+    if (sent.status === 400 && body.html === true) sent = await send(env, row.chat_id, plain(text))
     if (sent.status === 403) {  // the bot was blocked or the chat is gone
       await env.DB.prepare("UPDATE devices SET chat_id = NULL, chat_name = NULL WHERE id = ?").bind(device).run()
       return json({ error: "not_linked" }, 410)
@@ -166,8 +168,15 @@ async function botName(env) {
   return cachedBotName
 }
 
-function send(env, chat, text) {
-  return telegram(env, "sendMessage", { chat_id: chat, text, disable_web_page_preview: true })
+function send(env, chat, text, html = false) {
+  const message = { chat_id: chat, text, disable_web_page_preview: true }
+  if (html) message.parse_mode = "HTML"
+  return telegram(env, "sendMessage", message)
+}
+
+// Telegram's HTML as the text it shows: tags out, entities back.
+function plain(html) {
+  return html.replace(/<[^>]*>?/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&")
 }
 
 function telegram(env, method, body) {
