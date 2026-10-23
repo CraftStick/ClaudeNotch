@@ -338,8 +338,8 @@ final class Store: ObservableObject {
         if !limited { n.play(.excited, at: now) }
         chime(limited ? "Basso" : "Glass", for: &n)
         n.syncMotion(at: now)
+        guard prompt == nil else { return }  // the sound tells it; the request keeps the notch
         notice = n
-        guard prompt == nil else { return }
         focusID = Self.noticeID
         expanded = true
         scheduleCollapse(after: seconds)

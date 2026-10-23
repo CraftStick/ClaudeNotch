@@ -76,14 +76,14 @@ final class TelegramQuestions {
             lines.append("")
             lines += described.map { "• <b>\(escapeHTML($0.label))</b> — \(escapeHTML($0.detail))" }
         }
-        if q.multiSelect { lines += ["", tr("Можно выбрать несколько, потом «Отправить».", "Pick any, then Send.")] }
+        if q.multiSelect { lines += ["", "<i>" + tr("Можно выбрать несколько, потом «Отправить».", "Pick any, then Send.") + "</i>"] }
         let text = lines.joined(separator: "\n")
         let token = Self.token()
         sent.append(Sent(prompt: prompt.id, step: form.step, token: token, text: text))
         EventLog.append("Telegram question")
         telegram.ask(text, buttons: Self.buttons(form, token: token)) { [weak self] id in
             guard let self, let i = self.sent.firstIndex(where: { $0.token == token }) else {
-                if let id { self?.telegram.edit(id, text + "\n\n" + tr("Уже не ждёт ответа.", "No longer waiting for an answer.")) }
+                if let id { self?.telegram.edit(id, text + "\n\n<i>" + tr("Уже не ждёт ответа.", "No longer waiting for an answer.") + "</i>") }
                 return
             }
             self.sent[i].messageID = id
@@ -95,8 +95,8 @@ final class TelegramQuestions {
     private func close(_ done: Sent, answer: String?) {
         syncPolling()
         guard let id = done.messageID else { return }
-        let outcome = answer.map { "✅ " + escapeHTML($0) } ?? tr("Уже не ждёт ответа: ответили на Mac или вопрос закрыт.",
-                                                                 "No longer waiting: answered at the Mac, or the question closed.")
+        let outcome = answer.map { "\(TelegramEmoji.done) " + escapeHTML($0) }
+            ?? "<i>" + tr("Уже не ждёт ответа: ответили на Mac или вопрос закрыт.", "No longer waiting: answered at the Mac, or the question closed.") + "</i>"
         telegram.edit(id, done.text + "\n\n" + outcome)
     }
 
