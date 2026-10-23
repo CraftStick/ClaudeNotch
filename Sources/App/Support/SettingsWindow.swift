@@ -243,7 +243,7 @@ private struct NotificationsPage: View {
 
             if telegram.linked {
                 Section(tr("Что присылать в Telegram", "What to send to Telegram")) {
-                    ForEach(TelegramNote.allCases, id: \.self) { NoteToggle(note: $0) }
+                    ForEach(TelegramNote.allCases, id: \.self) { NoteToggle(note: $0, changed: telegram.syncPrefs) }
                 }
             }
         }
@@ -274,15 +274,18 @@ private struct LimitRow: View {
 
 private struct NoteToggle: View {
     let note: TelegramNote
+    let changed: () -> Void
     @AppStorage private var on: Bool
 
-    init(note: TelegramNote) {
+    init(note: TelegramNote, changed: @escaping () -> Void) {
         self.note = note
+        self.changed = changed
         _on = AppStorage(wrappedValue: false, note.key)
     }
 
     var body: some View {
-        Toggle(isOn: $on) { Label(note.label, systemImage: note.symbol) }
+        // Set from here only: what the chat switched comes in without being sent back.
+        Toggle(isOn: Binding(get: { on }, set: { on = $0; changed() })) { Label(note.label, systemImage: note.symbol) }
     }
 }
 

@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS devices (
     id TEXT PRIMARY KEY,
     chat_id INTEGER,
     chat_name TEXT,
+    -- What to send: a JSON list of the app's kinds of notification; NULL until the app says.
+    prefs TEXT,
     created INTEGER NOT NULL,
     -- Messages sent in the current hour (starting at sent_window), against a runaway loop.
     sent_window INTEGER NOT NULL DEFAULT 0,
@@ -25,3 +27,6 @@ CREATE TABLE IF NOT EXISTS answers (
     created INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS answers_chat ON answers (chat_id);
+
+-- A database made before `prefs` was there gets it with:
+-- ALTER TABLE devices ADD COLUMN prefs TEXT;

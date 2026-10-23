@@ -111,7 +111,32 @@ final class Telegram: ObservableObject {
         call("status", method: "GET") { [weak self] json, _ in
             guard let self, let json, let linked = json["linked"] as? Bool else { return }
             self.set(chat: linked ? (json["name"] as? String ?? "Telegram") : nil)
+            guard linked else { return }
+            // What to send is switched in the chat's Features too: the bot's list wins. A Mac it hasn't
+            // heard from yet tells it its own.
+            if let enabled = json["prefs"] as? [String] {
+                for note in TelegramNote.allCases where note.enabled != enabled.contains(note.rawValue) {
+                    UserDefaults.standard.set(enabled.contains(note.rawValue), forKey: note.key)
+                }
+            } else {
+                self.syncPrefs()
+            }
         }
+    }
+
+    /// Tells the bot what to send, after a switch in the settings.
+    func syncPrefs() {
+        guard linked else { return }
+        call("prefs", method: "POST", body: ["enabled": TelegramNote.allCases.filter(\.enabled).map(\.rawValue)]) { _, _ in }
+    }
+
+    /// Looks again every quarter of an hour while linked, for what was switched in the chat.
+    func watchPrefs() {
+        let timer = Timer(timeInterval: 15 * 60, repeats: true) { [weak self] _ in
+            if self?.linked == true { self?.refresh() }
+        }
+        timer.tolerance = 60
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     func unlink() {
@@ -123,7 +148,7 @@ final class Telegram: ObservableObject {
     func send(_ note: TelegramNote, _ text: String) {
         guard linked, note.enabled else { return }
         EventLog.append("Telegram \(note.rawValue)")
-        post(text)
+        post(text, kind: note)
     }
 
     func sendTest() {
@@ -139,7 +164,7 @@ final class Telegram: ObservableObject {
     /// Sends `text` with rows of `buttons` under it; `sent` gets the message's id, to edit it later.
     func ask(_ text: String, buttons: [[Button]], sent: @escaping (Int?) -> Void) {
         guard linked else { return sent(nil) }
-        post(text, buttons: buttons, sent: sent)
+        post(text, kind: .question, buttons: buttons, sent: sent)
     }
 
     /// Changes a message sent before; no buttons takes them away.
@@ -152,8 +177,10 @@ final class Telegram: ObservableObject {
         call("answers", method: "GET") { json, _ in done(json?["answers"] as? [String] ?? []) }
     }
 
-    private func post(_ text: String, buttons: [[Button]] = [], sent: @escaping (Int?) -> Void = { _ in }) {
+    /// `kind`: the bot drops the message if that's been switched off in the chat since we last looked.
+    private func post(_ text: String, kind: TelegramNote? = nil, buttons: [[Button]] = [], sent: @escaping (Int?) -> Void = { _ in }) {
         var body: [String: Any] = ["text": text, "html": true]
+        if let kind { body["kind"] = kind.rawValue }
         if !buttons.isEmpty { body["buttons"] = Self.rows(buttons) }
         call("notify", method: "POST", body: body) { [weak self] json, status in
             if status == 410 { self?.set(chat: nil) }  // unlinked in Telegram with /stop

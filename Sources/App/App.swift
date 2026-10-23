@@ -443,6 +443,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.onNews = { [weak self] news in self?.news(news) }
         store.questionsGoFar = { [weak self] in self?.questions.active == true }
         if telegram.linked { telegram.refresh() }
+        telegram.watchPrefs()
     }
 
     /// A limit ran out: the notch opens on Clawd by his hourglass, and Telegram hears of it. It's back: a hop.

@@ -8,6 +8,8 @@
 //                      chat, in Telegram's HTML if asked, with buttons under it; answers {"message_id"}
 //   POST   /v1/edit    {"message_id", "text", "html", "buttons"}: that message changed, without buttons if none
 //   GET    /v1/answers the buttons pressed since the last look: {"answers": ["<data>", …]}
+//   POST   /v1/prefs   {"enabled": ["limitReached", …]}: what to send, also switched in the chat's Features;
+//                      /v1/status hands it back, and /v1/notify drops a message whose "kind" is off
 //   DELETE /v1/link    unlinks it
 // Telegram's side: POST /telegram, the bot's webhook, set up once with POST /setup.
 //
@@ -54,11 +56,19 @@ async function api(request, env, route) {
     return json({ code, expires: now + CODE_TTL, bot, link: `https://t.me/${bot}?start=${code}` })
   }
 
-  const row = await env.DB.prepare("SELECT chat_id, chat_name, sent_window, sent_count FROM devices WHERE id = ?").bind(device).first()
+  const row = await env.DB.prepare("SELECT chat_id, chat_name, sent_window, sent_count, prefs FROM devices WHERE id = ?").bind(device).first()
   const linked = row != null && row.chat_id != null
 
   if (route === "status" && request.method === "GET") {
-    return json({ linked, name: linked ? row.chat_name : null, bot: await botName(env) })
+    return json({ linked, name: linked ? row.chat_name : null, bot: await botName(env), prefs: row && row.prefs ? JSON.parse(row.prefs) : null })
+  }
+
+  if (route === "prefs" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}))
+    const enabled = Array.isArray(body.enabled) ? body.enabled.filter((k) => NOTES.some((n) => n.key === k)) : null
+    if (!enabled || !row) return json({ error: "bad_request" }, 400)
+    await env.DB.prepare("UPDATE devices SET prefs = ? WHERE id = ?").bind(JSON.stringify(enabled), device).run()
+    return json({ ok: true })
   }
 
   if (route === "link" && request.method === "DELETE") {
@@ -75,6 +85,8 @@ async function api(request, env, route) {
     const body = await request.json().catch(() => ({}))
     const text = typeof body.text === "string" ? body.text.trim().slice(0, 3500) : ""
     if (!text) return json({ error: "empty" }, 400)
+    // Switched off in the chat since the app last looked: dropped here.
+    if (typeof body.kind === "string" && row.prefs && !JSON.parse(row.prefs).includes(body.kind)) return json({ ok: true, skipped: true })
     const markup = keyboard(body.buttons)
     const hour = now - (now % 3600)
     const count = row.sent_window === hour ? row.sent_count + 1 : 1
@@ -151,7 +163,7 @@ async function webhook(request, env) {
       // A code is gone once used: sent again after the link did it, it's no news.
       const linked = await env.DB.prepare("SELECT 1 FROM devices WHERE chat_id = ? LIMIT 1").bind(chat).first()
       if (linked) {
-        await send(env, chat, alreadyLinked(lang), true)
+        await send(env, chat, alreadyLinked(lang), true, menu(lang))
         return new Response("")
       }
       await send(env, chat, say(lang, "Код не подошёл или уже устарел. Возьми новый: Claude Notch → Настройки → Уведомления.",
@@ -165,13 +177,13 @@ async function webhook(request, env) {
       env.DB.prepare("DELETE FROM codes WHERE device_id = ?").bind(found.device_id),
     ])
     await send(env, chat, say(lang,
-      "Готово, Mac подключён! Сюда будут приходить уведомления Claude Notch: какие именно, выбери в настройках приложения.\n\n/stop — отключить.",
-      "Done, the Mac is linked! Claude Notch's notifications will come here: pick which ones in the app's settings.\n\n/stop to unlink."))
+      "Готово, Mac подключён! Сюда будут приходить уведомления Claude Notch. Какие именно, выбирается здесь, в «Функциях», или в настройках приложения.",
+      "Done, the Mac is linked! Claude Notch's notifications will come here. Pick which ones here, under Features, or in the app's settings."), false, menu(lang))
     return new Response("")
   }
 
   if (await env.DB.prepare("SELECT 1 FROM devices WHERE chat_id = ? LIMIT 1").bind(chat).first()) {
-    await send(env, chat, alreadyLinked(lang), true)
+    await send(env, chat, alreadyLinked(lang), true, menu(lang))
     return new Response("")
   }
   await send(env, chat, say(lang,
@@ -180,16 +192,79 @@ async function webhook(request, env) {
   return new Response("")
 }
 
-// A button under a question was pressed: kept for the Mac to pick up (every Mac linked to the chat
-// looks, and the one that asked knows it), and Telegram told it's taken.
+// A button was pressed. The bot's own menu (Features, Unlink, a notification switched) it handles
+// itself; one under a question is kept for the Mac to pick up (every Mac linked to the chat looks,
+// and the one that asked knows it), and Telegram told it's taken.
 async function pressed(query, env) {
   const chat = query.message && query.message.chat && query.message.chat.id
   const data = typeof query.data === "string" ? query.data.slice(0, 64) : ""
   const lang = query.from && query.from.language_code
+  if (chat && data.startsWith("menu:")) return await menuPressed(query, env, chat, data.slice(5), lang)
   if (chat && data) {
     await env.DB.prepare("INSERT INTO answers (chat_id, data, created) VALUES (?, ?, ?)").bind(chat, data, Math.floor(Date.now() / 1000)).run()
   }
   await telegram(env, "answerCallbackQuery", { callback_query_id: query.id, text: say(lang, "Принято", "Got it") })
+  return new Response("")
+}
+
+// MARK: - The menu
+
+// What the app can send, by the app's own names; on unless switched off, these by default.
+const NOTES = [
+  { key: "limitReached", ru: "Закончился лимит", en: "A limit ran out", on: true },
+  { key: "limitBack", ru: "Лимит снова доступен", en: "A limit is back", on: true },
+  { key: "question", ru: "Вопросы Claude с кнопками", en: "Claude's questions, with buttons", on: true },
+  { key: "done", ru: "Claude закончил задачу", en: "Claude is done", on: false },
+  { key: "waiting", ru: "Claude ждёт тебя", en: "Claude is waiting for you", on: false },
+  { key: "failed", ru: "Ошибка API", en: "An API error", on: false },
+]
+
+function menu(lang) {
+  return { inline_keyboard: [[
+    { text: say(lang, "⚙️ Функции", "⚙️ Features"), callback_data: "menu:features" },
+    { text: say(lang, "🔌 Отключиться", "🔌 Unlink"), callback_data: "menu:unlink" },
+  ]] }
+}
+
+// What's switched on for the chat's Macs (the first one's choice when there are several).
+async function chatPrefs(env, chat) {
+  const row = await env.DB.prepare("SELECT prefs FROM devices WHERE chat_id = ? AND prefs IS NOT NULL LIMIT 1").bind(chat).first()
+  return row ? JSON.parse(row.prefs) : NOTES.filter((n) => n.on).map((n) => n.key)
+}
+
+function featuresPage(lang, enabled) {
+  const text = say(lang, "⚙️ Что присылать в этот чат. Нажми, чтобы включить или выключить:",
+                         "⚙️ What to send to this chat. Tap to switch on or off:")
+  const rows = NOTES.map((n) => [{ text: `${enabled.includes(n.key) ? "✅" : "▫️"} ${say(lang, n.ru, n.en)}`, callback_data: `menu:toggle:${n.key}` }])
+  rows.push([{ text: say(lang, "← Назад", "← Back"), callback_data: "menu:back" }])
+  return { text, reply_markup: { inline_keyboard: rows } }
+}
+
+async function menuPressed(query, env, chat, action, lang) {
+  const message = { chat_id: chat, message_id: query.message.message_id }
+  let toast = ""
+  if (action === "features") {
+    Object.assign(message, featuresPage(lang, await chatPrefs(env, chat)))
+  } else if (action.startsWith("toggle:")) {
+    const key = action.slice(7)
+    const note = NOTES.find((n) => n.key === key)
+    let enabled = await chatPrefs(env, chat)
+    if (note) {
+      enabled = enabled.includes(key) ? enabled.filter((k) => k !== key) : [...enabled, key]
+      await env.DB.prepare("UPDATE devices SET prefs = ? WHERE chat_id = ?").bind(JSON.stringify(enabled), chat).run()
+      toast = `${enabled.includes(key) ? "✅" : "▫️"} ${say(lang, note.ru, note.en)}`
+    }
+    Object.assign(message, featuresPage(lang, enabled))
+  } else if (action === "back") {
+    Object.assign(message, { text: alreadyLinked(lang), parse_mode: "HTML", reply_markup: menu(lang) })
+  } else if (action === "unlink") {
+    await env.DB.prepare("UPDATE devices SET chat_id = NULL, chat_name = NULL WHERE chat_id = ?").bind(chat).run()
+    Object.assign(message, { text: say(lang, "🔌 Mac отключён: уведомления больше не придут. Подключить снова: Claude Notch → Настройки → Уведомления.",
+                                             "🔌 The Mac is unlinked: no more notifications. To link it again: Claude Notch → Settings → Notifications."),
+                             reply_markup: { inline_keyboard: [] } })
+  }
+  await telegram(env, "editMessageText", message)
+  await telegram(env, "answerCallbackQuery", { callback_query_id: query.id, text: toast })
   return new Response("")
 }
 
@@ -253,8 +328,8 @@ function telegram(env, method, body) {
 function alreadyLinked(lang) {
   const crab = '<tg-emoji emoji-id="5296674469677409218">🦀</tg-emoji>'
   return say(lang,
-    `${crab} Привет! Это чат с уведомлениями Claude Notch. Какие именно, выбирается в настройках приложения.\n\n/stop — отключить от бота.`,
-    `${crab} Hi! This is the chat for Claude Notch's notifications. Pick which ones in the app's settings.\n\n/stop to unlink from the bot.`)
+    `${crab} Привет! Это чат с уведомлениями Claude Notch. Какие именно, выбирается в «Функциях» или в настройках приложения.`,
+    `${crab} Hi! This is the chat for Claude Notch's notifications. Pick which ones under Features or in the app's settings.`)
 }
 
 function say(lang, ru, en) {
