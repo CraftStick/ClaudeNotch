@@ -3,7 +3,7 @@ import Security
 
 /// What the app can tell you in Telegram, each switched on or off in the settings.
 enum TelegramNote: String, CaseIterable {
-    case limitReached, limitBack, done, waiting, failed
+    case limitReached, limitBack, question, done, waiting, failed
 
     var key: String { "telegram.\(rawValue)" }
     var enabled: Bool { UserDefaults.standard.bool(forKey: key) }
@@ -12,6 +12,7 @@ enum TelegramNote: String, CaseIterable {
         switch self {
         case .limitReached: return tr("Закончился лимит", "A limit ran out")
         case .limitBack: return tr("Лимит снова доступен", "A limit is back")
+        case .question: return tr("Вопросы Claude с кнопками ответа", "Claude's questions, with buttons to answer")
         case .done: return tr("Claude закончил задачу", "Claude is done")
         case .waiting: return tr("Claude ждёт тебя", "Claude is waiting for you")
         case .failed: return tr("Ошибка API", "An API error")
@@ -22,14 +23,15 @@ enum TelegramNote: String, CaseIterable {
         switch self {
         case .limitReached: return "hourglass"
         case .limitBack: return "battery.100.bolt"
+        case .question: return "questionmark.bubble"
         case .done: return "checkmark.circle"
         case .waiting: return "hand.raised"
         case .failed: return "exclamationmark.triangle"
         }
     }
 
-    /// The limits by default; what Claude does only if you ask for it.
-    static let defaults: [String: Any] = [limitReached.key: true, limitBack.key: true]
+    /// The limits and questions by default; what else Claude does only if you ask for it.
+    static let defaults: [String: Any] = [limitReached.key: true, limitBack.key: true, question.key: true]
 }
 
 /// The emoji in the messages: Telegram's animated ones, each with the plain one it shows where it can't.
@@ -40,6 +42,7 @@ enum TelegramEmoji {
     static let waiting = animated("5222237691390762213", "⏱️")
     static let failed = animated("5276240711795107620", "⚠️")
     static let hello = animated("5222459157084411333", "👋")
+    static let question = "❓"
 
     private static func animated(_ id: String, _ plain: String) -> String {
         "<tg-emoji emoji-id=\"\(id)\">\(plain)</tg-emoji>"
@@ -127,10 +130,39 @@ final class Telegram: ObservableObject {
         post("\(TelegramEmoji.hello) " + tr("Это Claude Notch: уведомления работают.", "It's Claude Notch: notifications work."))
     }
 
-    private func post(_ text: String) {
-        call("notify", method: "POST", body: ["text": text, "html": true]) { [weak self] _, status in
+    /// A button under a message: what it says, and what comes back when it's pressed.
+    struct Button {
+        let text: String
+        let data: String
+    }
+
+    /// Sends `text` with rows of `buttons` under it; `sent` gets the message's id, to edit it later.
+    func ask(_ text: String, buttons: [[Button]], sent: @escaping (Int?) -> Void) {
+        guard linked else { return sent(nil) }
+        post(text, buttons: buttons, sent: sent)
+    }
+
+    /// Changes a message sent before; no buttons takes them away.
+    func edit(_ messageID: Int, _ text: String, buttons: [[Button]] = []) {
+        call("edit", method: "POST", body: ["message_id": messageID, "text": text, "html": true, "buttons": Self.rows(buttons)]) { _, _ in }
+    }
+
+    /// The buttons pressed since the last look, as their data.
+    func pressed(_ done: @escaping ([String]) -> Void) {
+        call("answers", method: "GET") { json, _ in done(json?["answers"] as? [String] ?? []) }
+    }
+
+    private func post(_ text: String, buttons: [[Button]] = [], sent: @escaping (Int?) -> Void = { _ in }) {
+        var body: [String: Any] = ["text": text, "html": true]
+        if !buttons.isEmpty { body["buttons"] = Self.rows(buttons) }
+        call("notify", method: "POST", body: body) { [weak self] json, status in
             if status == 410 { self?.set(chat: nil) }  // unlinked in Telegram with /stop
+            sent((json?["message_id"] as? NSNumber)?.intValue)
         }
+    }
+
+    private static func rows(_ buttons: [[Button]]) -> [[[String: String]]] {
+        buttons.map { $0.map { ["text": $0.text, "data": $0.data] } }
     }
 
     private func set(chat: String?) {

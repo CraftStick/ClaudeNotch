@@ -16,3 +16,12 @@ CREATE TABLE IF NOT EXISTS codes (
     device_id TEXT NOT NULL,
     expires INTEGER NOT NULL
 );
+
+-- Buttons pressed under a question, until the Mac picks them up.
+CREATE TABLE IF NOT EXISTS answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    created INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS answers_chat ON answers (chat_id);

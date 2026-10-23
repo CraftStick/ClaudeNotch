@@ -4,12 +4,15 @@
 // The app's side (all under /v1/, with `Authorization: Bearer <the Mac's own random secret>`):
 //   POST   /v1/code    a new code to send the bot (good for 15 minutes)
 //   GET    /v1/status  whether the Mac is linked to a chat, and to whose
-//   POST   /v1/notify  {"text": "…", "html": true}: a message to the linked chat, in Telegram's HTML if asked
+//   POST   /v1/notify  {"text": "…", "html": true, "buttons": [[{"text", "data"}]]}: a message to the linked
+//                      chat, in Telegram's HTML if asked, with buttons under it; answers {"message_id"}
+//   POST   /v1/edit    {"message_id", "text", "html", "buttons"}: that message changed, without buttons if none
+//   GET    /v1/answers the buttons pressed since the last look: {"answers": ["<data>", …]}
 //   DELETE /v1/link    unlinks it
 // Telegram's side: POST /telegram, the bot's webhook, set up once with POST /setup.
 //
-// Kept about a Mac: a hash of its secret, the chat id and its name. Nothing about Claude's work: the
-// messages are passed on and forgotten.
+// Kept about a Mac: a hash of its secret, the chat id and its name; and a button pressed, until the
+// Mac picks it up. Nothing about Claude's work: the messages are passed on and forgotten.
 
 const CODE_TTL = 15 * 60
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  // no 0/O, 1/I: easy to type over
@@ -72,18 +75,48 @@ async function api(request, env, route) {
     const body = await request.json().catch(() => ({}))
     const text = typeof body.text === "string" ? body.text.trim().slice(0, 3500) : ""
     if (!text) return json({ error: "empty" }, 400)
+    const markup = keyboard(body.buttons)
     const hour = now - (now % 3600)
     const count = row.sent_window === hour ? row.sent_count + 1 : 1
     if (count > HOURLY_MESSAGES) return json({ error: "too_many" }, 429)
     await env.DB.prepare("UPDATE devices SET sent_window = ?, sent_count = ? WHERE id = ?").bind(hour, count, device).run()
-    let sent = await send(env, row.chat_id, text, body.html === true)
+    let sent = await send(env, row.chat_id, text, body.html === true, markup)
     // HTML Telegram won't take (cut short, say): the same as plain text, the animated emoji as plain ones.
-    if (sent.status === 400 && body.html === true) sent = await send(env, row.chat_id, plain(text))
+    if (sent.status === 400 && body.html === true) sent = await send(env, row.chat_id, plain(text), false, markup)
     if (sent.status === 403) {  // the bot was blocked or the chat is gone
       await env.DB.prepare("UPDATE devices SET chat_id = NULL, chat_name = NULL WHERE id = ?").bind(device).run()
       return json({ error: "not_linked" }, 410)
     }
-    return sent.ok ? json({ ok: true }) : json({ error: "telegram" }, 502)
+    if (!sent.ok) return json({ error: "telegram" }, 502)
+    const answer = await sent.json().catch(() => ({}))
+    return json({ ok: true, message_id: answer.result && answer.result.message_id })
+  }
+
+  if (route === "edit" && request.method === "POST") {
+    if (!linked) return json({ error: "not_linked" }, 410)
+    const body = await request.json().catch(() => ({}))
+    const text = typeof body.text === "string" ? body.text.trim().slice(0, 3500) : ""
+    if (!text || !Number.isInteger(body.message_id)) return json({ error: "bad_request" }, 400)
+    const message = { chat_id: row.chat_id, message_id: body.message_id, text, disable_web_page_preview: true,
+                      reply_markup: keyboard(body.buttons) || { inline_keyboard: [] } }
+    if (body.html === true) message.parse_mode = "HTML"
+    let edited = await telegram(env, "editMessageText", message)
+    if (edited.status === 400 && body.html === true) {
+      delete message.parse_mode
+      message.text = plain(text)
+      edited = await telegram(env, "editMessageText", message)
+    }
+    return json({ ok: edited.ok })
+  }
+
+  if (route === "answers" && request.method === "GET") {
+    if (!linked) return json({ answers: [] })
+    const { results } = await env.DB.prepare("SELECT id, data FROM answers WHERE chat_id = ? ORDER BY id").bind(row.chat_id).all()
+    if (results.length > 0) {
+      await env.DB.prepare(`DELETE FROM answers WHERE id IN (${results.map(() => "?").join(",")})`).bind(...results.map((r) => r.id)).run()
+    }
+    await env.DB.prepare("DELETE FROM answers WHERE created < ?").bind(now - 3600).run()
+    return json({ answers: results.map((r) => r.data) })
   }
 
   return json({ error: "not_found" }, 404)
@@ -94,6 +127,7 @@ async function api(request, env, route) {
 async function webhook(request, env) {
   if (request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== env.WEBHOOK_SECRET) return new Response("", { status: 401 })
   const update = await request.json().catch(() => ({}))
+  if (update.callback_query) return await pressed(update.callback_query, env)
   const message = update.message
   if (!message || !message.chat || message.chat.type !== "private" || typeof message.text !== "string") return new Response("")
   const chat = message.chat.id
@@ -117,8 +151,7 @@ async function webhook(request, env) {
       // A code is gone once used: sent again after the link did it, it's no news.
       const linked = await env.DB.prepare("SELECT 1 FROM devices WHERE chat_id = ? LIMIT 1").bind(chat).first()
       if (linked) {
-        await send(env, chat, say(lang, "Этот чат уже подключён к Mac, всё в порядке. /stop — отключить.",
-                                        "This chat is already linked to a Mac, all good. /stop to unlink."))
+        await send(env, chat, alreadyLinked(lang), true)
         return new Response("")
       }
       await send(env, chat, say(lang, "Код не подошёл или уже устарел. Возьми новый: Claude Notch → Настройки → Уведомления.",
@@ -138,14 +171,25 @@ async function webhook(request, env) {
   }
 
   if (await env.DB.prepare("SELECT 1 FROM devices WHERE chat_id = ? LIMIT 1").bind(chat).first()) {
-    await send(env, chat, say(lang,
-      "Этот чат уже подключён к Mac: уведомления Claude Notch приходят сюда. Какие именно, выбирается в настройках приложения.\n\n/stop — отключить.",
-      "This chat is already linked to a Mac: Claude Notch's notifications come here. Pick which ones in the app's settings.\n\n/stop to unlink."))
+    await send(env, chat, alreadyLinked(lang), true)
     return new Response("")
   }
   await send(env, chat, say(lang,
     "Привет! Я присылаю уведомления Claude Notch: например, когда закончились лимиты Claude.\n\nЧтобы подключить Mac, открой Claude Notch → Настройки → Уведомления, нажми «Получить код» и пришли его сюда.",
     "Hi! I send Claude Notch's notifications: say, when your Claude limits run out.\n\nTo link your Mac, open Claude Notch → Settings → Notifications, click Get Code and send it here."))
+  return new Response("")
+}
+
+// A button under a question was pressed: kept for the Mac to pick up (every Mac linked to the chat
+// looks, and the one that asked knows it), and Telegram told it's taken.
+async function pressed(query, env) {
+  const chat = query.message && query.message.chat && query.message.chat.id
+  const data = typeof query.data === "string" ? query.data.slice(0, 64) : ""
+  const lang = query.from && query.from.language_code
+  if (chat && data) {
+    await env.DB.prepare("INSERT INTO answers (chat_id, data, created) VALUES (?, ?, ?)").bind(chat, data, Math.floor(Date.now() / 1000)).run()
+  }
+  await telegram(env, "answerCallbackQuery", { callback_query_id: query.id, text: say(lang, "Принято", "Got it") })
   return new Response("")
 }
 
@@ -156,7 +200,7 @@ async function setup(request, env, url) {
   const webhook = await telegram(env, "setWebhook", {
     url: `${url.origin}/telegram`,
     secret_token: env.WEBHOOK_SECRET,
-    allowed_updates: ["message"],
+    allowed_updates: ["message", "callback_query"],
     drop_pending_updates: true,
   })
   const commands = await telegram(env, "setMyCommands", { commands: [{ command: "stop", description: "Unlink the Mac" }] })
@@ -174,10 +218,20 @@ async function botName(env) {
   return cachedBotName
 }
 
-function send(env, chat, text, html = false) {
+function send(env, chat, text, html = false, markup = null) {
   const message = { chat_id: chat, text, disable_web_page_preview: true }
   if (html) message.parse_mode = "HTML"
+  if (markup) message.reply_markup = markup
   return telegram(env, "sendMessage", message)
+}
+
+// The app's [[{text, data}]] as Telegram's inline keyboard; null without buttons.
+function keyboard(buttons) {
+  if (!Array.isArray(buttons)) return null
+  const rows = buttons.filter(Array.isArray).slice(0, 8).map((row) => row.slice(0, 4)
+    .filter((b) => b && typeof b.text === "string" && typeof b.data === "string" && b.data.length <= 64)
+    .map((b) => ({ text: b.text.slice(0, 120), callback_data: b.data }))).filter((row) => row.length > 0)
+  return rows.length > 0 ? { inline_keyboard: rows } : null
 }
 
 // Telegram's HTML as the text it shows: tags out, entities back.
@@ -194,6 +248,14 @@ function telegram(env, method, body) {
 }
 
 // MARK: - Bits
+
+// What a linked chat hears when it sends /start or a code again.
+function alreadyLinked(lang) {
+  const crab = '<tg-emoji emoji-id="5296674469677409218">🦀</tg-emoji>'
+  return say(lang,
+    `${crab} Привет! Это чат с уведомлениями Claude Notch. Какие именно, выбирается в настройках приложения.\n\n/stop — отключить от бота.`,
+    `${crab} Hi! This is the chat for Claude Notch's notifications. Pick which ones in the app's settings.\n\n/stop to unlink from the bot.`)
+}
 
 function say(lang, ru, en) {
   return lang == null || String(lang).startsWith("ru") ? ru : en

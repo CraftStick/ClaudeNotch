@@ -40,6 +40,9 @@ final class Store: ObservableObject {
     /// What happened that you may want to hear about away from the Mac, in Telegram.
     enum News { case done(Session), waiting(Session), failed(Session) }
     var onNews: (News) -> Void = { _ in }
+    /// Claude's questions go to Telegram too: one holds until it's answered there, rather than going
+    /// back to the terminal after a minute and a half.
+    var questionsGoFar: () -> Bool = { false }
     /// What a second copy of the app sends before it quits, so this one greets you.
     static let openedMessage = Data(#"{"hook_event_name":"ClaudeNotchOpened"}"#.utf8)
     private let transcripts = TranscriptWatcher()
@@ -439,7 +442,7 @@ final class Store: ObservableObject {
             prompts.append(prompt)
             // In a terminal, hand the question back to the usual prompt after a while instead of
             // holding it for the hook's full ~10 minutes; a question takes longer to read.
-            expire(prompt, after: s.dialogRunsInParallel ? 590 : form == nil ? 20 : 90)
+            expire(prompt, after: s.dialogRunsInParallel || (form != nil && questionsGoFar()) ? 590 : form == nil ? 20 : 90)
             chime("Tink", for: &s)
             commit(s, expandFor: .infinity)
             onNews(.waiting(s))

@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let updates = Updates()
     private let limits = PlanLimits()
     private let telegram = Telegram()
+    private lazy var questions = TelegramQuestions(store: store, telegram: telegram)
     /// When a limit was last told from a turn that hit it, rather than from the limits themselves.
     private var lastLimitNotice = Date.distantPast
     private lazy var settings = SettingsWindow(actions: SettingsActions(
@@ -112,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.resizePanel()
                 self?.updateMouseHandling()
                 self?.updateHotKeys()
+                self?.questions.update()
             }
         }
         visibilityObserver = store.objectWillChange.sink { [weak self] _ in
@@ -439,6 +441,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         limits.onChange = { [weak self] change in self?.limitChanged(change) }
         limits.start()
         store.onNews = { [weak self] news in self?.news(news) }
+        store.questionsGoFar = { [weak self] in self?.questions.active == true }
         if telegram.linked { telegram.refresh() }
     }
 
@@ -485,6 +488,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // at the Mac needs no message. A question comes twice at once; the later one goes.
             DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
                 guard let self, let now = self.store.sessions[s.id], now.phase == .waiting, now.lastEvent == s.lastEvent else { return }
+                // A question goes with its buttons instead.
+                if self.questions.active, self.store.prompts.contains(where: { $0.sessionID == s.id && $0.form != nil }) { return }
                 self.telegram.send(.waiting, Self.message(TelegramEmoji.waiting, now.activity.title, now))
             }
         }
