@@ -1,0 +1,13 @@
+name = "claude-notch-bot"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "claude-notch-bot"
+database_id = "7d1ea935-c736-45cd-84a2-4b229fa309d8"
+
+# Secrets, set with `npx wrangler secret put …`, never in this file:
+#   BOT_TOKEN       the bot's token from @BotFather
+#   WEBHOOK_SECRET  any long random string; Telegram sends it back with each update

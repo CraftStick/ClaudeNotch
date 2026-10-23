@@ -2,3 +2,6 @@ build/
 .build/
 .swiftpm/
 .DS_Store
+Server/.wrangler/
+Server/node_modules/
+Server/.dev.vars

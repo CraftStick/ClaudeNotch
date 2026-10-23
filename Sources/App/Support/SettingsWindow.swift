@@ -17,11 +17,15 @@ final class SettingsWindow {
     private var window: NSWindow?
     private let actions: SettingsActions
     private let updates: Updates
+    private let limits: PlanLimits
+    private let telegram: Telegram
     private let state = SettingsState()
 
-    init(actions: SettingsActions, updates: Updates) {
+    init(actions: SettingsActions, updates: Updates, limits: PlanLimits, telegram: Telegram) {
         self.actions = actions
         self.updates = updates
+        self.limits = limits
+        self.telegram = telegram
     }
 
     func show() {
@@ -29,12 +33,15 @@ final class SettingsWindow {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 520),
                                   styleMask: [.titled, .closable], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView: SettingsView(actions: actions, updates: updates, state: state))
+            window.contentViewController = NSHostingController(rootView: SettingsView(actions: actions, updates: updates, limits: limits,
+                                                                                      telegram: telegram, state: state))
             window.center()
             self.window = window
         }
         state.connected = actions.isConnected()
         state.atLogin = actions.opensAtLogin()
+        limits.lookAgain()
+        if telegram.linked { telegram.refresh() }
         window?.title = tr("Настройки Claude Notch", "Claude Notch Settings")
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
@@ -50,6 +57,8 @@ final class SettingsState: ObservableObject {
 struct SettingsView: View {
     let actions: SettingsActions
     @ObservedObject var updates: Updates
+    @ObservedObject var limits: PlanLimits
+    @ObservedObject var telegram: Telegram
     @ObservedObject var state: SettingsState
     @AppStorage(Store.soundsKey) private var sounds = true
     @AppStorage(Store.rimKey) private var rim = true
@@ -104,8 +113,8 @@ struct SettingsView: View {
                 Section {
                     Toggle(isOn: Binding(get: { updates.enabled }, set: { updates.enabled = $0 })) {
                         Label(tr("Проверять обновления", "Check for updates"), systemImage: "arrow.down.circle")
-                        Text(tr("Раз в день на GitHub. Иначе приложение не выходит в сеть.",
-                                "Once a day, on GitHub. Otherwise the app never goes online."))
+                        Text(tr("Раз в день на GitHub.",
+                                "Once a day, on GitHub."))
                     }
                     HStack {
                         Text(statusText)
@@ -169,6 +178,8 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
             .tabItem { Label(tr("Чёлка", "Notch"), systemImage: "menubar.rectangle") }
+            NotificationsPage(limits: limits, telegram: telegram)
+                .tabItem { Label(tr("Уведомления", "Notifications"), systemImage: "bell") }
         }
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
@@ -195,5 +206,141 @@ struct SettingsView: View {
         Language.choice = Language(rawValue: choice)
         language = choice
         actions.changed()
+    }
+}
+
+/// The plan's limits, and notifications in Telegram.
+private struct NotificationsPage: View {
+    @ObservedObject var limits: PlanLimits
+    @ObservedObject var telegram: Telegram
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(isOn: Binding(get: { limits.enabled }, set: { limits.enabled = $0 })) {
+                    Label(tr("Следить за лимитами плана", "Watch the plan's limits"), systemImage: "hourglass")
+                    Text(tr("Чёлка скажет, когда лимит закончился и когда он снова есть. Пока Claude работает, приложение раз в несколько минут спрашивает о них api.anthropic.com, входя как Claude Code.",
+                            "The notch tells you when a limit runs out and when it's back. While Claude works, the app asks api.anthropic.com about them every few minutes, signed in as Claude Code."))
+                }
+                if limits.enabled {
+                    ForEach(limits.limits, id: \.kind) { LimitRow(limit: $0) }
+                }
+            } header: {
+                Text(tr("Лимиты", "Limits"))
+            }
+
+            Section {
+                TelegramRow(telegram: telegram)
+            } header: {
+                Text("Telegram")
+            } footer: {
+                Text(tr("Через бота Claude Notch: он знает только твой чат. Уведомления уходят, даже когда чёлку не видно.",
+                        "Through Claude Notch's bot, which knows nothing but your chat. They go out while the notch can't be seen too."))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if telegram.linked {
+                Section(tr("Что присылать в Telegram", "What to send to Telegram")) {
+                    ForEach(TelegramNote.allCases, id: \.self) { NoteToggle(note: $0) }
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// "Session limit · resets in 4 h 51 min · 4 %", over a bar.
+private struct LimitRow: View {
+    let limit: PlanLimit
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(limit.name)
+                Spacer()
+                Text(limit.resetText())
+                    .foregroundStyle(.secondary)
+                Text("\(Int(limit.used.rounded())) %")
+                    .monospacedDigit()
+                    .foregroundStyle(limit.exhausted ? .red : .secondary)
+            }
+            ProgressView(value: min(limit.used, 100), total: 100)
+                .tint(limit.exhausted ? .red : .accentColor)
+        }
+    }
+}
+
+private struct NoteToggle: View {
+    let note: TelegramNote
+    @AppStorage private var on: Bool
+
+    init(note: TelegramNote) {
+        self.note = note
+        _on = AppStorage(wrappedValue: false, note.key)
+    }
+
+    var body: some View {
+        Toggle(isOn: $on) { Label(note.label, systemImage: note.symbol) }
+    }
+}
+
+/// Linked, with a test message and a way out; or a code to send the bot.
+private struct TelegramRow: View {
+    @ObservedObject var telegram: Telegram
+
+    var body: some View {
+        if let chat = telegram.chat {
+            HStack {
+                Label(tr("Подключено: \(chat)", "Linked: \(chat)"), systemImage: "paperplane.fill")
+                Spacer()
+                Button(tr("Проверить", "Test")) { telegram.sendTest() }
+                Button(tr("Отключить", "Unlink")) { telegram.unlink() }
+            }
+        } else {
+            switch telegram.linking {
+            case .idle, .failed:
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label(tr("Уведомления в Telegram", "Notifications in Telegram"), systemImage: "paperplane")
+                        Text(telegram.linking == .failed
+                             ? tr("Не получилось связаться с ботом, попробуй ещё раз.", "Couldn't reach the bot, try again.")
+                             : tr("Возьми код и отправь его боту: так он узнает, куда писать.", "Get a code and send it to the bot, so it knows where to write."))
+                            .font(.callout)
+                            .foregroundStyle(telegram.linking == .failed ? .red : .secondary)
+                    }
+                    Spacer()
+                    Button(tr("Получить код", "Get Code")) { telegram.requestCode() }
+                }
+            case .asking:
+                HStack {
+                    Text(tr("Спрашиваю код…", "Getting a code…")).foregroundStyle(.secondary)
+                    Spacer()
+                    ProgressView().controlSize(.small)
+                }
+            case .code(let code, let link, let bot, _):
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(code.prefix(4) + "-" + code.dropFirst(4))
+                            .font(.system(size: 24, weight: .semibold, design: .monospaced))
+                            .textSelection(.enabled)
+                        Spacer()
+                        ProgressView().controlSize(.small)
+                    }
+                    Text(tr("Отправь этот код боту \(bot.isEmpty ? "" : "@" + bot) или открой ссылку: он сам его отправит. Код действует 15 минут.",
+                            "Send this code to the bot\(bot.isEmpty ? "" : " @" + bot), or open the link, which sends it for you. The code works for 15 minutes."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Button(tr("Открыть в Telegram", "Open in Telegram")) { NSWorkspace.shared.open(link) }
+                            .keyboardShortcut(.defaultAction)
+                        Button(tr("Скопировать код", "Copy Code")) {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(code, forType: .string)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

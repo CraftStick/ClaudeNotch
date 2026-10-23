@@ -13,7 +13,8 @@ enum ClaudeNotchMain {
             return
         }
         signal(SIGPIPE, SIG_IGN)  // a hook may hang up before we answer
-        UserDefaults.standard.register(defaults: Store.defaults)
+        UserDefaults.standard.register(defaults: Store.defaults.merging(TelegramNote.defaults) { a, _ in a }
+                                                    .merging([PlanLimits.key: true]) { a, _ in a })
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
@@ -29,6 +30,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var updateItem: NSMenuItem?
     private let updates = Updates()
+    private let limits = PlanLimits()
+    private let telegram = Telegram()
+    /// When a limit was last told from a turn that hit it, rather than from the limits themselves.
+    private var lastLimitNotice = Date.distantPast
     private lazy var settings = SettingsWindow(actions: SettingsActions(
         isConnected: { ClaudeHooks.state() == .connected },
         setConnected: { [weak self] on in
@@ -49,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.shortcuts = nil
             self?.updateHotKeys()
             self?.store.settingsChanged()  // the notch again, in its language, with or without the rim, quiet or not
-        }), updates: updates)
+        }), updates: updates, limits: limits, telegram: telegram)
     private var promptsObserver: AnyCancellable?
     private var visibilityObserver: AnyCancellable?
     private var hoverTimer: Timer?
@@ -101,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         connectToClaudeCodeIfNeeded()
         updates.announce = { [weak self] version, page in self?.announce(version, page) }
         updates.schedule()
+        watchLimits()
         promptsObserver = store.$prompts.sink { [weak self] _ in
             DispatchQueue.main.async {  // after `prompts` has its new value
                 self?.resizePanel()
@@ -277,8 +283,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lastPointer = location
         notchChanged = false
         let mode = store.mode
-        // The greeting's row stays open under the pointer, so it can be clicked.
-        let greeting = mode == .expanded && store.focused?.isGreeting == true
+        // The greeting's row (or a notice's) stays open under the pointer, so it can be clicked.
+        let greeting = mode == .expanded && store.focused?.isApp == true
         let zoneMode: DisplayMode = mode == .details || mode == .permission || greeting ? mode : .compact
         let details = store.detailsSession
         let size = NotchView.size(of: zoneMode, session: details,
@@ -420,6 +426,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.addButton(withTitle: tr("Открыть страницу", "Open the Page"))
         alert.addButton(withTitle: tr("Позже", "Later"))
         if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(page) }
+    }
+
+    // MARK: - Limits and Telegram
+
+    private func watchLimits() {
+        limits.claudeWasBusy = { [store] in
+            let now = Date()
+            return !store.working.isEmpty
+                || store.sessions.values.contains { now.timeIntervalSince($0.turnEnd ?? .distantPast) < PlanLimits.keepLooking }
+        }
+        limits.onChange = { [weak self] change in self?.limitChanged(change) }
+        limits.start()
+        store.onNews = { [weak self] news in self?.news(news) }
+        if telegram.linked { telegram.refresh() }
+    }
+
+    /// A limit ran out: the notch opens on Clawd by his hourglass, and Telegram hears of it. It's back: a hop.
+    private func limitChanged(_ change: PlanLimits.Change) {
+        switch change {
+        case .exhausted(let limit):
+            let title = tr("\(limit.name) исчерпан", "\(limit.name) reached")
+            let reset = limit.resetText()
+            store.show(notice: Activity(symbol: "hourglass", title: title, detail: reset), limited: true)
+            telegram.send(.limitReached, "⏳ \(title)" + (reset.isEmpty ? "" : "\n\(reset)"))
+        case .restored(let limit):
+            let title = tr("\(limit.name) снова доступен", "\(limit.name) is back")
+            let detail = tr("Claude может работать дальше", "Claude can get back to work")
+            store.show(notice: Activity(symbol: "battery.100.bolt", title: title, detail: detail), limited: false, for: 5)
+            telegram.send(.limitBack, "🟢 \(title)\n\(detail)")
+        }
+    }
+
+    private func news(_ news: Store.News) {
+        switch news {
+        case .done(let s):
+            limits.lookAgain()
+            telegram.send(.done, Self.message("✅ " + tr("Готово", "Done"), s))
+        case .failed(let s) where s.rateLimited:
+            limits.lookAgain(urgent: true)
+            // Without fresh limits to go by (Claude Code's login in the keychain expired: it's renewed
+            // only when Claude Code runs in a terminal), the turn that hit the limit tells it, in Claude
+            // Code's words: "5-hour limit reached ∙ resets 5pm". Once in half an hour at most.
+            let fresh = limits.checked.map { Date().timeIntervalSince($0) < 15 * 60 } ?? false
+            guard !fresh, Date().timeIntervalSince(lastLimitNotice) > 30 * 60 else { return }
+            lastLimitNotice = Date()
+            let title = tr("Лимит исчерпан", "Limit reached")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in  // after the turn's own word
+                self?.store.show(notice: Activity(symbol: "hourglass", title: title, detail: s.activity.detail), limited: true)
+            }
+            telegram.send(.limitReached, "⏳ \(title)" + (s.project.isEmpty ? "" : " · \(s.project)")
+                          + (s.activity.detail.isEmpty ? "" : "\n\(s.activity.detail)"))
+        case .failed(let s):
+            limits.lookAgain()
+            telegram.send(.failed, Self.message("⚠️ " + s.activity.title, s))
+        case .waiting(let s):
+            // Only if it's still waiting half a minute later, with nothing new since: a request answered
+            // at the Mac needs no message. A question comes twice at once; the later one goes.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
+                guard let self, let now = self.store.sessions[s.id], now.phase == .waiting, now.lastEvent == s.lastEvent else { return }
+                self.telegram.send(.waiting, Self.message("✋ " + now.activity.title, now))
+            }
+        }
+    }
+
+    /// "✅ Done · ClaudeNotch", then the task and how it ended.
+    private static func message(_ head: String, _ s: Session) -> String {
+        var lines = [s.project.isEmpty ? head : "\(head) · \(s.project)"]
+        if !s.task.isEmpty { lines.append("📝 " + String(s.task.prefix(300))) }
+        let a = s.activity
+        if !a.detail.isEmpty, a.detail != s.task { lines.append(a.detail) }
+        if !a.note.isEmpty { lines.append(a.note) }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Claude Code

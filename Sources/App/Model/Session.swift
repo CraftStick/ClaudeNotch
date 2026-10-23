@@ -248,6 +248,9 @@ struct Session: Equatable {
     /// Not a Claude Code session: Clawd saying hi when the app is opened.
     var isGreeting: Bool { id == Store.greetingID }
 
+    /// Not a Claude Code session at all: the greeting, or a notice from the app (a limit ran out).
+    var isApp: Bool { isGreeting || id == Store.noticeID }
+
     /// The desktop app and IDE extensions show their own permission dialog while the hook runs;
     /// in a terminal the usual prompt may only come once the hook is done.
     var dialogRunsInParallel: Bool { !entrypoint.isEmpty && entrypoint != "cli" }

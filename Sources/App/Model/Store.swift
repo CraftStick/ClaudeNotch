@@ -33,6 +33,13 @@ final class Store: ObservableObject {
     /// Shown when the app is opened and nothing else is in the notch: "Ready to work", a click opens Claude.
     @Published private(set) var greeting: Session? { didSet { syncTicking() } }
     static let greetingID = "greeting"
+    /// A word from the app rather than from Claude, open in the notch for a few seconds: a plan limit
+    /// ran out (Clawd by his hourglass) or is back.
+    @Published private(set) var notice: Session?
+    static let noticeID = "notice"
+    /// What happened that you may want to hear about away from the Mac, in Telegram.
+    enum News { case done(Session), waiting(Session), failed(Session) }
+    var onNews: (News) -> Void = { _ in }
     /// What a second copy of the app sends before it quits, so this one greets you.
     static let openedMessage = Data(#"{"hook_event_name":"ClaudeNotchOpened"}"#.utf8)
     private let transcripts = TranscriptWatcher()
@@ -150,6 +157,7 @@ final class Store: ObservableObject {
     var focused: Session? {
         if let p = prompt, let s = sessions[p.sessionID] { return s }
         if hovering, let s = detailsSession { return s }
+        if expanded, focusID == Self.noticeID, let n = notice { return n }
         if expanded, let id = focusID, let s = sessions[id] { return s }
         return working.first ?? resting ?? greeting
     }
@@ -157,7 +165,7 @@ final class Store: ObservableObject {
     var mode: DisplayMode {
         if prompt != nil { return .permission }
         if hovering, detailsSession != nil { return .details }
-        if expanded, let id = focusID, sessions[id] != nil { return .expanded }
+        if expanded, let id = focusID, sessions[id] != nil || (id == Self.noticeID && notice != nil) { return .expanded }
         if !working.isEmpty || resting != nil { return Self.quiet && !needsYou ? .hidden : .compact }
         guard greeting != nil else { return .hidden }
         if expanded || hovering { return .expanded }  // the greeting opens while new or under the pointer
@@ -205,6 +213,7 @@ final class Store: ObservableObject {
             if let app = AppFocus.claudeApp { AppFocus.open(app) }
             return
         }
+        if id == Self.noticeID { return collapse() }  // read: away with it
         guard let s = sessions[id] ?? idle.first(where: { $0.id == id }) else { return }
         if s.host == AppFocus.claudeBundleID || s.entrypoint == "claude-desktop" {
             AppFocus.openInClaudeApp(id) { AppFocus.show(host: s.host, folder: s.cwd, tty: s.tty) }
@@ -314,6 +323,25 @@ final class Store: ObservableObject {
         greeting?.play(.hello, at: now)
     }
 
+    /// Opens the notch on a word from the app for `seconds`, over whatever it shows unless Claude asks
+    /// you something. `limited`: Clawd turns to his hourglass; otherwise he hops.
+    func show(notice activity: Activity, limited: Bool, for seconds: TimeInterval = 8) {
+        let now = Date()
+        var n = Session(id: Self.noticeID, turnStart: now, lastEvent: now)
+        n.phase = limited ? .failed : .done
+        n.rateLimited = limited
+        n.turnEnd = now
+        n.activity = activity
+        if !limited { n.play(.excited, at: now) }
+        chime(limited ? "Basso" : "Glass", for: &n)
+        n.syncMotion(at: now)
+        notice = n
+        guard prompt == nil else { return }
+        focusID = Self.noticeID
+        expanded = true
+        scheduleCollapse(after: seconds)
+    }
+
     /// Clawd on his own in the notch, hopping and waving hello (or floating in under a parachute):
     /// "Ready to work", a click opens Claude.
     private static func makeGreeting(at now: Date, cue: Cue = .hello) -> Session {
@@ -414,6 +442,7 @@ final class Store: ObservableObject {
             expire(prompt, after: s.dialogRunsInParallel ? 590 : form == nil ? 20 : 90)
             chime("Tink", for: &s)
             commit(s, expandFor: .infinity)
+            onNews(.waiting(s))
             return
         }
         reply.send(nil)
@@ -474,6 +503,7 @@ final class Store: ObservableObject {
                 s.currentTool = question
                 chime("Tink", for: &s)
                 commit(s, expandFor: .infinity)
+                onNews(.waiting(s))
             } else {
                 s.phase = .tool
                 s.activity = Describe.tool(toolName, toolInput)
@@ -562,6 +592,7 @@ final class Store: ObservableObject {
                                   detail: oneLine(json["message"] as? String ?? ""), note: Describe.server(server), prose: true)
             chime("Tink", for: &s)
             commit(s, expandFor: .infinity)
+            onNews(.waiting(s))
 
         case "ElicitationResult":
             // Answered: back to the tool that asked.
@@ -592,6 +623,7 @@ final class Store: ObservableObject {
                                   detail: oneLine(message))
             chime("Tink", for: &s)
             commit(s, expandFor: .infinity)
+            onNews(.waiting(s))
 
         case "PreCompact":
             // Mid-turn or a /compact of your own: either way Claude is busy summarising, so it shows.
@@ -633,6 +665,7 @@ final class Store: ObservableObject {
                                       detail: last, note: summary(s, until: now), prose: true)
                 let away = chime("Tink", for: &s)
                 commit(s, expandFor: away ? 8 : 4)
+                onNews(.waiting(s))
                 return
             }
             s.phase = .done
@@ -651,6 +684,7 @@ final class Store: ObservableObject {
             // If you're in another app, the result stays up longer, with a sound.
             let away = chime("Glass", for: &s)
             commit(s, expandFor: away ? 8 : 4)
+            onNews(.done(s))
 
         case "StopFailure":
             dropPrompts(for: id)
@@ -664,6 +698,7 @@ final class Store: ObservableObject {
             s.activity = Activity(symbol: "exclamationmark.triangle.fill", title: Describe.apiError(json["error"] as? String ?? ""),
                                   detail: oneLine(message), note: summary(s, until: now), prose: true)
             commit(s, expandFor: 6)
+            onNews(.failed(s))
 
         case "SessionEnd":
             dropPrompts(for: id)
@@ -910,6 +945,7 @@ final class Store: ObservableObject {
             return
         }
         focusID = s.id
+        notice = nil  // Claude has news of its own
         expanded = true
         collapseWork?.cancel()
         collapseWork = nil
@@ -927,6 +963,7 @@ final class Store: ObservableObject {
         collapseWork?.cancel()
         collapseWork = nil
         expanded = false
+        if focusID == Self.noticeID { notice = nil }
     }
 
     /// Esc: Claude Code sends no hook, the transcript watcher tells us.

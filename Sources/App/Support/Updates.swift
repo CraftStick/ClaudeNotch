@@ -1,8 +1,7 @@
 import Foundation
 
 /// Looks on GitHub for a newer release of Claude Notch: at launch and once a day, and only when that's
-/// switched on in the settings. It's off unless you turn it on, and then it's the one thing the app
-/// ever asks the network for. Used on the main thread.
+/// switched on in the settings. It's off unless you turn it on. Used on the main thread.
 final class Updates: ObservableObject {
     enum Status: Equatable {
         case idle, checking

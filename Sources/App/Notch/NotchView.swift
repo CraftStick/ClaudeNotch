@@ -118,11 +118,11 @@ struct NotchView: View {
         guard let s else { return 48 }
         let hint: Bool
         switch s.phase {
-        case .stopped, .failed: hint = !s.isGreeting
-        case .done: hint = !s.isGreeting && date < (s.turnEnd ?? .distantPast).addingTimeInterval(ClawdBadge.doneFor)
+        case .stopped, .failed: hint = !s.isApp
+        case .done: hint = !s.isApp && date < (s.turnEnd ?? .distantPast).addingTimeInterval(ClawdBadge.doneFor)
         case .thinking, .tool, .waiting: hint = false
         }
-        let time = s.isGreeting ? "" : s.turnEnd.map { formatElapsed($0.timeIntervalSince(s.turnStart)) }
+        let time = s.isApp ? "" : s.turnEnd.map { formatElapsed($0.timeIntervalSince(s.turnStart)) }
             ?? (date.timeIntervalSince(s.turnStart) < 3000 ? "59:59" : "1:02:03")
         let right = 10 + CGFloat(time.count) * 7.2 + (busy > 1 ? 20 : 0)
         return max(hint ? 72 : 48, right.rounded(.up))
@@ -141,7 +141,7 @@ struct NotchView: View {
     private func content(_ s: Session, others: [Session], mode: DisplayMode, wing: CGFloat) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                ClawdBadge(session: s, showsHint: mode == .compact && !s.isGreeting, moving: store.onScreen)
+                ClawdBadge(session: s, showsHint: mode == .compact && !s.isApp, moving: store.onScreen)
                     .padding(.leading, 8)
                     .frame(width: wing, alignment: .leading)
                 Spacer(minLength: notch.width)
@@ -155,7 +155,7 @@ struct NotchView: View {
                             .background(Capsule().fill(claudeOrange))
                             .help(tr("Сессий в работе: \(busy)", "Sessions at work: \(busy)"))
                     }
-                    if !s.isGreeting { ElapsedLabel(session: s, ticking: store.onScreen) }
+                    if !s.isApp { ElapsedLabel(session: s, ticking: store.onScreen) }
                 }
                 .padding(.trailing, 10)
                 .frame(width: wing, alignment: .trailing)

@@ -18,7 +18,7 @@ enum DetailsLayout {
 
     /// A finished turn in a session a reply can be typed into gets buttons for it.
     static func showsReplies(_ s: Session) -> Bool {
-        !s.phase.isActive && !s.isGreeting && !s.waitingForTask && QuickReply.supports(s)
+        !s.phase.isActive && !s.isApp && !s.waitingForTask && QuickReply.supports(s)
     }
     /// The current step's line and the progress bar under it.
     static let plan: CGFloat = line + 5 + 3

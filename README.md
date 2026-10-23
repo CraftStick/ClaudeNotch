@@ -61,6 +61,8 @@ cd ~/ClaudeNotch && ./install.sh
 - **Details on hover.** The task, what Claude is doing and why, its plan, subagents, recent actions, tokens and context, other sessions. A click brings forward the terminal tab or app the session runs in.
 - **Answers from the notch.** Allow or deny a permission request (⌃⌥⌘Y / ⌃⌥⌘N, or **Always**), and pick the answers to Claude's questions (⌃⌥⌘1…4).
 - **Clawd.** He types while Claude works, thinks, waves when it needs you, hops when it's done and dozes while he rests; he turns detective while Claude searches, packs papers into a box while it compacts and launches a rocket after a push. With **Clawd stays in the notch** on, he lives there for good, with pastimes of his own. [All his animations →](docs/clawd/README.md)
+- **Limits.** When your plan's session or weekly limit runs out, the notch opens on Clawd by his hourglass and tells you when it resets; when it's back, he hops.
+- **Telegram.** Link your Mac to Claude Notch's bot with a code from the settings, and pick what it sends you: a limit ran out or is back, Claude is done, waiting for you, or hit an API error.
 - A sound when Claude is done or waiting for you, a glowing rim, English and Russian, your own shortcuts, an update check if you want one. All of it in the settings: Clawd's menu in the menu bar → **Settings…** (⌘,).
 
 <p align="center"><img src="docs/card.png" width="440" alt="The card you get on hover"> <img src="docs/permission.png" width="440" alt="A permission request in the notch"></p>
@@ -69,7 +71,7 @@ cd ~/ClaudeNotch && ./install.sh
 
 Claude Code runs a tiny hook on every event, which hands it to the app over a local socket and, for a permission request or a question, hands your answer back. The app also reads the session files in `~/.claude/projects`, to notice Esc and count tokens.
 
-Everything stays on your Mac, with no network. The one exception is a check for updates on GitHub once a day, and only if you switch it on in the settings. While the notch can't be seen (the display asleep, the screen locked), the app doesn't wake up at all; while Claude works, it takes about 1–2% of one core.
+Everything about Claude's work stays on your Mac. The app goes online for three things only. To watch the plan's limits it asks api.anthropic.com, signed in as Claude Code, every few minutes while Claude works (switch it off in the settings). Telegram messages, if you link the bot, go through Claude Notch's own [server](Server/), which keeps only your chat. And a check for updates on GitHub once a day, if you switch it on. While the notch can't be seen (the display asleep, the screen locked), the app doesn't wake up at all; while Claude works, it takes about 1–2% of one core.
 
 ## Troubleshooting
 
