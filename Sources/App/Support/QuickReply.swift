@@ -18,11 +18,19 @@ enum QuickReply {
         s.host == AppFocus.claudeBundleID || s.entrypoint == "claude-desktop"
     }
 
-    /// False when Accessibility access isn't there yet: macOS has just been asked to show its dialog.
+    /// False when it types nothing: Accessibility access isn't there yet (macOS has just been asked to show
+    /// its dialog), or the session's Claude Code is gone.
     @discardableResult
     static func send(_ text: String, to s: Session) -> Bool {
         let ask = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         guard supports(s) else { return false }
+        // Killed or crashed, Claude Code says no goodbye and the session stays in the notch a while: its tab
+        // holds a shell now, which would run the reply as a command.
+        if !inClaudeApp(s), SessionRegistry.isGone(s.id) {
+            EventLog.append("Quick reply: not typed, the session's Claude Code isn't running")
+            AppFocus.show(host: s.host, folder: s.cwd, tty: s.tty)
+            return false
+        }
         guard AXIsProcessTrustedWithOptions(ask) else {
             EventLog.append("Quick reply: no Accessibility access yet, macOS asked for it")
             return false

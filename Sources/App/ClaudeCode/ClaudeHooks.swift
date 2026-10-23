@@ -57,12 +57,21 @@ enum ClaudeHooks {
         Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/claude-notch-hook").path
     }
 
-    /// Claude Code runs the command through a shell: a path with spaces needs quotes. With the app
+    /// Claude Code runs the command through a shell, so the path is quoted unless it's plain. With the app
     /// gone (put in the Trash while it wasn't running, so it couldn't take its hooks out) the hook
     /// quietly does nothing, rather than Claude Code reporting a missing file at every step.
     static func command(for hook: String) -> String {
-        let path = hook.contains(" ") ? "\"\(hook)\"" : hook
+        let path = shellQuoted(hook)
         return "[ ! -x \(path) ] || \(path)"
+    }
+
+    /// As Python's shlex.quote, which install-hooks.sh uses: as it is when it's only letters, digits and
+    /// `@%+=:,./-_`, else in single quotes, where nothing is special but the quote itself. Double quotes
+    /// would let `$`, a backquote or a `"` in the app's path run as shell.
+    static func shellQuoted(_ text: String) -> String {
+        let plain = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@%+=:,./-_")
+        if !text.isEmpty, text.unicodeScalars.allSatisfy(plain.contains) { return text }
+        return "'" + text.replacingOccurrences(of: "'", with: #"'"'"'"#) + "'"
     }
 
     static func state(settings: URL = settingsURL, hook: String = hookPath) -> State {

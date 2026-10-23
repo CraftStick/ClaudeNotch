@@ -48,7 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         },
         setAlive: { [weak self] on in
             if on { self?.store.moveIn() }
-            self?.store.aliveChanged()
+            self?.store.settingsChanged()  // the greeting now stays, or leaves when its rest is over
         },
         changed: { [weak self] in
             self?.buildMenu()
@@ -75,8 +75,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The pointer is followed from mouse events, once one has come in; polled until then.
     private var followingMouse = false
     private var lookPending = false
+    /// A look after the store changed is on its way.
+    private var changePending = false
+    /// Room around a permission card for its glow and shadow.
+    private static let cardMargin: CGFloat = 24
     /// What keeps anyone from seeing the notch, besides the panel being covered.
     private var screensAsleep = false, locked = false, switchedAway = false
+    /// Going out of sight waits a moment: the panel is often reported covered for an instant.
+    private var hideWork: DispatchWorkItem?
     private static let screenLocked = Notification.Name("com.apple.screenIsLocked")
     private static let screenUnlocked = Notification.Name("com.apple.screenIsUnlocked")
 
@@ -90,7 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let server = SocketServer(path: Paths.socket) { [store] data, reply in
             // Parsed here, off the main thread: a payload can carry megabytes of tool output.
-            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let json = Store.prepare((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])
             DispatchQueue.main.async { store.handle(json, reply: reply) }
         }
         do {
@@ -99,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } catch {
             NSLog("ClaudeNotch: can't listen on \(Paths.socket): \(error)")
         }
+        for path in Paths.httpStorage { try? FileManager.default.removeItem(atPath: path) }
 
         layoutPanel()
         setUpStatusItem()
@@ -117,8 +124,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         visibilityObserver = store.objectWillChange.sink { [weak self] _ in
+            // One look for everything that changed together: an event sets several of the store's values.
+            guard let self, !self.changePending else { return }
+            self.changePending = true
             DispatchQueue.main.async {  // after the change
-                guard let self else { return }
+                self.changePending = false
                 self.notchChanged = true
                 self.updatePointerTracking()
                 // The notch changed under a pointer that may not move: is it still over it?
@@ -168,14 +178,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.orderFrontRegardless()
     }
 
-    /// Tall enough for the hover card; only as tall as the permission card while that one takes
-    /// clicks, so the transparent rest of the window doesn't swallow clicks meant for other apps.
+    /// Big enough for the hover card; only as big as the permission card and its glow while that one
+    /// takes clicks, so the transparent rest of the window doesn't swallow clicks meant for other apps.
     private func resizePanel() {
         guard let screen = notchScreen, let notch else { return }
-        let height = store.prompts.isEmpty
-            ? NotchView.maxHeight(notch: notch) + 30
-            : notch.height + NotchView.promptHeight(store.prompt) + 30
-        let size = NSSize(width: 640, height: height)
+        let size: NSSize
+        if store.prompts.isEmpty {
+            size = NSSize(width: 640, height: NotchView.maxHeight(notch: notch) + 30)
+        } else {
+            let card = NotchView.size(of: .permission, session: nil, prompt: store.prompt, notch: notch)
+            size = NSSize(width: card.width + 2 * Self.cardMargin, height: card.height + Self.cardMargin)
+        }
         let origin = NSPoint(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height)
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
     }
@@ -211,8 +224,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateVisibility()
     }
 
+    /// Back in sight at once; out of sight only once it has lasted a second. macOS often reports the panel
+    /// covered for an instant (dozens of times an hour while Claude works), and every change stops or
+    /// restarts Clawd, the rim and the clock.
     private func updateVisibility() {
         let visible = panel.occlusionState.contains(.visible) && !screensAsleep && !locked && !switchedAway
+        hideWork?.cancel()
+        hideWork = nil
+        guard !visible else { return setOnScreen(true) }
+        let work = DispatchWorkItem { [weak self] in self?.setOnScreen(false) }
+        hideWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+    }
+
+    private func setOnScreen(_ visible: Bool) {
+        hideWork = nil
         if visible != store.onScreen { EventLog.append(visible ? "Notch on screen" : "Notch out of sight") }
         store.screen(visible: visible)
     }
@@ -626,7 +652,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    @objc private func toggleClaudeCode() {
+    private func toggleClaudeCode() {
         guard ClaudeHooks.state() == .connected else { return connectToClaudeCode(asked: true) }
         do {
             try ClaudeHooks.disconnect()
@@ -660,7 +686,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    @objc private func toggleLaunchAtLogin() {
+    private func toggleLaunchAtLogin() {
         let enable = SMAppService.mainApp.status != .enabled
         UserDefaults.standard.set(enable, forKey: Self.launchAtLoginKey)
         setLaunchAtLogin(enable)

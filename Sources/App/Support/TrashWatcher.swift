@@ -57,6 +57,7 @@ final class TrashWatcher {
         try? fm.removeItem(atPath: ClaudeHooks.settingsURL.path + ".bak-claudenotch")
         try? SMAppService.mainApp.unregister()
         try? fm.removeItem(atPath: Paths.dir)
+        for path in Paths.httpStorage { try? fm.removeItem(atPath: path) }
         if let id = Bundle.main.bundleIdentifier {
             UserDefaults.standard.removePersistentDomain(forName: id)
             UserDefaults.standard.synchronize()

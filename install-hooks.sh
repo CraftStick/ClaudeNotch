@@ -23,7 +23,7 @@ mkdir -p "$(dirname "$SETTINGS")"
 [[ -e "$BACKUP" ]] || cp "$SETTINGS" "$BACKUP"
 
 python3 -I - "$SETTINGS" "$HOOK" "$MODE" <<'EOF'
-import json, sys
+import json, os, shlex, sys
 
 path, hook, mode = sys.argv[1:4]
 
@@ -57,7 +57,7 @@ with open(path, encoding="utf-8") as f:
     settings = json.load(f)
 hooks = settings.setdefault("hooks", {})
 # Like the app writes it: does nothing once the app is gone (ClaudeHooks.command(for:)).
-quoted = f'"{hook}"' if " " in hook else hook
+quoted = shlex.quote(hook)
 command = f"[ ! -x {quoted} ] || {quoted}"
 
 for event in set(hooks) | set(EVENTS):
@@ -76,9 +76,14 @@ for event in set(hooks) | set(EVENTS):
 if not hooks:
     settings.pop("hooks")
 
-with open(path, "w", encoding="utf-8") as f:
+# Through a symlink to where it points, and all at once, as the app does: Claude Code never reads half a file.
+target = os.path.realpath(path)
+temporary = target + ".claudenotch-tmp"
+with open(temporary, "w", encoding="utf-8") as f:
     json.dump(settings, f, indent=2, ensure_ascii=False)
     f.write("\n")
+os.chmod(temporary, os.stat(target).st_mode & 0o777)
+os.replace(temporary, target)
 EOF
 
 if [[ "$MODE" == "install" ]]; then

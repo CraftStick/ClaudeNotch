@@ -54,11 +54,13 @@ final class Updates: ObservableObject {
         status = .checking
         var request = URLRequest(url: Self.latestRelease, timeoutInterval: 20)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        URLSession.shared.dataTask(with: request) { data, response, _ in
+        URLSession.uncached.dataTask(with: request) { data, response, _ in
             let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
             let ok = (response as? HTTPURLResponse)?.statusCode == 200
             let tag = json?["tag_name"] as? String
-            let page = (json?["html_url"] as? String).flatMap(URL.init(string:)) ?? Self.releasesPage
+            // Opened in the browser from the menu: only a page on GitHub.
+            let page = (json?["html_url"] as? String).flatMap(URL.init(string:))
+                .flatMap { $0.scheme == "https" && $0.host == "github.com" ? $0 : nil } ?? Self.releasesPage
             let assets = (json?["assets"] as? [[String: Any]] ?? []).compactMap { $0["name"] as? String }
             let build = assets.lazy.compactMap(Self.build(fromDiskImage:)).first ?? 0
             DispatchQueue.main.async { self.finish(ok ? tag : nil, build: build, page: page) }

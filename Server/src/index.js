@@ -7,20 +7,31 @@
 //   POST   /v1/notify  {"text": "…", "html": true, "buttons": [[{"text", "data"}]]}: a message to the linked
 //                      chat, in Telegram's HTML if asked, with buttons under it; answers {"message_id"}
 //   POST   /v1/edit    {"message_id", "text", "html", "buttons"}: that message changed, without buttons if none
-//   GET    /v1/answers the buttons pressed since the last look: {"answers": ["<data>", …]}
+//   GET    /v1/answers?tokens=<t1,t2>&wait=<s>  the buttons pressed since the last look under the messages
+//                      whose buttons carry those tokens ("<token>:…"): {"answers": ["<data>", …]}; it waits up to
+//                      `wait` seconds (25 at most) for one. Without tokens, every press in the chat.
 //   POST   /v1/prefs   {"enabled": ["limitReached", …]}: what to send, also switched in the chat's Features;
 //                      /v1/status hands it back, and /v1/notify drops a message whose "kind" is off
 //   DELETE /v1/link    unlinks it
 // Telegram's side: POST /telegram, the bot's webhook, set up once with POST /setup.
 //
 // Kept about a Mac: a hash of its secret, the chat id and its name; and a button pressed, until the
-// Mac picks it up. Nothing about Claude's work: the messages are passed on and forgotten.
+// Mac picks it up. Nothing about Claude's work: the messages are passed on and forgotten. Once a day
+// (`scheduled`, wrangler.toml's cron) what's left over goes: codes that ran out, Macs that never linked.
 
 const CODE_TTL = 15 * 60
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  // no 0/O, 1/I: easy to type over
 const CODE_LENGTH = 8
-// Messages a Mac may send an hour: more is a loop gone wrong.
+// Messages a chat may get from its Macs an hour, and edits of them: more is a loop gone wrong.
 const HOURLY_MESSAGES = 60
+const HOURLY_EDITS = 240
+// Codes one address may ask for an hour: plenty for linking a Mac, too few to fill the database.
+const HOURLY_CODES = 20
+// How long a Mac's look for presses may wait for one, and how often the bot looks meanwhile (seconds).
+const MAX_WAIT = 25
+const WAIT_STEP = 1.5
+// A press nobody picked up in this long was for a question that's gone (a Mac waits 10 minutes at most).
+const ANSWER_TTL = 10 * 60
 
 export default {
   async fetch(request, env) {
@@ -28,24 +39,42 @@ export default {
     try {
       if (url.pathname === "/telegram" && request.method === "POST") return await webhook(request, env)
       if (url.pathname === "/setup" && request.method === "POST") return await setup(request, env, url)
-      if (url.pathname.startsWith("/v1/")) return await api(request, env, url.pathname.slice(4))
+      if (url.pathname.startsWith("/v1/")) return await api(request, env, url)
       return new Response("Claude Notch bot\n")
     } catch (error) {
       console.error(error)
       return json({ error: "internal" }, 500)
     }
   },
+
+  // Once a day: codes that ran out, Macs that asked for a code a day ago and never linked, presses nobody
+  // picked up, last hour's counts.
+  async scheduled(event, env) {
+    const now = Math.floor(Date.now() / 1000)
+    await throttleTable(env)
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM codes WHERE expires < ?").bind(now),
+      env.DB.prepare("DELETE FROM devices WHERE chat_id IS NULL AND created < ? AND id NOT IN (SELECT device_id FROM codes)")
+        .bind(now - 24 * 3600),
+      env.DB.prepare("DELETE FROM answers WHERE created < ?").bind(now - ANSWER_TTL),
+      env.DB.prepare("DELETE FROM throttle WHERE hour < ?").bind(now - 3600),
+    ])
+  },
 }
 
 // MARK: - The app
 
-async function api(request, env, route) {
+async function api(request, env, url) {
+  const route = url.pathname.slice(4)
   const secret = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "")
   if (secret.length < 32 || secret.length > 128) return json({ error: "unauthorized" }, 401)
   const device = await sha256(secret)
   const now = Math.floor(Date.now() / 1000)
 
   if (route === "code" && request.method === "POST") {
+    // Anyone may ask (a Mac's secret is made up on the spot): counted by where the request comes from.
+    const from = await sha256(request.headers.get("CF-Connecting-IP") || "unknown")
+    if (!(await allowed(env, `code:${from}`, HOURLY_CODES, now))) return json({ error: "too_many" }, 429)
     await env.DB.batch([
       env.DB.prepare("INSERT OR IGNORE INTO devices (id, created) VALUES (?, ?)").bind(device, now),
       env.DB.prepare("DELETE FROM codes WHERE device_id = ? OR expires < ?").bind(device, now),
@@ -56,7 +85,7 @@ async function api(request, env, route) {
     return json({ code, expires: now + CODE_TTL, bot, link: `https://t.me/${bot}?start=${code}` })
   }
 
-  const row = await env.DB.prepare("SELECT chat_id, chat_name, sent_window, sent_count, prefs FROM devices WHERE id = ?").bind(device).first()
+  const row = await env.DB.prepare("SELECT chat_id, chat_name, prefs FROM devices WHERE id = ?").bind(device).first()
   const linked = row != null && row.chat_id != null
 
   if (route === "status" && request.method === "GET") {
@@ -88,11 +117,9 @@ async function api(request, env, route) {
     // What's switched on is decided here, where the chat's Features switch it too: the app sends every kind.
     const enabled = row.prefs ? JSON.parse(row.prefs) : NOTES.filter((n) => n.on).map((n) => n.key)
     if (typeof body.kind === "string" && !enabled.includes(body.kind)) return json({ ok: true, skipped: true })
+    // Counted by chat, not by Mac: several Macs may be linked to one.
+    if (!(await allowed(env, `notify:${row.chat_id}`, HOURLY_MESSAGES, now))) return json({ error: "too_many" }, 429)
     const markup = keyboard(body.buttons)
-    const hour = now - (now % 3600)
-    const count = row.sent_window === hour ? row.sent_count + 1 : 1
-    if (count > HOURLY_MESSAGES) return json({ error: "too_many" }, 429)
-    await env.DB.prepare("UPDATE devices SET sent_window = ?, sent_count = ? WHERE id = ?").bind(hour, count, device).run()
     let sent = await send(env, row.chat_id, text, body.html === true, markup)
     // HTML Telegram won't take (cut short, say): the same as plain text, the animated emoji as plain ones.
     if (sent.status === 400 && body.html === true) sent = await send(env, row.chat_id, plain(text), false, markup)
@@ -110,6 +137,7 @@ async function api(request, env, route) {
     const body = await request.json().catch(() => ({}))
     const text = typeof body.text === "string" ? body.text.trim().slice(0, 3500) : ""
     if (!text || !Number.isInteger(body.message_id)) return json({ error: "bad_request" }, 400)
+    if (!(await allowed(env, `edit:${row.chat_id}`, HOURLY_EDITS, now))) return json({ error: "too_many" }, 429)
     const message = { chat_id: row.chat_id, message_id: body.message_id, text, disable_web_page_preview: true,
                       reply_markup: keyboard(body.buttons) || { inline_keyboard: [] } }
     if (body.html === true) message.parse_mode = "HTML"
@@ -124,15 +152,55 @@ async function api(request, env, route) {
 
   if (route === "answers" && request.method === "GET") {
     if (!linked) return json({ answers: [] })
-    const { results } = await env.DB.prepare("SELECT id, data FROM answers WHERE chat_id = ? ORDER BY id").bind(row.chat_id).all()
-    if (results.length > 0) {
-      await env.DB.prepare(`DELETE FROM answers WHERE id IN (${results.map(() => "?").join(",")})`).bind(...results.map((r) => r.id)).run()
+    // Only presses under the Mac's own questions are its to take: several Macs may share a chat.
+    const tokens = (url.searchParams.get("tokens") || "").split(",").filter((t) => /^[a-z0-9]{1,16}$/.test(t))
+    const mine = (r) => tokens.length === 0 || tokens.includes(String(r.data).split(":")[0])
+    // Up to `wait` seconds for a press, rather than the Mac asking again every couple of seconds.
+    const until = Date.now() + Math.min(MAX_WAIT, Math.max(0, Number(url.searchParams.get("wait")) || 0)) * 1000
+    let found = []
+    let newest = null
+    for (;;) {
+      const { results } = await env.DB.prepare("SELECT id, data FROM answers WHERE chat_id = ? ORDER BY id").bind(row.chat_id).all()
+      found = results.filter(mine)
+      const last = results.length > 0 ? results[results.length - 1].id : 0
+      // A press under a question the Mac sent while it waited, so not in `tokens`, ends the wait too: the
+      // Mac asks again with it.
+      const left = until - Date.now()
+      if (found.length > 0 || (newest !== null && last > newest) || left <= 0) break
+      newest = newest ?? last
+      await new Promise((resolve) => setTimeout(resolve, Math.min(WAIT_STEP * 1000, left)))
     }
-    await env.DB.prepare("DELETE FROM answers WHERE created < ?").bind(now - 3600).run()
-    return json({ answers: results.map((r) => r.data) })
+    if (found.length > 0) {
+      await env.DB.prepare(`DELETE FROM answers WHERE id IN (${found.map(() => "?").join(",")})`).bind(...found.map((r) => r.id)).run()
+    }
+    await env.DB.prepare("DELETE FROM answers WHERE created < ?").bind(now - ANSWER_TTL).run()
+    return json({ answers: found.map((r) => r.data) })
   }
 
   return json({ error: "not_found" }, 404)
+}
+
+// Counts one more use of `name` this hour: false once it has had `limit`.
+async function allowed(env, name, limit, now) {
+  await throttleTable(env)
+  const hour = now - (now % 3600)
+  const row = await env.DB.prepare(
+    "INSERT INTO throttle (name, hour, uses) VALUES (?, ?, 1) ON CONFLICT (name) DO UPDATE SET "
+      + "uses = CASE WHEN hour = excluded.hour THEN uses + 1 ELSE 1 END, hour = excluded.hour RETURNING uses",
+  ).bind(name, hour).first()
+  return row.uses <= limit
+}
+
+// The throttle table, made here too for a database made before it was in schema.sql: once per instance.
+let throttleReady = null
+
+function throttleTable(env) {
+  throttleReady ??= env.DB.prepare("CREATE TABLE IF NOT EXISTS throttle (name TEXT PRIMARY KEY, hour INTEGER NOT NULL, uses INTEGER NOT NULL)")
+    .run().catch((error) => {
+      throttleReady = null
+      throw error
+    })
+  return throttleReady
 }
 
 // MARK: - Telegram

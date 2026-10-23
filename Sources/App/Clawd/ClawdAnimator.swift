@@ -707,12 +707,13 @@ struct ClawdAnimator {
     }
 
     /// The standing frame breathed out: everything above his legs a pixel lower, on legs a pixel shorter.
-    static let exhaled: PixelSheet? = ClawdAssets.laptop.map { sheet in
+    static let exhaled: PixelSheet? = ClawdAssets.laptop.flatMap { sheet in
         let pixels = sheet.frames[0], w = sheet.width
         func row(_ y: Int) -> ArraySlice<UInt8> { pixels[(y * w)..<((y + 1) * w)] }
         // The legs: the rows at the bottom that are all like the last one.
         var legs = sheet.height - 1
         while legs > 0, row(legs - 1) == row(sheet.height - 1) { legs -= 1 }
+        guard legs > 0 else { return nil }  // a frame all of one row: nothing to breathe
         var out = [UInt8](repeating: 255, count: pixels.count)
         for y in 1...legs { out.replaceSubrange((y * w)..<((y + 1) * w), with: row(y - 1)) }
         for y in (legs + 1)..<sheet.height { out.replaceSubrange((y * w)..<((y + 1) * w), with: row(y)) }

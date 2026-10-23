@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 /// What the app can tell you in Telegram, each switched on or off in the settings.
 enum TelegramNote: String, CaseIterable {
@@ -175,9 +174,12 @@ final class Telegram: ObservableObject {
         call("edit", method: "POST", body: ["message_id": messageID, "text": text, "html": true, "buttons": Self.rows(buttons)]) { _, _ in }
     }
 
-    /// The buttons pressed since the last look, as their data.
-    func pressed(_ done: @escaping ([String]) -> Void) {
-        call("answers", method: "GET") { json, _ in done(json?["answers"] as? [String] ?? []) }
+    /// The buttons pressed since the last look under the messages whose buttons carry `tokens`, as their
+    /// data. The bot holds the answer up to `wait` seconds until there is one (a bot from before answers at once).
+    func pressed(tokens: [String], wait: Int = 25, _ done: @escaping ([String]) -> Void) {
+        call("answers", method: "GET", query: [URLQueryItem(name: "tokens", value: tokens.joined(separator: ",")),
+                                               URLQueryItem(name: "wait", value: String(wait))],
+             timeout: TimeInterval(wait + 15)) { json, _ in done(json?["answers"] as? [String] ?? []) }
     }
 
     /// `kind`: the bot drops the message if that's been switched off in the chat since we last looked.
@@ -208,27 +210,30 @@ final class Telegram: ObservableObject {
         if linkedNow { onLinked() }
     }
 
-    /// The Mac's own secret, made the first time it's needed.
+    /// The Mac's own secret, made the first time it's needed. In the app's preferences, which only you can
+    /// read: in the keychain, an app signed ad hoc like this one would have to ask for it after every update.
     private static var secret: String {
         if let secret = UserDefaults.standard.string(forKey: secretKey) { return secret }
-        var bytes = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        var random = SystemRandomNumberGenerator()  // arc4random: cryptographically secure, and never fails
+        let bytes = (0..<32).map { _ in UInt8.random(in: .min ... .max, using: &random) }
         let secret = Data(bytes).base64EncodedString()
             .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
         UserDefaults.standard.set(secret, forKey: secretKey)
         return secret
     }
 
-    private func call(_ route: String, method: String, body: [String: Any]? = nil,
-                      done: @escaping ([String: Any]?, Int) -> Void) {
-        var request = URLRequest(url: Self.server.appendingPathComponent("v1/\(route)"), timeoutInterval: 20)
+    private func call(_ route: String, method: String, query: [URLQueryItem] = [], body: [String: Any]? = nil,
+                      timeout: TimeInterval = 20, done: @escaping ([String: Any]?, Int) -> Void) {
+        var url = Self.server.appendingPathComponent("v1/\(route)")
+        if !query.isEmpty { url.append(queryItems: query) }
+        var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = method
         request.setValue("Bearer \(Self.secret)", forHTTPHeaderField: "Authorization")
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         }
-        URLSession.shared.dataTask(with: request) { data, response, _ in
+        URLSession.uncached.dataTask(with: request) { data, response, _ in
             let json = data.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             DispatchQueue.main.async { done(status == 200 ? json : nil, status) }

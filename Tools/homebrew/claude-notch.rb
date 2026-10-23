@@ -31,6 +31,8 @@ cask "claude-notch" do
 
   zap trash: [
     "~/Library/Application Support/ClaudeNotch",
+    "~/Library/Caches/local.claudenotch",
+    "~/Library/HTTPStorages/local.claudenotch",
     "~/Library/Preferences/local.claudenotch.plist",
   ]
 

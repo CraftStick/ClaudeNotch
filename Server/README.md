@@ -18,3 +18,6 @@ curl -X POST https://<the worker's address>/setup -H "X-Setup-Key: <WEBHOOK_SECR
 ```
 
 Then put the worker's address into `Telegram.server` in `Sources/App/Support/Telegram.swift`.
+
+To update it, `npx wrangler@4 deploy` again. A database made before `throttle` gets the table from the worker
+itself, or from running `schema.sql` again, which only adds what's missing.

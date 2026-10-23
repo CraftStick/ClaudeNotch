@@ -34,7 +34,7 @@ struct ClaudeHooksTests {
         #expect(ClaudeHooks.state(settings: settings, hook: hook) == .connected)
         #expect(try read()["model"] as? String == "opus")
         // A path with a space is quoted: Claude Code runs the command through a shell.
-        #expect(try commands("PreToolUse") == ["/other/hook", "[ ! -x \"\(hook)\" ] || \"\(hook)\""])
+        #expect(try commands("PreToolUse") == ["/other/hook", "[ ! -x '\(hook)' ] || '\(hook)'"])
         for event in ClaudeHooks.events.keys {
             #expect(try commands(event).filter { $0.contains("claude-notch-hook") }.count == 1, "\(event)")
         }
@@ -106,6 +106,14 @@ struct ClaudeHooksTests {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
         let there = try run(hook.path)
         #expect(there.status == 3 && there.output == "here\n")
+
+        // Nothing in the path runs as shell: not a $, a backquote or a quote of either kind.
+        let odd = folder.appendingPathComponent(#"It's "$(echo no)" `x`.app/claude-notch-hook"#)
+        try FileManager.default.createDirectory(at: odd.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho odd\n".utf8).write(to: odd)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: odd.path)
+        #expect(try run(odd.path).output == "odd\n")
+        #expect(ClaudeHooks.shellQuoted("/Applications/ClaudeNotch.app/x") == "/Applications/ClaudeNotch.app/x")
     }
 
     /// install-hooks.sh writes the same hooks for an install from source.

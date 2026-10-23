@@ -127,7 +127,7 @@ struct ClaudeLogin {
     static func load(_ request: URLRequest) -> (Int, [String: Any])? {
         var result: (Int, [String: Any])?
         let done = DispatchSemaphore(value: 0)
-        URLSession.shared.dataTask(with: request) { data, response, _ in
+        URLSession.uncached.dataTask(with: request) { data, response, _ in
             if let response = response as? HTTPURLResponse {
                 result = (response.statusCode, data.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] } ?? [:])
             }

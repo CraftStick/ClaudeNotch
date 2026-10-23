@@ -45,6 +45,13 @@ struct TranscriptTests {
         let url = try Self.file([Self.prompt, Self.toolCall, Self.answer])
         defer { try? FileManager.default.removeItem(at: url) }
         #expect(TranscriptWatcher.lastReply(path: url.path) == "Done.")
+
+        // A Stop without its last message gets it from there before the store sees it; one with it, and
+        // any other event, go as they are.
+        let stop: [String: Any] = ["hook_event_name": "Stop", "transcript_path": url.path]
+        #expect(Store.prepare(stop)?["last_assistant_message"] as? String == "Done.")
+        #expect(Store.prepare(stop.merging(["last_assistant_message": "Mine."]) { $1 })?["last_assistant_message"] as? String == "Mine.")
+        #expect(Store.prepare(["hook_event_name": "PreToolUse", "transcript_path": url.path])?["last_assistant_message"] == nil)
     }
 
     /// Watching starts with the context size there is, and Esc shows up as an interrupt. The file is read

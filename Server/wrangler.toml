@@ -3,6 +3,10 @@ main = "src/index.js"
 compatibility_date = "2026-10-01"
 workers_dev = true
 
+# Once a day the worker clears out what's left over (its `scheduled`).
+[triggers]
+crons = ["17 4 * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "claude-notch-bot"

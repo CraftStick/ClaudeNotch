@@ -34,6 +34,19 @@ enum SessionRegistry {
         }
     }
 
+    /// The session's Claude Code quit without a word (killed, or crashed): every file with its id names a
+    /// process that's gone. False while one runs, and when there's no file to tell.
+    static func isGone(_ sessionID: String, in dir: String = dir) -> Bool {
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
+        let pids = files.filter { $0.hasSuffix(".json") }.compactMap { file -> pid_t? in
+            guard let data = FileManager.default.contents(atPath: dir + "/" + file),
+                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  json["sessionId"] as? String == sessionID else { return nil }
+            return (json["pid"] as? NSNumber)?.int32Value
+        }
+        return !pids.isEmpty && !pids.contains(where: isRunning)
+    }
+
     /// The process is there, ours or not: a file left behind by a crash names one that's gone.
     private static func isRunning(_ pid: pid_t) -> Bool {
         pid > 0 && (kill(pid, 0) == 0 || errno == EPERM)

@@ -307,11 +307,6 @@ final class Store: ObservableObject {
         greeting = Self.makeGreeting(at: now, cue: .arrive)
     }
 
-    /// "Stays in the notch" was switched on or off: the greeting now stays, or leaves when its rest is over.
-    func aliveChanged() {
-        settingsChanged()
-    }
-
     /// A setting that changes what the notch shows was switched.
     func settingsChanged() {
         objectWillChange.send()
@@ -381,6 +376,16 @@ final class Store: ObservableObject {
         hoverWork = work
         // Leaving waits one more look at the pointer (it's polled every 0.1 s), for a pointer on the edge.
         DispatchQueue.main.asyncAfter(deadline: .now() + (wanted ? 0.3 : 0.1), execute: work)
+    }
+
+    /// What an event needs read from disk, read on the socket's thread before it reaches `handle` on the
+    /// main one: a turn's end without its last message (Claude Code from before it sent one) gets it from
+    /// the transcript, up to 256 KB of it.
+    static func prepare(_ json: [String: Any]?) -> [String: Any]? {
+        guard var json, json["hook_event_name"] as? String == "Stop", json["last_assistant_message"] == nil,
+              let path = json["transcript_path"] as? String, !path.isEmpty else { return json }
+        json["last_assistant_message"] = TranscriptWatcher.lastReply(path: path)
+        return json
     }
 
     func handle(_ json: [String: Any]?, reply: HookReply) {
@@ -658,9 +663,8 @@ final class Store: ObservableObject {
             dropPrompts(for: id)
             s.turnEnd = now
             s.currentTool = nil
-            // How the reply ends: its last line, from the hook or else the transcript.
-            let reply = (json["last_assistant_message"] as? String) ?? s.transcriptPath.flatMap(TranscriptWatcher.lastReply)
-            let last = reply.flatMap(TranscriptWatcher.lastLine) ?? ""
+            // How the reply ends: its last line, from the hook or else the transcript (`prepare`).
+            let last = (json["last_assistant_message"] as? String).flatMap(TranscriptWatcher.lastLine) ?? ""
             if last.hasSuffix("?") || last.hasSuffix("？") {
                 // It ended with a question: Claude waits for your answer.
                 s.phase = .waiting
@@ -935,7 +939,7 @@ final class Store: ObservableObject {
         sessions[s.id] = s
         // Claude is here, and the greeting gives way. Living in the notch for good, Clawd stays on in
         // it for when the sessions are gone: made again, he'd float in under a parachute every time.
-        if !Self.alive { greeting = nil }
+        if !Self.alive, greeting != nil { greeting = nil }
         if s.phase.isActive, let path = s.transcriptPath {
             transcripts.watch(sessionID: s.id, path: path)
         } else if !s.phase.isActive {
@@ -947,9 +951,10 @@ final class Store: ObservableObject {
             if expanded, collapseWork == nil, focusID == s.id { scheduleCollapse(after: 1) }
             return
         }
-        focusID = s.id
-        notice = nil  // Claude has news of its own
-        expanded = true
+        // Each of these redraws the notch when set, even to what it was: only what changes.
+        if focusID != s.id { focusID = s.id }
+        if notice != nil { notice = nil }  // Claude has news of its own
+        if !expanded { expanded = true }
         collapseWork?.cancel()
         collapseWork = nil
         if seconds.isFinite { scheduleCollapse(after: seconds) }
@@ -965,8 +970,8 @@ final class Store: ObservableObject {
     private func collapse() {
         collapseWork?.cancel()
         collapseWork = nil
-        expanded = false
-        if focusID == Self.noticeID { notice = nil }
+        if expanded { expanded = false }
+        if focusID == Self.noticeID, notice != nil { notice = nil }
     }
 
     /// Esc: Claude Code sends no hook, the transcript watcher tells us.

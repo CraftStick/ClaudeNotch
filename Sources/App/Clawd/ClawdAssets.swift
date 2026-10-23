@@ -40,9 +40,6 @@ enum ClawdAssets {
     static let turning = sheet("Turning", frames: 29)
     static let spark = sheet("Spark", frames: 73)
 
-    /// Any sheet by its name, as it is (for a look at one in a test).
-    static func named(_ name: String) -> PixelSheet? { sheets[name] }
-
     private static func sheet(_ name: String, frames: Int) -> PixelSheet? {
         sheets[name].flatMap { $0.frames.count >= frames ? $0 : nil }
     }
@@ -90,7 +87,8 @@ enum ClawdAssets {
                 if let hit = findEngine(in: child) { return hit }
             } else if name.hasPrefix("clawdQuestEngine-"), name.hasSuffix(".js"),
                       let size = child["size"] as? Int,
-                      let offset = (child["offset"] as? String).flatMap({ Int($0) }) ?? child["offset"] as? Int {
+                      let offset = (child["offset"] as? String).flatMap({ Int($0) }) ?? child["offset"] as? Int,
+                      offset >= 0, size >= 0 {
                 return (offset, size)
             }
         }
@@ -158,7 +156,7 @@ enum ClawdAssets {
         for delta in deltas {
             for token in delta.split(separator: ",") {
                 guard let last = token.last, let v = value(last),
-                      let index = Int(token.dropLast(), radix: 36), index < pixels.count else { return nil }
+                      let index = Int(token.dropLast(), radix: 36), pixels.indices.contains(index) else { return nil }
                 pixels[index] = v
             }
             frames.append(pixels)

@@ -101,8 +101,9 @@ final class TranscriptWatcher {
             let line = Data(buffer[buffer.startIndex..<newline])
             buffer = buffer[(newline + 1)...]
             if line.range(of: Self.interruptMarker) != nil, Self.isInterrupt(line) {
+                // On to the lines after it: returning here kept a half line already read as the start of the next.
                 onMain { $0.onInterrupt(sessionID) }
-                return
+                continue
             }
             if line.range(of: Self.usageMarker) != nil, let (message, written) = Self.assistantMessage(line) {
                 if let usage = Self.usage(in: message, initial: false) { onMain { $0.onUsage(sessionID, usage) } }

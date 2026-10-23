@@ -111,6 +111,11 @@ struct StoreTests {
         #expect(store.idle.first?.waitingForTask == true)
         #expect(store.others(than: "s1").map(\.id) == ["open"])
         #expect(store.working.map(\.id) == ["s1"])  // the notch itself doesn't show it
+
+        // A quick reply isn't typed into a session whose Claude Code is gone: its tab holds a shell now.
+        #expect(SessionRegistry.isGone("gone", in: dir))
+        #expect(!SessionRegistry.isGone("open", in: dir))
+        #expect(!SessionRegistry.isGone("never-seen", in: dir))
     }
 
     @Test func aQuestionIsAnsweredFromTheNotch() throws {

@@ -23,7 +23,8 @@ final class TelegramQuestions {
     private let telegram: Telegram
     private var sent: [Sent] = []
     private var waiting: Set<UUID> = []
-    private var poll: Timer?
+    /// A look for presses is out, or due.
+    private var polling = false
 
     init(store: Store, telegram: Telegram) {
         self.store = store
@@ -112,19 +113,25 @@ final class TelegramQuestions {
 
     // MARK: - Presses
 
-    /// Looks for presses every two seconds while a question is out.
+    /// Looks for presses while a question is out: one look after another, each held by the bot until a press
+    /// comes (25 s at most), and two seconds apart at least, for a bot from before that answers at once.
     private func syncPolling() {
-        let wanted = sent.contains { $0.messageID != nil }
-        guard wanted != (poll != nil) else { return }
-        poll?.invalidate()
-        poll = nil
-        guard wanted else { return }
-        let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
-            self?.telegram.pressed { self?.apply($0) }
+        guard !polling, sent.contains(where: { $0.messageID != nil }) else { return }
+        polling = true
+        poll()
+    }
+
+    private func poll() {
+        let tokens = sent.filter { $0.messageID != nil }.map(\.token)
+        guard !tokens.isEmpty else {
+            polling = false
+            return
         }
-        timer.tolerance = 0.5
-        RunLoop.main.add(timer, forMode: .common)
-        poll = timer
+        let start = Date()
+        telegram.pressed(tokens: tokens) { [weak self] presses in
+            self?.apply(presses)
+            DispatchQueue.main.asyncAfter(deadline: .now() + max(0, 2 - Date().timeIntervalSince(start))) { self?.poll() }
+        }
     }
 
     private func apply(_ presses: [String]) {
