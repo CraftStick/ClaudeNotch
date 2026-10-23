@@ -137,6 +137,12 @@ async function webhook(request, env) {
     return new Response("")
   }
 
+  if (await env.DB.prepare("SELECT 1 FROM devices WHERE chat_id = ? LIMIT 1").bind(chat).first()) {
+    await send(env, chat, say(lang,
+      "Этот чат уже подключён к Mac: уведомления Claude Notch приходят сюда. Какие именно, выбирается в настройках приложения.\n\n/stop — отключить.",
+      "This chat is already linked to a Mac: Claude Notch's notifications come here. Pick which ones in the app's settings.\n\n/stop to unlink."))
+    return new Response("")
+  }
   await send(env, chat, say(lang,
     "Привет! Я присылаю уведомления Claude Notch: например, когда закончились лимиты Claude.\n\nЧтобы подключить Mac, открой Claude Notch → Настройки → Уведомления, нажми «Получить код» и пришли его сюда.",
     "Hi! I send Claude Notch's notifications: say, when your Claude limits run out.\n\nTo link your Mac, open Claude Notch → Settings → Notifications, click Get Code and send it here."))
