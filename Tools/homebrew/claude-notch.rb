@@ -2,8 +2,8 @@
 # brew install craftstick/tap/claude-notch. Each release: the version and build, and the disk image's
 # sha256 (shasum -a 256 build/ClaudeNotch-<version>-<build>.dmg).
 cask "claude-notch" do
-  version "0.2.0,28"
-  sha256 "82f230aa45f0bbd4026fe7e9025dda4a10faf91b28bead84b9ca1bc1237536d4"
+  version "0.2.1,29"
+  sha256 "fb9fdad48344f9e418ad69a615c21fab8a8b8f5ded6319e4847395dbe0c84c56"
 
   url "https://github.com/CraftStick/ClaudeNotch/releases/download/v#{version.csv.first}/ClaudeNotch-#{version.csv.first}-#{version.csv.second}.dmg"
   name "Claude Notch"
