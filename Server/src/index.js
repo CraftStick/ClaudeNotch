@@ -112,6 +112,13 @@ async function webhook(request, env) {
     const now = Math.floor(Date.now() / 1000)
     const found = await env.DB.prepare("SELECT device_id FROM codes WHERE code = ? AND expires >= ?").bind(words, now).first()
     if (!found) {
+      // A code is gone once used: sent again after the link did it, it's no news.
+      const linked = await env.DB.prepare("SELECT 1 FROM devices WHERE chat_id = ? LIMIT 1").bind(chat).first()
+      if (linked) {
+        await send(env, chat, say(lang, "Этот чат уже подключён к Mac, всё в порядке. /stop — отключить.",
+                                        "This chat is already linked to a Mac, all good. /stop to unlink."))
+        return new Response("")
+      }
       await send(env, chat, say(lang, "Код не подошёл или уже устарел. Возьми новый: Claude Notch → Настройки → Уведомления.",
                                       "That code didn't work or has expired. Get a new one: Claude Notch → Settings → Notifications."))
       return new Response("")
