@@ -12,7 +12,7 @@
 //                      `wait` seconds (25 at most) for one. Without tokens, every press in the chat.
 //   POST   /v1/prefs   {"enabled": ["limitReached", …]}: what to send, also switched in the chat's Features;
 //                      /v1/status hands it back, and /v1/notify drops a message whose "kind" is off
-//   DELETE /v1/link    unlinks it
+//   DELETE /v1/link?lang=<ru|en>  unlinks it, and tells the chat in the app's language
 // Telegram's side: POST /telegram, the bot's webhook, set up once with POST /setup.
 //
 // Kept about a Mac: a hash of its secret, the chat id and its name; and a button pressed, until the
@@ -103,7 +103,8 @@ async function api(request, env, url) {
   if (route === "link" && request.method === "DELETE") {
     if (linked) {
       await env.DB.prepare("UPDATE devices SET chat_id = NULL, chat_name = NULL WHERE id = ?").bind(device).run()
-      await send(env, row.chat_id, say(null, `${EMOJI.unlinked} Mac отключён` + hint("Уведомления Claude Notch сюда больше не придут."),
+      // In the language the app's notifications came in; an app from before says none.
+      await send(env, row.chat_id, say(url.searchParams.get("lang"), `${EMOJI.unlinked} Mac отключён` + hint("Уведомления Claude Notch сюда больше не придут."),
                                        `${EMOJI.unlinked} The Mac is unlinked` + hint("Claude Notch's notifications won't come here any more.")), true)
     }
     return json({ linked: false })
@@ -292,7 +293,7 @@ const NOTES = [
 function menu(lang) {
   return { inline_keyboard: [[
     { text: say(lang, "\u00a0Функции", "\u00a0Features"), callback_data: "menu:features", icon_custom_emoji_id: EMOJI_IDS.features },
-    { text: say(lang, "🔌 Отключиться", "🔌 Unlink"), callback_data: "menu:unlink" },
+    { text: say(lang, "\u00a0Отключиться", "\u00a0Unlink"), callback_data: "menu:unlink", icon_custom_emoji_id: EMOJI_IDS.unlink },
   ]] }
 }
 
@@ -305,7 +306,14 @@ async function chatPrefs(env, chat) {
 function featuresPage(lang, enabled) {
   const text = say(lang, `${EMOJI.features} Что присылать в этот чат` + hint("Нажми, чтобы включить или выключить."),
                          `${EMOJI.features} What to send to this chat` + hint("Tap to switch on or off."))
-  const rows = NOTES.map((n) => [{ text: `${enabled.includes(n.key) ? "✅" : "▫️"} ${say(lang, n.ru, n.en)}`, callback_data: `menu:toggle:${n.key}` }])
+  // What's on gets the animated tick on its button; what's off keeps its square in the text, so the two
+  // differ where a Telegram from before shows no icons on buttons.
+  const rows = NOTES.map((n) => {
+    const on = enabled.includes(n.key)
+    const button = { text: `${on ? "\u00a0" : "▫️ "}${say(lang, n.ru, n.en)}`, callback_data: `menu:toggle:${n.key}` }
+    if (on) button.icon_custom_emoji_id = EMOJI_IDS.done
+    return [button]
+  })
   rows.push([{ text: say(lang, "← Назад", "← Back"), callback_data: "menu:back" }])
   return { text, parse_mode: "HTML", reply_markup: { inline_keyboard: rows } }
 }
@@ -400,11 +408,11 @@ function telegram(env, method, body) {
 // MARK: - Bits
 
 // Telegram's animated emoji, each with the plain one shown where it can't be.
-const EMOJI_IDS = { features: "5429499996913278461" }
+const EMOJI_IDS = { features: "5429499996913278461", done: "5222021113369893480", unlink: "5222255236332168190" }
 const EMOJI = {
   features: animated(EMOJI_IDS.features, "🫵"),
   crab: animated("5296674469677409218", "🦀"),
-  done: animated("5222021113369893480", "✅"),
+  done: animated(EMOJI_IDS.done, "✅"),
   warning: animated("5276240711795107620", "⚠️"),
   unlinked: animated("5222333585125582195", "❌"),
 }

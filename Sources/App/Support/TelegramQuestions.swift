@@ -1,11 +1,22 @@
 import Foundation
 
+/// What the questions need of Telegram; the tests stand in for it.
+protocol QuestionChannel: AnyObject {
+    var linked: Bool { get }
+    func ask(_ text: String, buttons: [[Telegram.Button]], sent: @escaping (Int?) -> Void)
+    func edit(_ messageID: Int, _ text: String, buttons: [[Telegram.Button]])
+    func pressed(tokens: [String], wait: Int, _ done: @escaping ([String]) -> Void)
+}
+
+extension Telegram: QuestionChannel {}
+
 /// Claude's questions in Telegram, its options as buttons: a press answers in the notch, as a click there
 /// would. A question goes out once it has waited `delay` unanswered (at the Mac you'd have answered it by
-/// then); the next of several goes out as soon as one is answered. A message whose question is answered,
-/// there or at the Mac, or gone, says so and loses its buttons. Used on the main thread.
+/// then); the next of several goes out as soon as one is answered in Telegram, and waits its own `delay`
+/// after one answered at the Mac. A message whose question is answered, there or at the Mac, or gone, says
+/// so and loses its buttons. Used on the main thread.
 final class TelegramQuestions {
-    static let delay: TimeInterval = 20
+    private let delay: TimeInterval
 
     private struct Sent {
         let prompt: UUID
@@ -20,15 +31,16 @@ final class TelegramQuestions {
     }
 
     private let store: Store
-    private let telegram: Telegram
+    private let telegram: QuestionChannel
     private var sent: [Sent] = []
     private var waiting: Set<UUID> = []
     /// A look for presses is out, or due.
     private var polling = false
 
-    init(store: Store, telegram: Telegram) {
+    init(store: Store, telegram: QuestionChannel, delay: TimeInterval = 20) {
         self.store = store
         self.telegram = telegram
+        self.delay = delay
     }
 
     /// Questions go to Telegram: it's linked, and they're switched on.
@@ -55,10 +67,12 @@ final class TelegramQuestions {
         guard active else { return }
         for prompt in prompts where prompt.form != nil && !waiting.contains(prompt.id) && !sent.contains(where: { $0.prompt == prompt.id }) {
             waiting.insert(prompt.id)
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.delay) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self else { return }
                 self.waiting.remove(prompt.id)
-                guard self.active, let now = self.store.prompts.first(where: { $0.id == prompt.id }), now.form?.step == prompt.form?.step else { return }
+                guard self.active, let now = self.store.prompts.first(where: { $0.id == prompt.id }), now.form != nil else { return }
+                // Answered at the Mac meanwhile, but there's more to it: the next question waits its own turn.
+                guard now.form?.step == prompt.form?.step else { return self.update() }
                 self.send(now)
             }
         }
@@ -84,7 +98,7 @@ final class TelegramQuestions {
         EventLog.append("Telegram question")
         telegram.ask(text, buttons: Self.buttons(form, token: token)) { [weak self] id in
             guard let self, let i = self.sent.firstIndex(where: { $0.token == token }) else {
-                if let id { self?.telegram.edit(id, text + "\n\n<i>" + tr("Уже не ждёт ответа.", "No longer waiting for an answer.") + "</i>") }
+                if let id { self?.telegram.edit(id, text + "\n\n<i>" + tr("Уже не ждёт ответа.", "No longer waiting for an answer.") + "</i>", buttons: []) }
                 return
             }
             self.sent[i].messageID = id
@@ -98,7 +112,7 @@ final class TelegramQuestions {
         guard let id = done.messageID else { return }
         let outcome = answer.map { "\(TelegramEmoji.done) " + escapeHTML($0) }
             ?? "<i>" + tr("Уже не ждёт ответа: ответили на Mac или вопрос закрыт.", "No longer waiting: answered at the Mac, or the question closed.") + "</i>"
-        telegram.edit(id, done.text + "\n\n" + outcome)
+        telegram.edit(id, done.text + "\n\n" + outcome, buttons: [])
     }
 
     /// One button per option, ticked where several may be picked, then Send.
@@ -128,7 +142,7 @@ final class TelegramQuestions {
             return
         }
         let start = Date()
-        telegram.pressed(tokens: tokens) { [weak self] presses in
+        telegram.pressed(tokens: tokens, wait: 25) { [weak self] presses in
             self?.apply(presses)
             DispatchQueue.main.asyncAfter(deadline: .now() + max(0, 2 - Date().timeIntervalSince(start))) { self?.poll() }
         }

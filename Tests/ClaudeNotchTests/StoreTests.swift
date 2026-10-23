@@ -4,7 +4,7 @@ import Testing
 @testable import ClaudeNotch
 
 /// A hook's connection to the app, whose answer can be read back once the app has given it.
-private final class Hook {
+final class Hook {
     let reply: HookReply
     private let output: Int32
 

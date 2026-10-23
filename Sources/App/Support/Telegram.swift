@@ -140,8 +140,9 @@ final class Telegram: ObservableObject {
         RunLoop.main.add(timer, forMode: .common)
     }
 
+    /// The bot says goodbye in the chat in the app's language, as its notifications came.
     func unlink() {
-        call("link", method: "DELETE") { _, _ in }
+        call("link", method: "DELETE", query: [URLQueryItem(name: "lang", value: Language.current.rawValue)]) { _, _ in }
         set(chat: nil)
     }
 
