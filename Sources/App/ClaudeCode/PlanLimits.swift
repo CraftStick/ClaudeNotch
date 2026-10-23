@@ -55,9 +55,10 @@ struct PlanLimit: Equatable {
 }
 
 /// Keeps an eye on the plan's limits and tells when one runs out and when it's back. Asks
-/// api.anthropic.com with Claude Code's own login (`ClaudeLogin`), the way its /usage does: every few minutes while
-/// Claude works and for a while after, then once more when a limit that ran out is due to reset.
-/// Otherwise the limits can't run out, and it asks nothing. Used on the main thread.
+/// api.anthropic.com with Claude Code's own login (`ClaudeLogin`), the way its /usage does: every few
+/// minutes while Claude works here and for a while after, every ten minutes otherwise (the limits are the
+/// account's, spent in chats and on other devices too), and once more when a limit that ran out is due
+/// to reset. Used on the main thread.
 final class PlanLimits: ObservableObject {
     enum Change { case exhausted(PlanLimit), restored(PlanLimit) }
 
@@ -65,9 +66,10 @@ final class PlanLimits: ObservableObject {
     /// The limits that had run out at the last look, so a change is told once, across restarts too.
     private static let exhaustedKey = "exhaustedLimits"
     static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
-    /// How often to look while Claude works, and how long after it stopped.
+    /// How often to look while Claude works, and how long after it stopped; and how often otherwise.
     static let interval: TimeInterval = 4 * 60
     static let keepLooking: TimeInterval = 10 * 60
+    static let idleInterval: TimeInterval = 10 * 60
 
     @Published private(set) var limits: [PlanLimit] = []
     @Published private(set) var checked: Date?
@@ -98,11 +100,14 @@ final class PlanLimits: ObservableObject {
             return
         }
         refresh()
-        let timer = Timer(timeInterval: Self.interval, repeats: true) { [weak self] _ in
-            guard let self, self.claudeWasBusy() else { return }
+        // A glance once a minute at how long it's been: `interval` while Claude works, `idleInterval` otherwise.
+        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let since = Date().timeIntervalSince(self.lastFetch)
+            guard since >= (self.claudeWasBusy() ? Self.interval : Self.idleInterval) - 20 else { return }
             self.refresh()
         }
-        timer.tolerance = 30
+        timer.tolerance = 20
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }

@@ -220,8 +220,8 @@ private struct NotificationsPage: View {
             Section {
                 Toggle(isOn: Binding(get: { limits.enabled }, set: { limits.enabled = $0 })) {
                     Label(tr("Следить за лимитами плана", "Watch the plan's limits"), systemImage: "hourglass")
-                    Text(tr("Чёлка скажет, когда лимит закончился и когда он снова есть. Пока Claude работает, приложение раз в несколько минут спрашивает о них api.anthropic.com, входя как Claude Code.",
-                            "The notch tells you when a limit runs out and when it's back. While Claude works, the app asks api.anthropic.com about them every few minutes, signed in as Claude Code."))
+                    Text(tr("Чёлка скажет, когда лимит закончился и когда он снова есть. Приложение спрашивает о них api.anthropic.com, входя как Claude Code: раз в несколько минут, пока Claude работает, и раз в 10 минут в остальное время, ведь лимиты тратят и чаты, и другие устройства.",
+                            "The notch tells you when a limit runs out and when it's back. The app asks api.anthropic.com about them, signed in as Claude Code: every few minutes while Claude works, and every 10 minutes otherwise, as chats and other devices spend them too."))
                 }
                 if limits.enabled {
                     ForEach(limits.limits, id: \.kind) { LimitRow(limit: $0) }
