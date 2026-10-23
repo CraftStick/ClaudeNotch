@@ -183,6 +183,7 @@ struct SettingsView: View {
         }
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
+        .tint(claudeOrange)  // switches and buttons in Claude's colour
         .id(language)  // every label again in the language just picked
         .onAppear(perform: refresh)
     }
@@ -266,7 +267,7 @@ private struct LimitRow: View {
                     .foregroundStyle(limit.exhausted ? .red : .secondary)
             }
             ProgressView(value: min(limit.used, 100), total: 100)
-                .tint(limit.exhausted ? .red : .accentColor)
+                .tint(limit.exhausted ? .red : claudeOrange)
         }
     }
 }
