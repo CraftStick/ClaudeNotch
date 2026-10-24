@@ -37,6 +37,11 @@ struct RenderClawd {
             try write(strip(stride(from: 0.0, to: end.duration, by: end.duration / 16).map { end.frame($0) }), "\(folder)/nap-end.png")
         }
         if let hula = ClawdAnimator.hula { try frames(hula, into: "\(folder)/gif-hula") }
+        if let look = ClawdAnimator.searching, let off = ClawdAnimator.hatOff,
+           let search = ClawdAnimator.Pastime.sequence([ClawdAnimator.Pastime(duration: 0.8) { ClawdAnimator.hatOn($0)! }, look, look, off]) {
+            try frames(search, into: "\(folder)/gif-searching")
+        }
+        if let rocket = ClawdAnimator.moodReactions[.rocket] { try frames(rocket, into: "\(folder)/gif-rocket") }
         if let start = ClawdAnimator.napStart, let end = ClawdAnimator.napEnd,
            let nap = ClawdAnimator.Pastime.sequence([start, ClawdAnimator.Pastime(duration: 5) { ClawdAnimator.napping($0)! }, end]) {
             try frames(nap, into: "\(folder)/gif-sleeping")
