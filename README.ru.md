@@ -10,13 +10,6 @@
 Что Claude делает, сколько уже работает и когда ждёт тебя — и ответить ему можно прямо там.<br>
 А ещё в чёлке живёт Clawd.
 
-<p>
-<a href="https://github.com/CraftStick/ClaudeNotch/releases/latest"><img src="https://img.shields.io/github/v/release/CraftStick/ClaudeNotch?label=release&color=d97757" alt="Latest release"></a>
-<img src="https://img.shields.io/badge/macOS-14%2B-lightgrey?logo=apple" alt="macOS 14+">
-<a href="https://github.com/CraftStick/homebrew-tap"><img src="https://img.shields.io/badge/brew-craftstick%2Ftap%2Fclaude--notch-fbb040?logo=homebrew&logoColor=white" alt="Homebrew"></a>
-<a href="https://github.com/CraftStick/ClaudeNotch/stargazers"><img src="https://img.shields.io/github/stars/CraftStick/ClaudeNotch?style=flat&color=d97757" alt="Stars"></a>
-</p>
-
 <img src="docs/ru/notch.gif" width="640" alt="Чёлка во время задачи: Clawd достаёт ноутбук, печатает, выполняется команда, «Готово»">
 
 <table>
