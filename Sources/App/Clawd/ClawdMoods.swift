@@ -345,7 +345,8 @@ extension ClawdAnimator {
            frame.capped || (session.phase.isActive && Self.cappedMotions.contains(session.motion)),
            let head = Self.head(frame.sheet, frame.index) {
             // Thinking, his bubble is up where the tip would droop.
-            frame.decals.append(Decal(session.motion == .pondering ? Props.nightcapOtherWay : Props.nightcap, head.x, head.y - 4))
+            let cap = session.motion == .pondering ? Props.nightcapOtherWay : Props.nightcap
+            frame.decals.append(Decal(cap, head.x, head.y - cap.height + 1))
         }
         guard session.phase.isActive, [.typing, .pondering, .desktop, .running, .searching].contains(session.motion) else { return frame }
         let t = date.timeIntervalSince(session.motionStart)

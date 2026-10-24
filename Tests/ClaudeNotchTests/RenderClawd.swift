@@ -20,7 +20,7 @@ struct RenderClawd {
         let night = poses.compactMap { sheet, index in
             sheet.flatMap { sheet in ClawdAnimator.head(sheet, index).map { head in
                 ClawdAnimator.Frame(sheet, index, decals: [Decal(sheet.name == "Thinking" ? Props.nightcapOtherWay : Props.nightcap,
-                                                                 head.x, head.y - 4)])
+                                                                 head.x, head.y - Props.nightcap.height + 1)])
             } }
         }
         try write(strip(night), "\(folder)/night.png")

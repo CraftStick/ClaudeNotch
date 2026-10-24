@@ -587,23 +587,29 @@ enum Props {
     /// One eye shut, a wink: over the eye at x 16–17, at (16, 7).
     static let winkShut = PixelArt("winkShut", ["bb", "xx"], ["b": body, "x": eye])
 
-    /// A nightcap on top of his head, its tip drooping behind him with a pompom: at (head x, head top − 4).
+    /// A nightcap on top of his head, a tall cone whose tip droops behind him with a pompom: at (head x, head top − 7).
     static let nightcap = PixelArt("nightcap", [
-        "p...............",
-        ".bbbb...........",
-        "...bbbbbbbb.....",
-        "..bbbbbbbbbbbbb.",
+        "..pp............",
+        ".pppb...........",
+        "...bbbb.........",
+        "....bbbbbB......",
+        "...bbbbbbbBB....",
+        "..bbbbbbbbbBBB..",
+        ".bbbbbbbbbbbBBB.",
         "wwwwwwwwwwwwwwww",
-    ], ["b": 0x3a_4f_9a_ff, "w": 0xf4_f0_e6_ff, "p": 0xf4_f0_e6_ff])
+    ], ["b": 0x3a_4f_9a_ff, "B": 0x2c_3c_78_ff, "w": 0xf4_f0_e6_ff, "p": 0xf4_f0_e6_ff])
 
     /// The nightcap with its tip drooping the other way: where his thought bubble is on the side it would.
     static let nightcapOtherWay = PixelArt("nightcapOtherWay", [
-        "...............p",
-        "...........bbbb.",
-        ".....bbbbbbbb...",
-        ".bbbbbbbbbbbbb..",
+        "............pp..",
+        "...........bppp.",
+        ".........bbbb...",
+        "......Bbbbbb....",
+        "....BBbbbbbbb...",
+        "..BBBbbbbbbbbb..",
+        ".BBBbbbbbbbbbbb.",
         "wwwwwwwwwwwwwwww",
-    ], ["b": 0x3a_4f_9a_ff, "w": 0xf4_f0_e6_ff, "p": 0xf4_f0_e6_ff])
+    ], ["b": 0x3a_4f_9a_ff, "B": 0x2c_3c_78_ff, "w": 0xf4_f0_e6_ff, "p": 0xf4_f0_e6_ff])
 
     /// The coffee mug with tea in it instead, its tag hanging over the rim: late at night.
     static let teaMug = PixelArt("teaMug", [
