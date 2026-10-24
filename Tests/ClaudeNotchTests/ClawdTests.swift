@@ -33,7 +33,7 @@ struct ClawdTests {
     @Test func propsAreWhole() {
         let props = [Props.mug, Props.steam, Props.steamFading, Props.happyEyes, Props.closedEyes, Props.headphones,
                      Props.note, Props.wizardHat, Props.wand, Props.star, Props.sparkle, Props.bigSparkle, Props.wink,
-                     Props.chefHat, Props.pan, Props.pancakeFlat, Props.pancakeEdge, Props.book, Props.parachute,
+                     Props.chefHat, Props.pan, Props.pancakeFlat, Props.pancakeEdge, Props.book, Props.bookClosed, Props.bookFront, Props.eyesReadingStart, Props.eyesReadingEnd, Props.parachute,
                      Props.arm, Props.headphonesFolded, Props.wizardHatTucked, Props.heart, Props.heartFading, Props.smallHeart,
                      Props.blush, Props.squeezedEyes, Props.eyesDown, Props.breath, Props.breathFading, Props.broom,
                      Props.wideEyes, Props.exclamation, Props.thumbUp, Props.winkShut, Props.nightcap, Props.nightcapOtherWay, Props.teaMug]

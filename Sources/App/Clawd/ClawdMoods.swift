@@ -48,17 +48,33 @@ extension ClawdAnimator {
         }
     }
 
+    /// What stands beside him on the ground comes out from behind him, and goes back there: `decal` slid
+    /// along from inside his body (turned, x 4–19) to where it stands, `p` of the way (0…1). Behind him it
+    /// shows only where he isn't.
+    static func fromBehind(_ decal: Decal, _ p: Double) -> Decal {
+        Decal(decal.art, lerp(6, decal.x, smooth(p)), decal.y, .behind)
+    }
+
+    /// The box for compacting, pushed out from behind him once he's turned to it; and back when he's done.
+    static let boxOut: Pastime? = ClawdAssets.turning.map { _ in
+        Pastime(duration: 0.4) { t in turned(rate: 16, decals: [fromBehind(Decal(Props.box, 25, 9), t / 0.4)])! }
+    }
+    static let boxAway: Pastime? = ClawdAssets.turning.map { _ in
+        Pastime(duration: 0.4) { t in turned(rate: 16, decals: [fromBehind(Decal(Props.boxShut, 25, 9), 1 - t / 0.4)])! }
+    }
+
     /// A rate limit: he turns to an hourglass beside him, eyes on it, while its sand runs down; once it's
     /// all through he blinks and turns back to you.
     static let rateLimit: Pastime? = turnAside.flatMap { aside in turnBack.map { back in
-        Pastime(duration: aside.duration + 8 + back.duration) { t in
+        Pastime(duration: aside.duration + 0.4 + 8 + 0.4 + back.duration) { t in
             let glass = { (level: Int, running: Bool) in Decal(Props.hourglass(level, running: running), 25, 6) }
             if t < aside.duration { return Frame(aside, at: t) }
-            let u = t - aside.duration
+            // Out from behind him first, and back there before he turns back.
+            if t < aside.duration + 0.4 { return turned(rate: 16, decals: [fromBehind(glass(0, false), (t - aside.duration) / 0.4)])! }
+            let u = t - aside.duration - 0.4
+            if (8..<8.4).contains(u) { return turned(rate: 16, decals: [fromBehind(glass(9, false), 1 - (u - 8) / 0.4)])! }
             guard u < 8 else {
-                var frame = Frame(back, at: u - 8)
-                frame.decals = [glass(9, false)]
-                return frame
+                return Frame(back, at: u - 8.4)
             }
             let running = u < 7
             let level = running ? Int(u / 7 * 9) : 9
@@ -81,11 +97,11 @@ extension ClawdAnimator {
         }
     }
 
-    /// Putting the hat on, before the first look: down onto his head from above as he turns aside.
+    /// Putting the hat on, before the first look: lifted from behind his head, up over it, and down onto it,
+    /// as he turns aside. Nil once it's on.
     static func hatOn(_ t: TimeInterval) -> Frame? {
-        guard t < 0.3, let aside = turnAside else { return nil }
-        let drop = Int((1 - t / 0.3) * 6)
-        let hat = Decal(Props.deerstalker, 2, -6 - drop)
+        guard t < 0.5, let aside = turnAside else { return nil }
+        let hat = deerstalkerLifted(t / 0.5)
         guard t >= aside.duration else {
             // Facing you, his head's top row is where it is when he's turned.
             var frame = Frame(aside, at: t)
@@ -93,6 +109,18 @@ extension ClawdAnimator {
             return frame
         }
         return turned(rate: 16, decals: [hat])
+    }
+
+    /// Done searching: the hat comes off, up and back down behind his head, before he turns back to you.
+    static let hatOff: Pastime? = ClawdAssets.turning.map { _ in
+        Pastime(duration: 0.5) { t in turned(rate: 16, decals: [deerstalkerLifted(1 - t / 0.5)])! }
+    }
+
+    /// The deerstalker `p` of the way on (0…1): from behind his head (its brim at his eyes) up till it's clear
+    /// of his head, then down onto it.
+    private static func deerstalkerLifted(_ p: Double) -> Decal {
+        if p < 0.6 { return Decal(Props.deerstalker, 2, lerp(3, -9, smooth(p / 0.6)), p < 0.45 ? .behind : .front) }
+        return Decal(Props.deerstalker, 2, lerp(-9, -6, smooth((p - 0.6) / 0.4)))
     }
 
     /// Waiting for you a long while: after a minute he looks around for you between waves; after five
@@ -163,11 +191,14 @@ extension ClawdAnimator {
                 if t >= 1.0 { decals.append(Decal(Props.eyesUpTurned, 9, 2)) }
                 return turned(rate: 14, offsetY: pressing ? 1 : 0, decals: decals)!
             }
-            let turnIn = Pastime(duration: aside.duration) { t in
-                var frame = Frame(aside, at: t)
-                frame.decals = [Decal(Props.rocket, 27, 2)]
-                return frame
-            }
+            // He turns aside, then the rocket comes out from behind him and the button into his hand.
+            let turnIn = Pastime.sequence([
+                Pastime([aside]),
+                Pastime(duration: 0.5) { t in
+                    turned(rate: 16, decals: [fromBehind(Decal(Props.rocket, 27, 2), t / 0.5),
+                                              fromBehind(Decal(Props.remote, 21, 5), min(1, t / 0.35))])!
+                },
+            ])
             let joy = ClawdAssets.excited.flatMap { Pastime([Clip(sheet: $0, frames: 2...21, fps: 14)]) }
             return Pastime.sequence([turnIn, launch, joy])
         }
@@ -235,8 +266,10 @@ extension ClawdAnimator {
         }
         // More taken out than put in: a tidy-up. With a broom he sweeps in front of him, dust flying, eyes on
         // the floor; then a glint where it's clean, and he's pleased.
-        all[.sweep] = ClawdAssets.pointing.map { sheet in
-            Pastime(duration: 3.0) { t in
+        all[.sweep] = ClawdAssets.pointing.flatMap { sheet in
+            let side = grip[0]!
+            let (broomOut, broomAway) = handHeld(sheet, [Decal(Props.broom, 19 - side.x, 7 - side.y)])
+            let sweeping = Pastime(duration: 3.0) { t in
                 if t < 2.2 {
                     let stroke = Int(t * 5) % 2  // back and forth
                     var decals = [Decal(Props.broom, 19 + stroke * 2, 7), Decal(Props.eyesDown, 6, 7)]
@@ -248,6 +281,7 @@ extension ClawdAnimator {
                 if t < 2.7 { decals.append(Decal(Int(t * 8) % 2 == 0 ? Props.bigSparkle : Props.sparkle, 29, 16)) }
                 return Frame(sheet, 0, rate: 8, decals: decals)
             }
+            return Pastime.sequence([broomOut, sweeping, broomAway])
         }
         // A huge output or file: eyes wide, a "!" pops up, and he jumps back a step, then edges in again.
         all[.surprise] = ClawdAssets.pointing.map { sheet in

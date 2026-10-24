@@ -62,7 +62,7 @@ Short reactions play over whatever Clawd was doing.
 
 ## Resting
 
-After a task Clawd stays in the notch for 15 more minutes, so you can see that Claude is done. Every 30 seconds he does one of these, in no fixed order and never the same twice in a row: looks around, sways, dances, does the hula. In between he doesn't freeze: he breathes, blinks (now and then twice) and sometimes glances aside or up. So he does whenever he stands still, living in the notch for good too.
+After a task Clawd stays in the notch for 15 more minutes, so you can see that Claude is done. Every 30 seconds he does one of these, in no fixed order and never the same twice in a row: looks around, sways, dances, or takes a grass skirt from behind his back, pulls it on over his head and does the hula. In between he doesn't freeze: he breathes, blinks (now and then twice) and sometimes glances aside or up. So he does whenever he stands still, living in the notch for good too.
 
 <table>
 <tr>
@@ -77,7 +77,7 @@ Then he settles down:
 
 <table>
 <tr>
-<td align="center" valign="top"><img src="sleeping.gif" width="96" alt="Clawd dozing under an open book"><br><b>Dozes off under an open book</b><br>3 minutes after the task</td>
+<td align="center" valign="top"><img src="sleeping.gif" width="96" alt="Clawd reading a book, then dozing under it"><br><b>Reads, yawns and dozes under his book</b><br>3 minutes after the task</td>
 <td align="center" valign="top"><img src="walking-off.gif" width="96" alt="Clawd walking away"><br><b>Walks off</b><br>At the end of the 15 minutes;<br>then the notch hides</td>
 </tr>
 </table>
@@ -103,7 +103,7 @@ Switch on **Clawd stays in the notch** in the settings (Clawd's menu → Setting
 - lifts a chef's hat from behind his back over his head and puts it on, then brings out a frying pan and tosses a pancake;
 - stands thinking with a hand on his chin, dots coming and going in a bubble;
 - looks around, sways, dances (once or twice), does the hula, hops twice, gets excited, breakdances (the whole routine, with a windmill and a headspin);
-- sits down for a nap under an open book and gets back up;
+- reads a book held up in front of him, yawns, puts it on his head and dozes under it, then gets up and puts it away;
 - walks off out of the notch and comes back a few seconds later, walking or under a parachute.
 
 The props are drawn in Claude Notch's code over Clawd's own frames from the Claude app. None of it is what he does at work or when Claude needs you, so it can't be taken for news. The checkmark and the time of the last task still go away after 15 minutes, and a new task still comes first.

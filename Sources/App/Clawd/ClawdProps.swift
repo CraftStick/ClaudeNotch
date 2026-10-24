@@ -206,14 +206,52 @@ enum Props {
 
     // MARK: Sitting (Meditating frames 8–51): head x 4–19 from y 1 or 2, as he breathes.
 
-    /// An open book spread over his head while he dozes: its cover on the head's top row, at x 2.
+    /// The book open and face down on his head while he dozes, its cover up like a little roof, the spine on
+    /// top: its bottom row on the head's top row, at x 2.
     static let book = PixelArt("book", [
-        "...wwwwww..wwwwww...",
-        "..wwwwwwwsswwwwwww..",
-        ".pwwwwwwwsswwwwwwwp.",
-        "cppppppppssppppppppc",
-        "cccccccccCCccccccccc",
-    ], ["w": 0xf6_e9_cc_ff, "p": 0xe6_cf_a0_ff, "s": 0xd8_b9_8a_ff, "c": 0xb8_74_2e_ff, "C": 0x8f_55_20_ff])
+        "........cCCc........",
+        "......cccCCccc......",
+        "....cccccCCccccc....",
+        "..cccccccCCccccccc..",
+        "pccccccccCCccccccccp",
+    ], ["p": 0xf6_e9_cc_ff, "c": 0xb8_74_2e_ff, "C": 0x8f_55_20_ff])
+
+    private static let bookColors: [Character: UInt32] = [
+        "w": 0xf6_e9_cc_ff, "p": 0xe6_cf_a0_ff, "s": 0xd8_b9_8a_ff, "c": 0xb8_74_2e_ff, "C": 0x8f_55_20_ff,
+    ]
+
+    /// The book shut, held in his hand by its spine: its pages to the right.
+    static let bookClosed = PixelArt("bookClosed", [
+        "ccccp",
+        "ccccw",
+        "ccccw",
+        "ccccw",
+        "ccccw",
+        "CCCCp",
+    ], bookColors)
+
+
+    /// The book held open in front of him in both hands, its pages to him: you see its cover, a gold title on
+    /// each half. At (4, 10), below his eyes; his hands are its sides.
+    static let bookFront = PixelArt("bookFront", [
+        "..cccccCCccccc..",
+        ".ccccccCCcccccc.",
+        "hcgggccCCcgggcch",
+        "hccccccCCcccccch",
+        "..CCCCCCCCCCCC..",
+    ], bookColors.merging(["g": 0xe8_c0_5a_ff, "h": body]) { $1 })
+
+    /// His eyes down on the page, at the start of a line, and at its end: over both eyes, at (5, 7).
+    static let eyesReadingStart = PixelArt("eyesReadingStart", [
+        ".bb........bb.",
+        "xxb.......xxb.",
+        "xx........xx..",
+    ], ["b": body, "x": eye])
+    static let eyesReadingEnd = PixelArt("eyesReadingEnd", [
+        ".bb........bb.",
+        ".bxx.......bxx",
+        "..xx........xx",
+    ], ["b": body, "x": eye])
 
     // MARK: Arms up (JumpingHappy frame 8): arms x 5–8 and 15–18 from y 0.
 

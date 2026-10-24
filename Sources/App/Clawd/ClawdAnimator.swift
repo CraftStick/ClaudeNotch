@@ -95,11 +95,14 @@ struct ClawdAnimator {
     private func plainFrame(at date: Date) -> Frame {
         let sinceMotion = date.timeIntervalSince(session.motionStart)
         if let cue = session.cue, let reaction = Self.reactions[cue] ?? Self.moodReactions[cue] {
-            // Put the laptop away first.
-            let putAway = exit(from: session.cueInterrupted)
-            let lead = putAway?.duration ?? 0
+            // Put the laptop away first (the hat, or the box, back behind him before that).
+            let interrupted = session.cueInterrupted
+            let away = interrupted == .searching ? Self.hatOff : interrupted == .compacting ? Self.boxAway : nil
+            let putAway = exit(from: interrupted)
+            let lead = (away?.duration ?? 0) + (putAway?.duration ?? 0)
             let t = date.timeIntervalSince(session.cueStart)
-            if let putAway, t < lead { return Frame(putAway, at: t).markedBusy() }
+            if let away, t < away.duration { return away.frame(t).markedBusy() }
+            if let putAway, t < lead { return Frame(putAway, at: t - (away?.duration ?? 0)).markedBusy() }
             if t < lead + reaction.duration { return reaction.frame(t - lead).markedBusy() }
             let cueEnd = session.cueStart.addingTimeInterval(lead + reaction.duration)
             if cueEnd > session.motionStart {
@@ -115,6 +118,12 @@ struct ClawdAnimator {
     private func motionFrame(after previous: Motion?, t: TimeInterval, sinceMotion: TimeInterval, at date: Date) -> Frame {
         let motion = session.motion
         var t = max(0, t)
+        // What he had beside him or on his head goes back behind him before he turns back to you.
+        let putAway = previous == motion ? nil : previous == .compacting ? Self.boxAway : previous == .searching ? Self.hatOff : nil
+        if let putAway {
+            if t < putAway.duration { return putAway.frame(t) }
+            t -= putAway.duration
+        }
         if let previous, previous != motion, let exit = exit(from: previous) {
             if t < exit.duration { return Frame(exit, at: t) }
             t -= exit.duration
@@ -146,9 +155,11 @@ struct ClawdAnimator {
             return looking.frame(t.truncatingRemainder(dividingBy: looking.duration))
         case .compacting:
             guard let box = Self.compacting else { return Frame(laptop, typingLoop.looped(at: t)) }
-            if previous != .compacting, let aside = Self.turnAside {
+            if previous != .compacting, let aside = Self.turnAside, let out = Self.boxOut {
                 if t < aside.duration { return Frame(aside, at: t) }
                 t -= aside.duration
+                if t < out.duration { return out.frame(t) }
+                t -= out.duration
             }
             return box.frame(t.truncatingRemainder(dividingBy: box.duration))
         case .limited:
@@ -214,22 +225,21 @@ struct ClawdAnimator {
         }
     }
 
-    /// Mostly standing still (breathing, blinking); every 30 s a little fidget; after `sleepAfter` sits down and dozes;
-    /// at the very end of the rest wakes up and walks off out of the notch.
+    /// Mostly standing still (breathing, blinking); every 30 s a little fidget; after `sleepAfter` reads a little,
+    /// yawns and dozes under his book; at the very end of the rest gets up, puts the book away and walks off out
+    /// of the notch.
     private func idle(_ t: TimeInterval, sinceRest: TimeInterval, at date: Date) -> Frame {
         let leaveAt = Store.restDuration - Self.walkOff
         if sinceRest >= leaveAt, let walking = ClawdAssets.walking {
             let w = sinceRest - leaveAt
             return Frame(walking, Clip(sheet: walking, frames: 5...9, fps: 12).looped(at: w), rate: 16, offsetX: -CGFloat(w) * 14)
         }
-        if sinceRest >= Self.sleepAfter, let meditating = ClawdAssets.meditating {
+        if sinceRest >= Self.sleepAfter, let start = Self.napStart, let end = Self.napEnd {
             let asleep = sinceRest - Self.sleepAfter
-            let sitDown = Clip(sheet: meditating, frames: 2...12, fps: 10)
-            if asleep < sitDown.duration { return Frame(sitDown, at: asleep) }
-            let doze = Clip(sheet: meditating, frames: 12...48, fps: 6)
-            let index = doze.looped(at: asleep - sitDown.duration)
-            return Frame(meditating, index, rate: 8, dozing: asleep,
-                         decals: [Self.book(on: meditating, index, dropping: asleep - sitDown.duration)])
+            let wakeAt = leaveAt - Self.sleepAfter - end.duration
+            if asleep >= wakeAt { return end.frame(asleep - wakeAt) }
+            if asleep < start.duration { return start.frame(asleep) }
+            if let frame = Self.napping(asleep - start.duration) { return frame }
         }
         let window: TimeInterval = 30
         let n = Int(t / window)
@@ -237,7 +247,7 @@ struct ClawdAnimator {
         if !Self.fidgets.isEmpty, intoFidget >= 0 {
             let seed = UInt64(bitPattern: Int64(session.motionStart.timeIntervalSinceReferenceDate))
             let fidget = Self.fidgets[Self.pick(n, of: Self.fidgets.count, seed: seed)]
-            if intoFidget < fidget.duration { return Frame(fidget, at: intoFidget) }
+            if intoFidget < fidget.duration { return fidget.frame(intoFidget) }
         }
         // Standing still until the next fidget, or until he sits down or walks off: no look before then.
         let nextFidget = Double(intoFidget < 0 ? n : n + 1) * window + 10 - t
@@ -246,11 +256,11 @@ struct ClawdAnimator {
         return Self.alive(laptop, now, until: now + (next ?? 1))
     }
 
-    private static let fidgets: [Clip] = [
-        ClawdAssets.lookingAround.map { Clip(sheet: $0, frames: 4...30, fps: 12) },
-        ClawdAssets.swaying.map { Clip(sheet: $0, frames: 4...48, fps: 12) },
-        ClawdAssets.dancing.map { Clip(sheet: $0, frames: 4...38, fps: 12) },
-        ClawdAssets.hula.map { Clip(sheet: $0, frames: 6...53, fps: 12) },
+    private static let fidgets: [Pastime] = [
+        ClawdAssets.lookingAround.flatMap { Pastime([Clip(sheet: $0, frames: 4...30, fps: 12)]) },
+        ClawdAssets.swaying.flatMap { Pastime([Clip(sheet: $0, frames: 4...48, fps: 12)]) },
+        ClawdAssets.dancing.flatMap { Pastime([Clip(sheet: $0, frames: 4...38, fps: 12)]) },
+        hula,
     ].compactMap { $0 }
 
     /// Which of `count` the `n`th fidget of a rest is: in no set order, and never the same twice in a row.
@@ -341,24 +351,11 @@ struct ClawdAnimator {
                     Clip(sheet: sheet, frames: [3], fps: 4))
         }
 
-        // Sits down, dozes off for a little while under an open book and gets back up.
-        let nap = ClawdAssets.meditating.map { sheet in
-            let sitDown = Clip(sheet: sheet, frames: 2...12, fps: 10)
-            let doze = Clip(sheet: sheet, frames: 12...44, fps: 6)
-            let wakeUp = Clip(sheet: sheet, frames: 45...59, fps: 10)
-            let asleep = 4 * doze.duration
-            return Pastime(duration: sitDown.duration + asleep + wakeUp.duration) { t in
-                if t < sitDown.duration { return Frame(sitDown, at: t) }
-                let dozing = t - sitDown.duration
-                if dozing < asleep {
-                    let index = doze.looped(at: dozing)
-                    return Frame(sheet, index, rate: 8, dozing: dozing, decals: [book(on: sheet, index, dropping: dozing)])
-                }
-                // The book stays on until he's back on his feet.
-                let index = wakeUp.frame(at: dozing - asleep)
-                return Frame(sheet, index, rate: wakeUp.fps, decals: index < 54 ? [book(on: sheet, index, dropping: .infinity)] : [])
-            }
-        }
+        // Reads a little, yawns, sits down and dozes off for a while under the book on his head, gets back up
+        // and puts it away.
+        let nap = Pastime.sequence([napStart, napping(0).map { _ in
+            Pastime(duration: 4 * Clip(sheet: ClawdAssets.meditating!, frames: 12...44, fps: 6).duration) { t in napping(t)! }
+        }, napEnd])
 
         // Off to the left out of the notch, a few seconds out of sight, and back: walking in facing
         // right, or floating down under a parachute.
@@ -387,103 +384,8 @@ struct ClawdAnimator {
         let stroll = walkOff == nil || walkBack == nil ? nil : Pastime.sequence([walkOff, away(5), walkBack])
         let skydive = walkOff == nil || parachute == nil ? nil : Pastime.sequence([walkOff, away(3), parachute])
 
-        // Props from ClawdProps.swift, over his own frames. Nothing turns up out of thin air: he takes a prop
-        // out from behind his back, and puts it back there when he's done. All of them are placed on the
-        // Pointing sheet: 0 stands (his head's top row at y 5, his body x 4–19 down to y 16, arms at x 0–3
-        // and 20–23, y 9–12, cut away while a hand is behind his back), 6 raises his arms, 7–14 hold them up
-        // (hands' top row at y 0), 15 brings them down to his head (y 1), 16 squashes him as they come down
-        // to his sides, 17–18 turn him and 24 holds out his near arm.
-        // His arms as far out as `left` and `right` pixels (4 being all of each): the rest is behind his back.
-        func arms(left: Int = 4, right: Int = 4) -> [Decal] {
-            [Decal(Props.arm, -min(4, max(0, left)), 9, .cut), Decal(Props.arm, 20 + min(4, max(0, right)), 9, .cut)]
-        }
-        func lerp(_ from: Int, _ to: Int, _ p: Double) -> Int { from + Int((Double(to - from) * min(1, max(0, p))).rounded()) }
-        func smooth(_ p: Double) -> Double { let p = min(1, max(0, p)); return p * p * (3 - 2 * p) }
-        func moved(_ decals: [Decal], _ dx: Int, _ dy: Int) -> [Decal] { decals.map { $0.moved(dx, dy) } }
+        // Props come out from behind his back and go back there: see "Props in his hands" below.
 
-        // Where his near hand holds things, just past its end at its top row: at his side (0), squashed
-        // while turning (17), turned (18) and with the arm out (24).
-        let grip: [Int: (x: Int, y: Int)] = [0: (24, 9), 17: (23, 12), 18: (25, 8), 24: (27, 8)]
-
-        // A hat or headphones: he puts both hands behind his back, lifts it up from there over his head, which
-        // hides it until it's past, raises his arms to take it and puts it on; and the other way round, back
-        // behind his back. `y` is its top row: `tucked` behind his back, `raising` in his hands as they go
-        // up (6), `overhead` held up (7–14), `lowering` as they come down (15), and `worn` while he stands.
-        // What's wider than him is `folded` while it's behind him, or it would show.
-        func headgear(_ sheet: PixelSheet, _ art: PixelArt, x: Int, folded: (art: PixelArt, x: Int)? = nil, tucked: Int,
-                      raising: Int, overhead: Int, lowering: Int, worn: Int) -> (take: Pastime, putBack: Pastime) {
-            func at(_ y: Int, _ layer: Decal.Layer = .front) -> [Decal] { [Decal(art, x, y, layer)] }
-            let behind = folded ?? (art, x)
-            func behindHim(arms out: Int, lifted p: Double) -> Frame {
-                Frame(sheet, 0, rate: 16, decals: arms(left: out, right: out)
-                    + [Decal(behind.art, behind.x, lerp(tucked, raising + 2, smooth(p)), .behind)])
-            }
-            let putOn = [
-                Pastime(duration: 0.08) { _ in Frame(sheet, 6, rate: 12, decals: at(raising)) },
-                Pastime(duration: 0.3) { t in Frame(sheet, 7 + min(7, Int(t * 12)), rate: 12, decals: at(overhead)) },
-                Pastime(duration: 0.12) { _ in Frame(sheet, 15, rate: 12, decals: at(lowering)) },
-                Pastime(duration: 0.12) { _ in Frame(sheet, 16, rate: 12, decals: at(worn + 1)) },
-            ]
-            let take = Pastime.sequence([
-                Pastime(duration: 0.2) { t in behindHim(arms: lerp(4, 0, t / 0.2), lifted: 0) },
-                Pastime(duration: 0.15) { _ in behindHim(arms: 0, lifted: 0) },
-                Pastime(duration: 0.45) { t in behindHim(arms: 0, lifted: t / 0.45) },
-            ] + putOn)!
-            let putBack = Pastime.sequence(putOn.reversed() + [
-                Pastime(duration: 0.45) { t in behindHim(arms: 0, lifted: 1 - t / 0.45) },
-                Pastime(duration: 0.1) { _ in behindHim(arms: 0, lifted: 0) },
-                Pastime(duration: 0.2) { t in behindHim(arms: lerp(0, 4, t / 0.2), lifted: 0) },
-            ])!
-            return (take, putBack)
-        }
-
-        // Something he holds in his near hand, `held` placed as if the hand's grip were at (0, 0): he puts the
-        // hand behind his back and brings it out holding it, his arm coming out as it slides out from behind
-        // him; and later puts it back there. `wearing` stays on him meanwhile.
-        func handHeld(_ sheet: PixelSheet, _ held: [Decal], wearing: [Decal] = []) -> (take: Pastime, putBack: Pastime) {
-            let side = grip[0]!
-            let atSide = moved(held, side.x, side.y)
-            // Behind him, all of it within his body.
-            let dx = 6 - (atSide.map(\.x).min() ?? 0), dy = max(0, 7 - (atSide.map(\.y).min() ?? 0))
-            func emptyHand(out: Int) -> Frame { Frame(sheet, 0, rate: 16, decals: wearing + arms(right: out)) }
-            func sliding(_ p: Double) -> Frame {
-                let ox = lerp(dx, 0, smooth(p)), oy = lerp(dy, 0, smooth(p))
-                // The arm reaches as far as the hand holding it.
-                return Frame(sheet, 0, rate: 16, decals: wearing + arms(right: side.x + ox - 20)
-                    + moved(atSide, ox, oy).map { $0.on(.behind) })
-            }
-            let holding = Pastime(duration: 0.12) { _ in Frame(sheet, 0, rate: 12, decals: wearing + atSide) }
-            let take = Pastime.sequence([
-                Pastime(duration: 0.2) { t in emptyHand(out: lerp(4, 0, t / 0.2)) },
-                Pastime(duration: 0.15) { _ in sliding(0) },
-                Pastime(duration: 0.45) { t in sliding(t / 0.45) },
-                holding,
-            ])!
-            let putBack = Pastime.sequence([
-                holding,
-                Pastime(duration: 0.45) { t in sliding(1 - t / 0.45) },
-                Pastime(duration: 0.1) { _ in sliding(0) },
-                Pastime(duration: 0.2) { t in emptyHand(out: lerp(0, 4, t / 0.2)) },
-            ])!
-            return (take, putBack)
-        }
-
-        // Turning to hold out his near arm with `held` in his hand (placed as for `handHeld`), `act` giving
-        // what he holds out for `seconds`, and turning back. The hat sits a pixel lower while he's squashed.
-        func holdOut(_ sheet: PixelSheet, _ held: [Decal], hat: Decal, seconds: TimeInterval,
-                     _ act: @escaping (TimeInterval) -> [Decal]) -> Pastime {
-            func frame(_ index: Int, rate: Double = 12, _ decals: [Decal]? = nil) -> Frame {
-                let hand = grip[index]!
-                return Frame(sheet, index, rate: rate, decals: [hat.moved(0, index == 17 ? 1 : 0)] + (decals ?? moved(held, hand.x, hand.y)))
-            }
-            return Pastime.sequence([
-                Pastime(duration: 0.08) { _ in frame(17) },
-                Pastime(duration: 0.08) { _ in frame(18) },
-                Pastime(duration: seconds) { t in frame(24, rate: 16, act(t)) },
-                Pastime(duration: 0.08) { _ in frame(18) },
-                Pastime(duration: 0.08) { _ in frame(17) },
-            ])!
-        }
 
         // Three wisps rising from (x, y) and fading.
         func steam(_ t: TimeInterval, x: Int, y: Int) -> [Decal] {
@@ -583,20 +485,243 @@ struct ClawdAnimator {
         }
 
         return [pastime(clip(ClawdAssets.lookingAround, 4...30)), pastime(clip(ClawdAssets.swaying, 4...48)),
-                pastime(dance), pastime(dance, dance), pastime(clip(ClawdAssets.hula, 6...53)), pastime(hop, hop),
+                pastime(dance), pastime(dance, dance), hula, pastime(hop, hop),
                 pastime(clip(ClawdAssets.excited, 2...21, fps: 14)), breakdance, think, nap, stroll, skydive,
                 coffee, music, wizard, chef]
             .compactMap { $0 }
     }()
 
-    /// The open book over Clawd's head while he dozes, rising and falling as he breathes: it drops onto
-    /// his head in the first moments (`dropping`, time since it started to).
-    private static func book(on sheet: PixelSheet, _ index: Int, dropping: TimeInterval) -> Decal {
+    // MARK: - Props in his hands
+
+    // Props from ClawdProps.swift, over his own frames. Nothing turns up out of thin air: he takes a prop
+    // out from behind his back, and puts it back there when he's done. All of them are placed on the
+    // Pointing sheet: 0 stands (his head's top row at y 5, his body x 4–19 down to y 16, arms at x 0–3
+    // and 20–23, y 9–12, cut away while a hand is behind his back), 6 raises his arms, 7–14 hold them up
+    // (hands' top row at y 0), 15 brings them down to his head (y 1), 16 squashes him as they come down
+    // to his sides, 17–18 turn him and 24 holds out his near arm.
+    // His arms as far out as `left` and `right` pixels (4 being all of each): the rest is behind his back.
+    static func arms(left: Int = 4, right: Int = 4) -> [Decal] {
+        [Decal(Props.arm, -min(4, max(0, left)), 9, .cut), Decal(Props.arm, 20 + min(4, max(0, right)), 9, .cut)]
+    }
+    static func lerp(_ from: Int, _ to: Int, _ p: Double) -> Int { from + Int((Double(to - from) * min(1, max(0, p))).rounded()) }
+    static func smooth(_ p: Double) -> Double { let p = min(1, max(0, p)); return p * p * (3 - 2 * p) }
+    static func moved(_ decals: [Decal], _ dx: Int, _ dy: Int) -> [Decal] { decals.map { $0.moved(dx, dy) } }
+
+    // Where his near hand holds things, just past its end at its top row: at his side (0), squashed
+    // while turning (17), turned (18) and with the arm out (24).
+    static let grip: [Int: (x: Int, y: Int)] = [0: (24, 9), 17: (23, 12), 18: (25, 8), 24: (27, 8)]
+
+    // A hat or headphones: he puts both hands behind his back, lifts it up from there over his head, which
+    // hides it until it's past, raises his arms to take it and puts it on; and the other way round, back
+    // behind his back. `y` is its top row: `tucked` behind his back, `raising` in his hands as they go
+    // up (6), `overhead` held up (7–14), `lowering` as they come down (15), and `worn` while he stands.
+    // What's wider than him is `folded` while it's behind him, or it would show.
+    static func headgear(_ sheet: PixelSheet, _ art: PixelArt, x: Int, folded: (art: PixelArt, x: Int)? = nil, tucked: Int,
+                  raising: Int, overhead: Int, lowering: Int, worn: Int) -> (take: Pastime, putBack: Pastime) {
+        func at(_ y: Int, _ layer: Decal.Layer = .front) -> [Decal] { [Decal(art, x, y, layer)] }
+        let behind = folded ?? (art, x)
+        func behindHim(arms out: Int, lifted p: Double) -> Frame {
+            Frame(sheet, 0, rate: 16, decals: arms(left: out, right: out)
+                + [Decal(behind.art, behind.x, lerp(tucked, raising + 2, smooth(p)), .behind)])
+        }
+        let putOn = [
+            Pastime(duration: 0.08) { _ in Frame(sheet, 6, rate: 12, decals: at(raising)) },
+            Pastime(duration: 0.3) { t in Frame(sheet, 7 + min(7, Int(t * 12)), rate: 12, decals: at(overhead)) },
+            Pastime(duration: 0.12) { _ in Frame(sheet, 15, rate: 12, decals: at(lowering)) },
+            Pastime(duration: 0.12) { _ in Frame(sheet, 16, rate: 12, decals: at(worn + 1)) },
+        ]
+        let take = Pastime.sequence([
+            Pastime(duration: 0.2) { t in behindHim(arms: lerp(4, 0, t / 0.2), lifted: 0) },
+            Pastime(duration: 0.15) { _ in behindHim(arms: 0, lifted: 0) },
+            Pastime(duration: 0.45) { t in behindHim(arms: 0, lifted: t / 0.45) },
+        ] + putOn)!
+        let putBack = Pastime.sequence(putOn.reversed() + [
+            Pastime(duration: 0.45) { t in behindHim(arms: 0, lifted: 1 - t / 0.45) },
+            Pastime(duration: 0.1) { _ in behindHim(arms: 0, lifted: 0) },
+            Pastime(duration: 0.2) { t in behindHim(arms: lerp(0, 4, t / 0.2), lifted: 0) },
+        ])!
+        return (take, putBack)
+    }
+
+    // Something he holds in his near hand, `held` placed as if the hand's grip were at (0, 0): he puts the
+    // hand behind his back and brings it out holding it, his arm coming out as it slides out from behind
+    // him; and later puts it back there. `wearing` stays on him meanwhile.
+    static func handHeld(_ sheet: PixelSheet, _ held: [Decal], wearing: [Decal] = []) -> (take: Pastime, putBack: Pastime) {
+        let side = grip[0]!
+        let atSide = moved(held, side.x, side.y)
+        // Behind him, all of it within his body.
+        let dx = 6 - (atSide.map(\.x).min() ?? 0), dy = max(0, 7 - (atSide.map(\.y).min() ?? 0))
+        func emptyHand(out: Int) -> Frame { Frame(sheet, 0, rate: 16, decals: wearing + arms(right: out)) }
+        func sliding(_ p: Double) -> Frame {
+            let ox = lerp(dx, 0, smooth(p)), oy = lerp(dy, 0, smooth(p))
+            // The arm reaches as far as the hand holding it.
+            return Frame(sheet, 0, rate: 16, decals: wearing + arms(right: side.x + ox - 20)
+                + moved(atSide, ox, oy).map { $0.on(.behind) })
+        }
+        let holding = Pastime(duration: 0.12) { _ in Frame(sheet, 0, rate: 12, decals: wearing + atSide) }
+        let take = Pastime.sequence([
+            Pastime(duration: 0.2) { t in emptyHand(out: lerp(4, 0, t / 0.2)) },
+            Pastime(duration: 0.15) { _ in sliding(0) },
+            Pastime(duration: 0.45) { t in sliding(t / 0.45) },
+            holding,
+        ])!
+        let putBack = Pastime.sequence([
+            holding,
+            Pastime(duration: 0.45) { t in sliding(1 - t / 0.45) },
+            Pastime(duration: 0.1) { _ in sliding(0) },
+            Pastime(duration: 0.2) { t in emptyHand(out: lerp(0, 4, t / 0.2)) },
+        ])!
+        return (take, putBack)
+    }
+
+    // Turning to hold out his near arm with `held` in his hand (placed as for `handHeld`), `act` giving
+    // what he holds out for `seconds`, and turning back. The hat, if he wears one, sits a pixel lower while he's
+    // squashed.
+    static func holdOut(_ sheet: PixelSheet, _ held: [Decal], hat: Decal?, seconds: TimeInterval,
+                 _ act: @escaping (TimeInterval) -> [Decal]) -> Pastime {
+        func frame(_ index: Int, rate: Double = 12, _ decals: [Decal]? = nil) -> Frame {
+            let hand = grip[index]!
+            return Frame(sheet, index, rate: rate, decals: [hat?.moved(0, index == 17 ? 1 : 0)].compactMap { $0 } + (decals ?? moved(held, hand.x, hand.y)))
+        }
+        return Pastime.sequence([
+            Pastime(duration: 0.08) { _ in frame(17) },
+            Pastime(duration: 0.08) { _ in frame(18) },
+            Pastime(duration: seconds) { t in frame(24, rate: 16, act(t)) },
+            Pastime(duration: 0.08) { _ in frame(18) },
+            Pastime(duration: 0.08) { _ in frame(17) },
+        ])!
+    }
+
+    // MARK: - A nap with a book
+
+    /// Before a nap: he takes a book out from behind his back, opens it in front of him in both hands and
+    /// reads, his eyes going along the lines; yawns; lifts it over his head, opens it on his head and sits
+    /// down under it.
+    static let napStart: Pastime? = ClawdAssets.pointing.flatMap { sheet in ClawdAssets.meditating.map { meditating in
+        let side = grip[0]!
+        let (bookOut, _) = handHeld(sheet, [Decal(Props.bookClosed, 0, -2)])
+        // From his hand at his side to in front of him, then open in both hands.
+        let toFront = Pastime(duration: 0.35) { t in
+            let p = smooth(t / 0.35)
+            return Frame(sheet, 0, rate: 16, decals: arms(right: lerp(4, 0, p))
+                + [Decal(Props.bookClosed, lerp(side.x, 10, p), lerp(side.y - 2, 10, p))])
+        }
+        func holding(_ eyes: PixelArt?, bookY: Int = 10) -> [Decal] {
+            arms(left: 0, right: 0) + [Decal(Props.bookFront, 4, bookY)] + (eyes.map { [Decal($0, 5, 7)] } ?? [])
+        }
+        // Along a line from its start to its end, and back to the start of the next: four lines.
+        let reading = Pastime(duration: 4.8) { t in
+            let line = t.truncatingRemainder(dividingBy: 1.2)
+            let eyes = line < 0.5 ? Props.eyesReadingStart : line < 0.9 ? Props.eyesDown : Props.eyesReadingEnd
+            return Frame(sheet, 0, rate: 10, decals: holding(eyes))
+        }
+        // The book drops a little as he yawns over it.
+        let yawn = Pastime(duration: 1.6) { t in
+            let yawning = (0.2..<1.4).contains(t)
+            return Frame(sheet, 0, rate: 8, decals: holding(nil, bookY: yawning ? 11 : 10)
+                + (yawning ? Self.yawn(sheet, 0, wide: (0.45..<1.15).contains(t)) : [Decal(Props.eyesDown, 6, 7)]))
+        }
+        // Up over his head, open, and down onto it.
+        let book = Props.book
+        let onHead = Pastime.sequence([
+            Pastime(duration: 0.08) { _ in Frame(sheet, 6, rate: 12, decals: [Decal(book, 2, 2 - book.height)]) },
+            Pastime(duration: 0.3) { t in Frame(sheet, 7 + min(7, Int(t * 12)), rate: 12, decals: [Decal(book, 2, -book.height)]) },
+            Pastime(duration: 0.12) { _ in Frame(sheet, 15, rate: 12, decals: [Decal(book, 2, 1 - book.height)]) },
+            Pastime(duration: 0.12) { _ in Frame(sheet, 16, rate: 12, decals: [Decal(book, 2, 7 - book.height)]) },
+            Pastime(duration: 0.3) { _ in Frame(sheet, 0, rate: 4, decals: [Decal(book, 2, 6 - book.height)]) },
+        ])
+        let sitDown = Clip(sheet: meditating, frames: 2...12, fps: 10)
+        let sit = Pastime(duration: sitDown.duration) { t in
+            let index = sitDown.frame(at: t)
+            return Frame(meditating, index, rate: sitDown.fps, decals: [Self.book(on: meditating, index)])
+        }
+        return Pastime.sequence([bookOut, toFront, reading, yawn, onHead, sit])!
+    } }
+
+    /// Dozing under the book, `t` into it: it rises and falls as he breathes.
+    static func napping(_ t: TimeInterval) -> Frame? {
+        ClawdAssets.meditating.map { sheet in
+            let index = Clip(sheet: sheet, frames: 12...48, fps: 6).looped(at: t)
+            return Frame(sheet, index, rate: 8, dozing: t, decals: [Self.book(on: sheet, index)])
+        }
+    }
+
+    /// After a nap: he gets up with the book still on his head, then lifts it off over his head and puts it
+    /// back behind his back.
+    static let napEnd: Pastime? = ClawdAssets.pointing.flatMap { sheet in ClawdAssets.meditating.map { meditating in
+        let wakeUp = Clip(sheet: meditating, frames: 45...59, fps: 10)
+        let up = Pastime(duration: wakeUp.duration) { t in
+            let index = wakeUp.frame(at: t)
+            return Frame(meditating, index, rate: wakeUp.fps, decals: [Self.book(on: meditating, index)])
+        }
+        let book = Props.book
+        let (_, offHead) = headgear(sheet, book, x: 2, folded: (Props.bookClosed, 10), tucked: 16 - Props.bookClosed.height,
+                                    raising: 2 - book.height, overhead: -book.height, lowering: 1 - book.height, worn: 6 - book.height)
+        let standing = Pastime(duration: 0.3) { _ in Frame(sheet, 0, rate: 4, decals: [Decal(book, 2, 6 - book.height)]) }
+        return Pastime.sequence([up, standing, offHead])!
+    } }
+
+    // MARK: - The grass skirt
+
+    /// The grass skirt from the Hula sheet's first frame, where he stands in it: cut out by its green and
+    /// placed for the Pointing sheet, with both sheets' feet on the same spot. Its top row is `y`.
+    static let skirt: (art: PixelArt, x: Int, y: Int)? = {
+        guard let hula = ClawdAssets.hula, let pointing = ClawdAssets.pointing else { return nil }
+        let pixels = hula.frames[0]
+        var points: [(x: Int, y: Int, v: UInt8)] = []
+        for y in 0..<hula.height {
+            for x in 0..<hula.width {
+                let v = pixels[y * hula.width + x]
+                guard v != 255, Int(v) < hula.palette.count else { continue }
+                let c = hula.palette[Int(v)]
+                if c.g > c.r + 0.1, c.g > c.b { points.append((x, y, v)) }
+            }
+        }
+        guard let minX = points.map(\.x).min(), let maxX = points.map(\.x).max(),
+              let minY = points.map(\.y).min(), let maxY = points.map(\.y).max() else { return nil }
+        let used = Array(Set(points.map(\.v))).sorted()
+        let letters = Array("abcdefghijklmnop")
+        guard used.count <= letters.count else { return nil }
+        var rows = Array(repeating: Array(repeating: Character("."), count: maxX - minX + 1), count: maxY - minY + 1)
+        for p in points { rows[p.y - minY][p.x - minX] = letters[used.firstIndex(of: p.v)!] }
+        var colors: [Character: UInt32] = [:]
+        for (i, v) in used.enumerated() {
+            let c = hula.palette[Int(v)]
+            colors[letters[i]] = UInt32(c.r * 255) << 24 | UInt32(c.g * 255) << 16 | UInt32(c.b * 255) << 8 | 0xff
+        }
+        let art = PixelArt("grassSkirt", rows.map { String($0) }, colors)
+        let dx = Int(pointing.anchor.x - hula.anchor.x), dy = Int(pointing.anchor.y - hula.anchor.y)
+        return (art, minX + dx, minY + dy)
+    }()
+
+    /// The hula, skirt and all: he reaches behind his back for the grass skirt, lifts it over his head, pulls
+    /// it down to his waist, dances, and takes it off over his head again, back behind him.
+    static let hula: Pastime? = ClawdAssets.pointing.flatMap { sheet in ClawdAssets.hula.flatMap { hulaSheet in skirt.map { skirt in
+        let art = skirt.art
+        // Behind him it's folded in to his body's width (x 4–19), or its ends would show.
+        let inset = max(0, 4 - skirt.x)
+        let foldedWidth = min(art.width - inset, 16)
+        let folded = PixelArt("grassSkirtFolded", (0..<art.height).map { y in
+            String((0..<foldedWidth).map { x in art.rgba[(y * art.width + x + inset) * 4 + 3] > 0 ? "x" : "." })
+        }, ["x": 0x5a_8a_3a_ff])
+        let onHead = 6 - art.height
+        let (lift, lower) = headgear(sheet, art, x: skirt.x, folded: (folded, skirt.x + inset), tucked: 16 - art.height,
+                                     raising: 2 - art.height, overhead: -art.height, lowering: 1 - art.height, worn: onHead)
+        // Down over his face to his waist, and up again.
+        func pull(from: Int, to: Int) -> Pastime {
+            Pastime(duration: 0.5) { t in
+                Frame(sheet, 0, rate: 16, decals: [Decal(art, skirt.x, lerp(from, to, smooth(t / 0.5)))])
+            }
+        }
+        let dance = Pastime([Clip(sheet: hulaSheet, frames: 0...53, fps: 12)])
+        return Pastime.sequence([lift, pull(from: onHead + 1, to: skirt.y), dance, pull(from: skirt.y, to: onHead + 1), lower])!
+    } } }
+
+    /// The open book on Clawd's head while he sits under it, rising and falling as he breathes.
+    private static func book(on sheet: PixelSheet, _ index: Int) -> Decal {
         let pixels = sheet.frames[min(index, sheet.frames.count - 1)]
         let head = pixels.firstIndex { $0 != 255 }.map { $0 / sheet.width } ?? 0
-        // From 4 px up, in a quarter of a second. (`dropping` may be infinite, which Int can't hold.)
-        let fall = dropping < 0.25 ? 4 - Int(dropping * 16) : 0
-        return Decal(Props.book, 2, head - Props.book.height + 1 - fall)
+        return Decal(Props.book, 2, head - Props.book.height + 1)
     }
 
     /// Pastimes are laid out over each stretch this long of the clock.
