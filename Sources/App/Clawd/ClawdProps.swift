@@ -206,15 +206,14 @@ enum Props {
 
     // MARK: Sitting (Meditating frames 8–51): head x 4–19 from y 1 or 2, as he breathes.
 
-    /// The book open and face down on his head while he dozes, its cover up like a little roof, the spine on
-    /// top: its bottom row on the head's top row, at x 2.
+    /// An open book spread over his head while he dozes: its cover on the head's top row, at x 2.
     static let book = PixelArt("book", [
-        "........cCCc........",
-        "......cccCCccc......",
-        "....cccccCCccccc....",
-        "..cccccccCCccccccc..",
-        "pccccccccCCccccccccp",
-    ], ["p": 0xf6_e9_cc_ff, "c": 0xb8_74_2e_ff, "C": 0x8f_55_20_ff])
+        "...wwwwww..wwwwww...",
+        "..wwwwwwwsswwwwwww..",
+        ".pwwwwwwwsswwwwwwwp.",
+        "cppppppppssppppppppc",
+        "cccccccccCCccccccccc",
+    ], ["w": 0xf6_e9_cc_ff, "p": 0xe6_cf_a0_ff, "s": 0xd8_b9_8a_ff, "c": 0xb8_74_2e_ff, "C": 0x8f_55_20_ff])
 
     private static let bookColors: [Character: UInt32] = [
         "w": 0xf6_e9_cc_ff, "p": 0xe6_cf_a0_ff, "s": 0xd8_b9_8a_ff, "c": 0xb8_74_2e_ff, "C": 0x8f_55_20_ff,
@@ -222,6 +221,7 @@ enum Props {
 
     /// The book shut, held in his hand: only its cover shows, the spine on the left.
     static let bookClosed = PixelArt("bookClosed", [
+        "Ccccc",
         "Ccccc",
         "Ccccc",
         "Ccccc",
@@ -236,6 +236,8 @@ enum Props {
         "..cccCcccc",
         "hccccCcccc",
         "hccccCcccc",
+        ".ccccCcccc",
+        ".ccccCcccc",
         "...CCCCCCC",
     ], bookColors.merging(["h": body]) { $1 })
 
@@ -247,6 +249,8 @@ enum Props {
         ".ccccccCCcccccc.",
         "hccccccCCcccccch",
         "hccccccCCcccccch",
+        ".ccccccCCcccccc.",
+        ".ccccccCCcccccc.",
         "..CCCCCCCCCCCC..",
     ], bookColors.merging(["h": body]) { $1 })
 
