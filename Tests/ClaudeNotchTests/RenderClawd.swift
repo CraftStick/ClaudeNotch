@@ -72,6 +72,28 @@ struct RenderClawd {
             }
             try write(strip(strips), "\(folder)/stand-up.png")
         }
+        // At 2 at night: a task after a rest, its first seconds; then the turn ending.
+        if let laptop = ClawdAssets.laptop, let waving = ClawdAssets.waving {
+            let night = Calendar.current.date(bySettingHour: 2, minute: 0, second: 0, of: Date())!
+            var s = Session(id: "night", turnStart: night, lastEvent: night)
+            s.phase = .thinking
+            s.syncMotion(at: night.addingTimeInterval(-100))
+            s.phase = .done
+            s.syncMotion(at: night.addingTimeInterval(-60))
+            s.phase = .tool
+            s.activity = Describe.tool("Bash", ["command": "make"])
+            s.lastEvent = night
+            s.syncMotion(at: night)
+            let starting = ClawdAnimator(session: s, laptop: laptop, waving: waving)
+            var frames = stride(from: 0.0, to: 2.6, by: 0.2).map { starting.frame(at: night.addingTimeInterval($0)) }
+            let end = night.addingTimeInterval(20)
+            s.phase = .done
+            s.turnEnd = end
+            s.syncMotion(at: end)
+            let ending = ClawdAnimator(session: s, laptop: laptop, waving: waving)
+            frames += stride(from: 0.0, to: 2.6, by: 0.2).map { ending.frame(at: end.addingTimeInterval($0)) }
+            try write(strip(frames), "\(folder)/nightcap.png")
+        }
         if let hula = ClawdAnimator.hula { try frames(hula, into: "\(folder)/gif-hula") }
         if let look = ClawdAnimator.searching, let off = ClawdAnimator.hatOff,
            let search = ClawdAnimator.Pastime.sequence([ClawdAnimator.Pastime(duration: 0.8) { ClawdAnimator.hatOn($0)! }, look, look, off]) {

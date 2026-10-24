@@ -340,11 +340,14 @@ extension ClawdAnimator {
         if hour < 6 {
             frame.decals = frame.decals.map { $0.art == Props.mug ? Decal(Props.teaMug, $0.x, $0.y, $0.layer) : $0 }
         }
-        guard session.phase.isActive, [.typing, .pondering, .desktop, .running, .searching].contains(session.motion) else { return frame }
-        if hour < 6, session.motion != .searching, let head = Self.head(frame.sheet, frame.index) {
+        let wearing = frame.decals.contains { $0.art.name.hasPrefix("nightcap") }  // putting it on, or taking it off
+        if hour < 6, !frame.hatless, !wearing,
+           frame.capped || (session.phase.isActive && Self.cappedMotions.contains(session.motion)),
+           let head = Self.head(frame.sheet, frame.index) {
             // Thinking, his bubble is up where the tip would droop.
             frame.decals.append(Decal(session.motion == .pondering ? Props.nightcapOtherWay : Props.nightcap, head.x, head.y - 4))
         }
+        guard session.phase.isActive, [.typing, .pondering, .desktop, .running, .searching].contains(session.motion) else { return frame }
         let t = date.timeIntervalSince(session.motionStart)
         let full = session.contextWindow > 0 ? Double(session.contextTokens) / Double(session.contextWindow) : 0
         if full >= 0.85, let head = Self.head(frame.sheet, frame.index) {

@@ -54,6 +54,10 @@ struct ClawdAnimator {
         var mirrored = true
         var decals: [Decal] = []
         var busy = false
+        /// At night: no nightcap on him in this frame (he's putting things away before he puts it on), or one
+        /// all the same (he's closing the laptop before he takes it off).
+        var hatless = false
+        var capped = false
 
         init(_ sheet: PixelSheet, _ index: Int, rate: Double = 16, dozing: TimeInterval? = nil, offsetX: CGFloat = 0,
              offsetY: CGFloat = 0, mirrored: Bool = true, decals: [Decal] = []) {
@@ -72,6 +76,13 @@ struct ClawdAnimator {
         func markedBusy() -> Frame {
             var frame = self
             frame.busy = true
+            return frame
+        }
+
+        func night(hatless: Bool = false, capped: Bool = false) -> Frame {
+            var frame = self
+            frame.hatless = frame.hatless || hatless
+            frame.capped = frame.capped || capped
             return frame
         }
     }
@@ -100,10 +111,20 @@ struct ClawdAnimator {
             let away = interrupted == .searching ? Self.hatOff : interrupted == .compacting ? Self.boxAway
                 : session.motion != interrupted ? restInterrupted(interrupted, at: session.cueStart) ?? handedOver(at: session.cueStart) : nil
             let putAway = exit(from: interrupted)
-            let lead = (away?.duration ?? 0) + (putAway?.duration ?? 0)
+            // At night the nightcap goes on as work starts, after he's put away what he had; and comes off
+            // as it ends, after he's closed the laptop.
+            let (capOn, capOff) = nightcap(from: interrupted, to: session.motion, at: session.cueStart)
             let t = date.timeIntervalSince(session.cueStart)
-            if let away, t < away.duration { return away.frame(t).markedBusy() }
-            if let putAway, t < lead { return Frame(putAway, at: t - (away?.duration ?? 0)).markedBusy() }
+            var lead = 0.0
+            for (part, tag) in [(away, 0), (putAway.map { clip in Pastime(duration: clip.duration) { Frame(clip, at: $0) } }, 0),
+                                (capOff, 1), (capOn, 1)] {
+                guard let part else { continue }
+                if t < lead + part.duration {
+                    let frame = part.frame(t - lead).markedBusy()
+                    return tag == 1 ? frame : frame.night(hatless: capOn != nil, capped: capOff != nil)
+                }
+                lead += part.duration
+            }
             if t < lead + reaction.duration { return reaction.frame(t - lead).markedBusy() }
             let cueEnd = session.cueStart.addingTimeInterval(lead + reaction.duration)
             if cueEnd > session.motionStart {
@@ -124,13 +145,19 @@ struct ClawdAnimator {
         let putAway = previous == motion ? nil : previous == .compacting ? Self.boxAway : previous == .searching ? Self.hatOff
             : t < 6 ? previous.flatMap { restInterrupted($0, at: session.motionStart) } ?? handedOver(at: session.motionStart)
             : nil  // (none takes that long)
+        let (capOn, capOff) = previous.map { nightcap(from: $0, to: motion, at: session.motionStart) } ?? (nil, nil)
         if let putAway {
-            if t < putAway.duration { return putAway.frame(t) }
+            if t < putAway.duration { return putAway.frame(t).night(hatless: capOn != nil, capped: capOff != nil) }
             t -= putAway.duration
         }
         if let previous, previous != motion, let exit = exit(from: previous) {
-            if t < exit.duration { return Frame(exit, at: t) }
+            if t < exit.duration { return Frame(exit, at: t).night(hatless: capOn != nil, capped: capOff != nil) }
             t -= exit.duration
+        }
+        for part in [capOff, capOn] {
+            guard let part else { continue }
+            if t < part.duration { return part.frame(t) }
+            t -= part.duration
         }
         switch motion {
         case .typing:
@@ -501,6 +528,30 @@ struct ClawdAnimator {
                 coffee, music, wizard, chef]
             .compactMap { $0 }
     }()
+
+    // MARK: - The nightcap
+
+    /// The motions he wears his nightcap in at night: at work, waiting for you, not under a deerstalker.
+    static let cappedMotions: Set<Motion> = [.typing, .pondering, .desktop, .running, .waving, .compacting]
+
+    /// At night, going from `previous` to `motion` at `date`: putting the nightcap on as work starts after a
+    /// rest, or taking it off as it ends.
+    private func nightcap(from previous: Motion, to motion: Motion, at date: Date) -> (on: Pastime?, off: Pastime?) {
+        guard Calendar.current.component(.hour, from: date) < 6, previous != motion else { return (nil, nil) }
+        // Off for a rest, a rate limit, or the deerstalker; on again after them.
+        let bare: Set<Motion> = [.done, .stopped, .failed, .limited, .searching]
+        if bare.contains(previous), Self.cappedMotions.contains(motion) { return (Self.nightcapOnAndOff?.on, nil) }
+        if Self.cappedMotions.contains(previous), bare.contains(motion) { return (nil, Self.nightcapOnAndOff?.off) }
+        return (nil, nil)
+    }
+
+    /// From behind his back, over his head and on; and off again, back there.
+    static let nightcapOnAndOff: (on: Pastime, off: Pastime)? = ClawdAssets.pointing.map { sheet in
+        let cap = Props.nightcap
+        let (on, off) = headgear(sheet, cap, x: 4, tucked: 16 - cap.height, raising: 2 - cap.height, overhead: -cap.height,
+                                 lowering: 1 - cap.height, worn: 6 - cap.height)
+        return (on, off)
+    }
 
     // MARK: - Cut short
 
