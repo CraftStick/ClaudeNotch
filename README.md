@@ -10,6 +10,13 @@
 See what Claude is doing, how long it's been at it and when it needs you, and answer it right there.<br>
 And Clawd lives in the notch.
 
+<p>
+<a href="https://github.com/CraftStick/ClaudeNotch/releases/latest"><img src="https://img.shields.io/github/v/release/CraftStick/ClaudeNotch?label=release&color=d97757" alt="Latest release"></a>
+<img src="https://img.shields.io/badge/macOS-14%2B-lightgrey?logo=apple" alt="macOS 14+">
+<a href="https://github.com/CraftStick/homebrew-tap"><img src="https://img.shields.io/badge/brew-craftstick%2Ftap%2Fclaude--notch-fbb040?logo=homebrew&logoColor=white" alt="Homebrew"></a>
+<a href="https://github.com/CraftStick/ClaudeNotch/stargazers"><img src="https://img.shields.io/github/stars/CraftStick/ClaudeNotch?style=flat&color=d97757" alt="Stars"></a>
+</p>
+
 <img src="docs/notch.gif" width="640" alt="The notch during a task: Clawd gets out his laptop and types, a command runs, Done">
 
 <table>
@@ -66,6 +73,27 @@ cd ~/ClaudeNotch && ./install.sh
 - A sound when Claude is done or waiting for you, a glowing rim, English and Russian, your own shortcuts, an update check if you want one. All of it in the settings: Clawd's menu in the menu bar → **Settings…** (⌘,).
 
 <p align="center"><img src="docs/card.png" width="440" alt="The card you get on hover"> <img src="docs/permission.png" width="440" alt="A permission request in the notch"></p>
+
+## Meet Clawd
+
+He lives in the notch and reacts to everything Claude does, more than 40 animations in all.
+
+<table>
+<tr>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/typing.gif" width="120" alt="Types while Claude works"><br><sub><b>Types while Claude works</b></sub></td>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/thinking.gif" width="120" alt="Thinks"><br><sub><b>Thinks</b></sub></td>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/searching.gif" width="120" alt="Turns detective"><br><sub><b>Turns detective</b></sub></td>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/waving.gif" width="120" alt="Waves when it needs you"><br><sub><b>Waves when it needs you</b></sub></td>
+</tr>
+<tr>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/thanks.gif" width="120" alt="Goes shy at a thank-you"><br><sub><b>Goes shy at a thank-you</b></sub></td>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/rocket.gif" width="120" alt="Launches a rocket on a push"><br><sub><b>Launches a rocket on a push</b></sub></td>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/sleeping.gif" width="120" alt="Reads, then naps"><br><sub><b>Reads, then naps</b></sub></td>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/hula.gif" width="120" alt="Does the hula"><br><sub><b>Does the hula</b></sub></td>
+</tr>
+</table>
+
+<p align="center"><a href="docs/clawd/README.md"><b>All of Clawd's animations →</b></a></p>
 
 ## How it works
 

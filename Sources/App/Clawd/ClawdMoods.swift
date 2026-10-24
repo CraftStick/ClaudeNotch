@@ -373,15 +373,20 @@ extension ClawdAnimator {
     }
 
     /// The top of his head in a frame: its row, and the column it starts at. Found by his orange, lit or in
-    /// shadow: what he has beside him (a desk with its screen, a speech bubble) may reach higher.
+    /// shadow: what he has beside him (a desk with its screen, a speech bubble) may reach higher, and so may
+    /// a hand.
     static func head(_ sheet: PixelSheet, _ index: Int) -> (x: Int, y: Int)? {
         let pixels = sheet.frames[min(index, sheet.frames.count - 1)]
         let skin = Set(sheet.palette.indices.filter { i in
             let c = sheet.palette[i]
             return c.r > 0.55 && c.r > c.g + 0.2 && c.g > c.b && c.b < 0.5
         }.map(UInt8.init))
-        guard let first = pixels.firstIndex(where: { skin.contains($0) }) else { return nil }
-        return (first % sheet.width, first / sheet.width)
+        // The first row with a head's width of him in it: a hand raised above his head is narrower.
+        for y in 0..<sheet.height {
+            let row = (0..<sheet.width).filter { skin.contains(pixels[y * sheet.width + $0]) }
+            if row.count >= 8, let x = row.first { return (x, y) }
+        }
+        return nil
     }
 
     /// Eyes shut and mouth open: drawn over whatever eyes the frame has, found by their colour.

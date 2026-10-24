@@ -10,6 +10,13 @@
 Что Claude делает, сколько уже работает и когда ждёт тебя — и ответить ему можно прямо там.<br>
 А ещё в чёлке живёт Clawd.
 
+<p>
+<a href="https://github.com/CraftStick/ClaudeNotch/releases/latest"><img src="https://img.shields.io/github/v/release/CraftStick/ClaudeNotch?label=release&color=d97757" alt="Latest release"></a>
+<img src="https://img.shields.io/badge/macOS-14%2B-lightgrey?logo=apple" alt="macOS 14+">
+<a href="https://github.com/CraftStick/homebrew-tap"><img src="https://img.shields.io/badge/brew-craftstick%2Ftap%2Fclaude--notch-fbb040?logo=homebrew&logoColor=white" alt="Homebrew"></a>
+<a href="https://github.com/CraftStick/ClaudeNotch/stargazers"><img src="https://img.shields.io/github/stars/CraftStick/ClaudeNotch?style=flat&color=d97757" alt="Stars"></a>
+</p>
+
 <img src="docs/ru/notch.gif" width="640" alt="Чёлка во время задачи: Clawd достаёт ноутбук, печатает, выполняется команда, «Готово»">
 
 <table>
@@ -66,6 +73,27 @@ cd ~/ClaudeNotch && ./install.sh
 - Звук, когда Claude закончил или ждёт тебя, переливающаяся обводка, русский и английский, свои горячие клавиши, проверка обновлений по желанию. Всё это — в настройках: меню Clawd в строке меню → **Настройки…** (⌘,).
 
 <p align="center"><img src="docs/ru/card.png" width="440" alt="Карточка при наведении"> <img src="docs/ru/permission.png" width="440" alt="Запрос разрешения в чёлке"></p>
+
+## Знакомься, Clawd
+
+Он живёт в чёлке и реагирует на всё, что делает Claude: больше 40 анимаций.
+
+<table>
+<tr>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/typing.gif" width="120" alt="Печатает, пока Claude работает"><br><sub><b>Печатает, пока Claude работает</b></sub></td>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/thinking.gif" width="120" alt="Думает"><br><sub><b>Думает</b></sub></td>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/searching.gif" width="120" alt="Становится сыщиком"><br><sub><b>Становится сыщиком</b></sub></td>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/waving.gif" width="120" alt="Машет, когда нужен ты"><br><sub><b>Машет, когда нужен ты</b></sub></td>
+</tr>
+<tr>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/thanks.gif" width="120" alt="Смущается от «спасибо»"><br><sub><b>Смущается от «спасибо»</b></sub></td>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/rocket.gif" width="120" alt="Запускает ракету на push"><br><sub><b>Запускает ракету на push</b></sub></td>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/sleeping.gif" width="120" alt="Читает и засыпает"><br><sub><b>Читает и засыпает</b></sub></td>
+<td align="center" valign="top" width="25%"><img src="docs/clawd/hula.gif" width="120" alt="Танцует хулу"><br><sub><b>Танцует хулу</b></sub></td>
+</tr>
+</table>
+
+<p align="center"><a href="docs/clawd/README.ru.md"><b>Все анимации Clawd →</b></a></p>
 
 ## Как это устроено
 

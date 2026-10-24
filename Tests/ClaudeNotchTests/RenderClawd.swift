@@ -135,15 +135,104 @@ struct RenderClawd {
         }
     }
 
+
+    // MARK: - docs/clawd's GIFs
+
+    static let docs = ProcessInfo.processInfo.environment["CLAWD_DOCS"]
+
+    /// Every GIF on docs/clawd's pages as numbered frames in a folder of its name under CLAWD_DOCS, all the
+    /// same size on black, drawn the way the notch draws them (ffmpeg makes the GIFs). Skipped without it.
+    @Test(.enabled(if: docs != nil)) func docsGIFs() throws {
+        let folder = try #require(Self.docs)
+        let laptop = try #require(ClawdAssets.laptop), waving = try #require(ClawdAssets.waving)
+        // Midday, so no nightcap; or 2 at night for one.
+        let noon = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: Date())!
+        let night = Calendar.current.date(bySettingHour: 2, minute: 0, second: 0, of: Date())!
+
+        /// A session going through `steps`, each a change at its second, as the hooks would make them.
+        func play(_ steps: [(TimeInterval, (inout Session) -> Void)], from: TimeInterval, to: TimeInterval, base: Date = noon,
+                  _ name: String) throws {
+            var s = Session(id: name, turnStart: base, lastEvent: base)
+            for (at, change) in steps {
+                change(&s)
+                s.syncMotion(at: base.addingTimeInterval(at))
+            }
+            let animator = ClawdAnimator(session: s, laptop: laptop, waving: waving)
+            try frames({ animator.frame(at: base.addingTimeInterval($0)) }, from: from, to: to, into: "\(folder)/\(name)")
+        }
+        func work(_ phase: Phase = .thinking, _ activity: Activity? = nil) -> (inout Session) -> Void {
+            { s in s.phase = phase; s.lastEvent = s.turnStart; if let activity { s.activity = activity } }
+        }
+        func rest(_ phase: Phase) -> (inout Session) -> Void { { s in s.phase = phase } }
+        let bash = Describe.tool("Bash", ["command": "make"])
+        let agent = Describe.tool("Task", ["description": "Look around", "subagent_type": "Explore"])
+
+        // Reactions.
+        let cues: [(String, Cue)] = [("idea", .idea), ("excited", .excited), ("facepalm", .facepalm), ("celebrate", .celebrate),
+                                     ("despair", .despair), ("shrug", .shrug), ("sparkler", .sparkler), ("rocket", .rocket),
+                                     ("thanks", .thanks), ("flinch", .flinch), ("phew", .phew), ("proud", .proud), ("sweep", .sweep),
+                                     ("surprise", .surprise), ("thumbs", .thumbs), ("stretch", .stretch), ("dizzy", .dizzy)]
+        for (name, cue) in cues {
+            let reaction = try #require(ClawdAnimator.reactions[cue] ?? ClawdAnimator.moodReactions[cue], "\(cue)")
+            try frames(reaction, into: "\(folder)/\(name)")
+        }
+        if let rateLimit = ClawdAnimator.rateLimit { try frames(rateLimit, into: "\(folder)/rate-limit") }
+        if let box = ClawdAnimator.compacting, let out = ClawdAnimator.boxOut, let away = ClawdAnimator.boxAway,
+           let all = ClawdAnimator.Pastime.sequence([out, box, box, away]) { try frames(all, into: "\(folder)/compacting") }
+        if let look = ClawdAnimator.searching, let off = ClawdAnimator.hatOff,
+           let all = ClawdAnimator.Pastime.sequence([ClawdAnimator.Pastime(duration: 0.8) { ClawdAnimator.hatOn($0)! }, look, look, off]) {
+            try frames(all, into: "\(folder)/searching")
+        }
+
+        // At work.
+        try play([(0, work())], from: 0, to: 3.5, "typing")
+        try play([(0, work()), (12.1, { _ in })], from: 12.1, to: 17, "thinking")
+        try play([(0, work(.tool, bash)), (8.1, { _ in })], from: 8.1, to: 12.5, "desktop")
+        try play([(0, work(.tool, agent))], from: 0, to: 2, "running")
+        try play([(0, work(.waiting))], from: 0, to: 2.4, "waving")
+        try play([(0, work(.waiting))], from: 60, to: 63, "looking-for-you")
+        try play([(0, work(.waiting))], from: 300, to: 304, "waiting-long")
+        try play([(0, { s in s.phase = .thinking; s.lastEvent = s.turnStart; s.contextTokens = 185_000; s.contextWindow = 200_000 })],
+                 from: 2, to: 5.3, "sweating")
+        try play([(0, work())], from: 29.6, to: 32.2, base: night, "yawning")
+        try play([(-100, work()), (-60, rest(.done)), (0, work(.tool, bash))], from: 0, to: 3.4, base: night, "nightcap")
+
+        // How a turn ends.
+        try play([(-20, work()), (0, rest(.done))], from: 0, to: 1.4, "done")
+        try play([(-20, work()), (0, rest(.stopped))], from: 0, to: 2.2, "stopped")
+        try play([(-20, work()), (0, rest(.failed))], from: 0, to: 3.5, "error")
+
+        // Resting, and living in the notch.
+        try play([(-20, work()), (0, rest(.done))], from: Store.restDuration - 4.5, to: Store.restDuration - 1.5, "walking-off")
+        let simple: [(String, PixelSheet?, ClosedRange<Int>)] = [("looking-around", ClawdAssets.lookingAround, 4...30),
+                                                                ("swaying", ClawdAssets.swaying, 4...48), ("dancing", ClawdAssets.dancing, 4...38)]
+        for (name, sheet, range) in simple {
+            if let sheet, let p = ClawdAnimator.Pastime([Clip(sheet: sheet, frames: range, fps: 12)]) { try frames(p, into: "\(folder)/\(name)") }
+        }
+        if let hula = ClawdAnimator.hula { try frames(hula, into: "\(folder)/hula") }
+        if let start = ClawdAnimator.napStart, let end = ClawdAnimator.napEnd,
+           let nap = ClawdAnimator.Pastime.sequence([start, ClawdAnimator.Pastime(duration: 5) { ClawdAnimator.napping($0)! }, end]) {
+            try frames(nap, into: "\(folder)/sleeping")
+        }
+        for (name, pastime) in zip(["coffee", "music", "wizard", "chef"], ClawdAnimator.pastimes.suffix(4)) {
+            try frames(pastime, into: "\(folder)/\(name)")
+        }
+    }
+
     /// A pastime as numbered frames, 12 a second, for docs/clawd's GIFs (ffmpeg makes them): 4× on black,
     /// 48 × 52 like the others, with the "z"s while he dozes.
     private func frames(_ pastime: ClawdAnimator.Pastime, from: TimeInterval = 0, to: TimeInterval? = nil, into dir: String) throws {
+        try frames(pastime.frame, from: from, to: to ?? pastime.duration, into: dir)
+    }
+
+    /// Frames from `frameAt`, seconds `from` to `to`: 4× on black, 60 × 52 with room for what he has beside him.
+    private func frames(_ frameAt: (TimeInterval) -> ClawdAnimator.Frame, from: TimeInterval, to: TimeInterval, into dir: String) throws {
         try? FileManager.default.removeItem(atPath: dir)
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        let s = 4, w = 48, h = 52
-        let feet = CGPoint(x: 30, y: 48)
-        for (n, t) in stride(from: from, to: to ?? pastime.duration, by: 1.0 / 12).enumerated() {
-            let f = pastime.frame(t)
+        let s = 4, w = 60, h = 52
+        let feet = CGPoint(x: 37, y: 48)
+        for (n, t) in stride(from: from, to: to, by: 1.0 / 12).enumerated() {
+            let f = frameAt(t)
             let ctx = CGContext(data: nil, width: w * s, height: h * s, bitsPerComponent: 8, bytesPerRow: 0,
                                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
             ctx.setFillColor(gray: 0, alpha: 1)
