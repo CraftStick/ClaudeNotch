@@ -97,7 +97,8 @@ struct ClawdAnimator {
         if let cue = session.cue, let reaction = Self.reactions[cue] ?? Self.moodReactions[cue] {
             // Put the laptop away first (the hat, or the box, back behind him before that).
             let interrupted = session.cueInterrupted
-            let away = interrupted == .searching ? Self.hatOff : interrupted == .compacting ? Self.boxAway : nil
+            let away = interrupted == .searching ? Self.hatOff : interrupted == .compacting ? Self.boxAway
+                : session.motion != interrupted ? restInterrupted(interrupted, at: session.cueStart) : nil
             let putAway = exit(from: interrupted)
             let lead = (away?.duration ?? 0) + (putAway?.duration ?? 0)
             let t = date.timeIntervalSince(session.cueStart)
@@ -118,8 +119,10 @@ struct ClawdAnimator {
     private func motionFrame(after previous: Motion?, t: TimeInterval, sinceMotion: TimeInterval, at date: Date) -> Frame {
         let motion = session.motion
         var t = max(0, t)
-        // What he had beside him or on his head goes back behind him before he turns back to you.
-        let putAway = previous == motion ? nil : previous == .compacting ? Self.boxAway : previous == .searching ? Self.hatOff : nil
+        // What he had beside him or on his head goes back behind him before he turns back to you; and what
+        // he had in his hands or on him when his rest was cut short.
+        let putAway = previous == motion ? nil : previous == .compacting ? Self.boxAway : previous == .searching ? Self.hatOff
+            : t < 6 ? previous.flatMap { restInterrupted($0, at: session.motionStart) } : nil  // (none takes that long)
         if let putAway {
             if t < putAway.duration { return putAway.frame(t) }
             t -= putAway.duration
@@ -228,7 +231,7 @@ struct ClawdAnimator {
     /// Mostly standing still (breathing, blinking); every 30 s a little fidget; after `sleepAfter` reads a little,
     /// yawns and dozes under his book; at the very end of the rest gets up, puts the book away and walks off out
     /// of the notch.
-    private func idle(_ t: TimeInterval, sinceRest: TimeInterval, at date: Date) -> Frame {
+    private func idle(_ t: TimeInterval, sinceRest: TimeInterval, at date: Date, restStart: Date? = nil) -> Frame {
         let leaveAt = Store.restDuration - Self.walkOff
         if sinceRest >= leaveAt, let walking = ClawdAssets.walking {
             let w = sinceRest - leaveAt
@@ -245,7 +248,7 @@ struct ClawdAnimator {
         let n = Int(t / window)
         let intoFidget = t - Double(n) * window - 10  // starts 10 s into each window
         if !Self.fidgets.isEmpty, intoFidget >= 0 {
-            let seed = UInt64(bitPattern: Int64(session.motionStart.timeIntervalSinceReferenceDate))
+            let seed = UInt64(bitPattern: Int64((restStart ?? session.motionStart).timeIntervalSinceReferenceDate))
             let fidget = Self.fidgets[Self.pick(n, of: Self.fidgets.count, seed: seed)]
             if intoFidget < fidget.duration { return fidget.frame(intoFidget) }
         }
@@ -491,6 +494,56 @@ struct ClawdAnimator {
             .compactMap { $0 }
     }()
 
+    // MARK: - Cut short
+
+    /// What he puts away when work cuts his rest short at `date`: whatever he had in his hands or on him
+    /// then. Nil when `motion` isn't a rest, or he had nothing.
+    private func restInterrupted(_ motion: Motion, at date: Date) -> Pastime? {
+        guard [.done, .stopped, .failed].contains(motion), session.previousMotion == motion else { return nil }
+        let start = session.previousMotionStart
+        var t = max(0, date.timeIntervalSince(start))
+        let sinceRest = t
+        if let ending = ending(motion) {
+            if t < ending.duration { return nil }  // the hop after a turn: nothing in hand
+            t -= ending.duration
+        }
+        let frame = Store.alive ? life(at: date, restingSince: date.addingTimeInterval(-t))
+                                : idle(t, sinceRest: sinceRest, at: date, restStart: start)
+        return Self.putAway(after: frame)
+    }
+
+    /// Props he holds, wears or reads, as opposed to how he looks (eyes, a blush, sweat) or what floats by.
+    private static let carried: Set<String> = [
+        "mug", "teaMug", "wand", "wizardHat", "wizardHatTucked", "chefHat", "headphones", "headphonesFolded", "pan",
+        "pancakeFlat", "pancakeEdge", "book", "bookClosed", "bookOpening", "bookFront", "broom", "grassSkirt",
+        "grassSkirtFolded", "deerstalker", "magnifier",
+    ]
+
+    /// Putting away what's in `frame`: up from under his book and the book off over his head, the grass
+    /// skirt off over his head, or anything else back behind his back.
+    static func putAway(after frame: Frame) -> Pastime? {
+        if frame.sheet.name == ClawdAssets.meditating?.name, frame.decals.contains(where: { $0.art == Props.book }) { return napEnd }
+        if frame.sheet.name == ClawdAssets.hula?.name || frame.decals.contains(where: { $0.art.name == "grassSkirt" }) {
+            return skirtOnAndOff?.off
+        }
+        let held = frame.decals.filter { carried.contains($0.art.name) }
+        guard !held.isEmpty else { return nil }
+        // Standing, his arms go behind his back with it; in any other pose it just slides in behind him.
+        let pointing = frame.sheet.name == ClawdAssets.pointing?.name
+        let sheet = pointing ? ClawdAssets.pointing! : frame.sheet, index = pointing ? 0 : frame.index
+        let middle = sheet.width / 2
+        return Pastime.sequence([
+            Pastime(duration: 0.45) { t in
+                let p = smooth(t / 0.45)
+                let decals = held.map { d in
+                    Decal(d.art, lerp(d.x, middle - d.art.width / 2, p), lerp(d.y, max(d.y, 6), p), p < 0.3 ? d.layer : .behind)
+                }
+                return Frame(sheet, index, rate: 16, decals: (pointing ? arms(left: lerp(4, 0, p), right: lerp(4, 0, p)) : []) + decals)
+            },
+            pointing ? Pastime(duration: 0.2) { t in Frame(sheet, 0, rate: 16, decals: arms(left: lerp(0, 4, t / 0.2), right: lerp(0, 4, t / 0.2))) } : nil,
+        ])
+    }
+
     // MARK: - Props in his hands
 
     // Props from ClawdProps.swift, over his own frames. Nothing turns up out of thin air: he takes a prop
@@ -701,7 +754,12 @@ struct ClawdAnimator {
 
     /// The hula, skirt and all: he reaches behind his back for the grass skirt, lifts it over his head, pulls
     /// it down to his waist, dances, and takes it off over his head again, back behind him.
-    static let hula: Pastime? = ClawdAssets.pointing.flatMap { sheet in ClawdAssets.hula.flatMap { hulaSheet in skirt.map { skirt in
+    static let hula: Pastime? = skirtOnAndOff.flatMap { onOff in ClawdAssets.hula.flatMap { hulaSheet in
+        Pastime.sequence([onOff.on, Pastime([Clip(sheet: hulaSheet, frames: 0...53, fps: 12)]), onOff.off])
+    } }
+
+    /// Putting the skirt on (from behind his back, over his head, down to his waist), and taking it off.
+    static let skirtOnAndOff: (on: Pastime, off: Pastime)? = ClawdAssets.pointing.flatMap { sheet in skirt.map { skirt in
         let art = skirt.art
         // Behind him it's folded in to his body's width (x 4–19), or its ends would show.
         let inset = max(0, 4 - skirt.x)
@@ -718,9 +776,8 @@ struct ClawdAnimator {
                 Frame(sheet, 0, rate: 16, decals: [Decal(art, skirt.x, lerp(from, to, smooth(t / 0.5)))])
             }
         }
-        let dance = Pastime([Clip(sheet: hulaSheet, frames: 0...53, fps: 12)])
-        return Pastime.sequence([lift, pull(from: onHead + 1, to: skirt.y), dance, pull(from: skirt.y, to: onHead + 1), lower])!
-    } } }
+        return (Pastime.sequence([lift, pull(from: onHead + 1, to: skirt.y)])!, Pastime.sequence([pull(from: skirt.y, to: onHead + 1), lower])!)
+    } }
 
     /// The open book on Clawd's head while he sits under it, rising and falling as he breathes.
     private static func book(on sheet: PixelSheet, _ index: Int) -> Decal {

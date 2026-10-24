@@ -170,4 +170,16 @@ struct ClawdTests {
         }
         #expect(Set(picks).count == 16)  // every one of them, in time
     }
+
+    // MARK: - Cut short
+
+    /// Work starting mid-pastime: what he had is put away first; nothing to put away without props.
+    @Test(.enabled(if: ClawdTests.hasSprites, "needs Claude.app"))
+    func propsArePutAwayWhenWorkCutsIn() throws {
+        let pointing = try #require(ClawdAssets.pointing), hula = try #require(ClawdAssets.hula)
+        #expect(ClawdAnimator.putAway(after: ClawdAnimator.Frame(hula, 20)) != nil)
+        #expect(ClawdAnimator.putAway(after: ClawdAnimator.Frame(pointing, 0, decals: [Decal(Props.mug, 24, 8)])) != nil)
+        #expect(ClawdAnimator.putAway(after: ClawdAnimator.Frame(pointing, 0, decals: [Decal(Props.happyEyes, 5, 7)])) == nil)
+        #expect(ClawdAnimator.putAway(after: ClawdAnimator.Frame(pointing, 0)) == nil)
+    }
 }

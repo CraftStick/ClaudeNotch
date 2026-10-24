@@ -112,6 +112,8 @@ struct Session: Equatable {
     /// Clawd's current and previous motion, so the notch can play the change between them.
     private(set) var motion = Motion.done
     private(set) var previousMotion = Motion.done
+    /// When the previous motion began: what he was doing when the current one cut it short can be worked out.
+    private(set) var previousMotionStart = Date()
     private(set) var motionStart = Date()
     /// A one-off reaction, and what Clawd was doing when it started (to put the laptop away first).
     private(set) var cue: Cue?
@@ -203,6 +205,7 @@ struct Session: Equatable {
         let next = desiredMotion(at: now)
         guard next != motion else { return }
         previousMotion = motion
+        previousMotionStart = motionStart
         motion = next
         motionStart = now
     }

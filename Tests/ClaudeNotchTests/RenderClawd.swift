@@ -36,6 +36,22 @@ struct RenderClawd {
             }
             try write(strip(stride(from: 0.0, to: end.duration, by: end.duration / 16).map { end.frame($0) }), "\(folder)/nap-end.png")
         }
+        // Asleep under his book when a task comes in: he gets up, puts the book away, and opens his laptop.
+        if let laptop = ClawdAssets.laptop, let waving = ClawdAssets.waving {
+            let rest = Date(timeIntervalSinceReferenceDate: 800_000_000)
+            var s = Session(id: "nap", turnStart: rest, lastEvent: rest)
+            s.phase = .thinking
+            s.syncMotion(at: rest.addingTimeInterval(-30))
+            s.phase = .done
+            s.turnEnd = rest
+            s.syncMotion(at: rest)
+            let start = rest.addingTimeInterval(240)  // asleep by then
+            s.phase = .thinking
+            s.lastEvent = start
+            s.syncMotion(at: start)
+            let animator = ClawdAnimator(session: s, laptop: laptop, waving: waving)
+            try write(strip(stride(from: 0.0, to: 5.6, by: 0.35).map { animator.frame(at: start.addingTimeInterval($0)) }), "\(folder)/cut-short.png")
+        }
         if let hula = ClawdAnimator.hula { try frames(hula, into: "\(folder)/gif-hula") }
         if let look = ClawdAnimator.searching, let off = ClawdAnimator.hatOff,
            let search = ClawdAnimator.Pastime.sequence([ClawdAnimator.Pastime(duration: 0.8) { ClawdAnimator.hatOn($0)! }, look, look, off]) {
