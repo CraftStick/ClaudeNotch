@@ -25,7 +25,8 @@ struct RenderClawd {
         }
         try write(strip(night), "\(folder)/night.png")
         // Sheets as they come, every few frames.
-        for (name, sheet, frames) in [("Hula", ClawdAssets.hula, Array(stride(from: 0, through: 53, by: 3))), ("Meditating", ClawdAssets.meditating, Array(stride(from: 0, through: 59, by: 4)))] {
+        for (name, sheet, frames) in [("Hula", ClawdAssets.hula, Array(stride(from: 0, through: 53, by: 3))), ("Meditating", ClawdAssets.meditating, Array(stride(from: 0, through: 59, by: 4))),
+                                      ("Thinking", ClawdAssets.thinking, [0, 3, 4, 6, 18, 19, 20, 21, 22, 30, 36]), ("Meditating-sit", ClawdAssets.meditating, [0, 2, 3, 4, 5, 6, 7, 8, 45, 46, 50, 54, 56, 58, 59])] {
             guard let sheet else { continue }
             try write(strip(frames.map { ClawdAnimator.Frame(sheet, $0) }), "\(folder)/sheet-\(name).png")
         }
@@ -51,6 +52,25 @@ struct RenderClawd {
             s.syncMotion(at: start)
             let animator = ClawdAnimator(session: s, laptop: laptop, waving: waving)
             try write(strip(stride(from: 0.0, to: 5.6, by: 0.35).map { animator.frame(at: start.addingTimeInterval($0)) }), "\(folder)/cut-short.png")
+        }
+        // Sitting while he thinks, then the next tool; sitting after waiting six minutes, then your answer.
+        if let laptop = ClawdAssets.laptop, let waving = ClawdAssets.waving {
+            var strips: [ClawdAnimator.Frame] = []
+            for (phase, wait) in [(Phase.thinking, 40.0), (Phase.waiting, 360.0)] {
+                let t0 = Date(timeIntervalSinceReferenceDate: 800_000_000)
+                var s = Session(id: "sit", turnStart: t0, lastEvent: t0)
+                s.phase = phase
+                s.syncMotion(at: t0)
+                if phase == .thinking { s.syncMotion(at: t0.addingTimeInterval(wait)) }  // pondering by then
+                let next = t0.addingTimeInterval(wait + 1)
+                s.phase = .tool
+                s.activity = Describe.tool("Read", ["file_path": "/a.swift"])
+                s.lastEvent = next
+                s.syncMotion(at: next)
+                let animator = ClawdAnimator(session: s, laptop: laptop, waving: waving)
+                strips += stride(from: -0.3, to: 1.2, by: 0.15).map { animator.frame(at: next.addingTimeInterval($0)) }
+            }
+            try write(strip(strips), "\(folder)/stand-up.png")
         }
         if let hula = ClawdAnimator.hula { try frames(hula, into: "\(folder)/gif-hula") }
         if let look = ClawdAnimator.searching, let off = ClawdAnimator.hatOff,

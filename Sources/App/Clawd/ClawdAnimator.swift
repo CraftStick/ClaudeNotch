@@ -192,6 +192,11 @@ struct ClawdAnimator {
         case .typing: return closeLaptop
         case .desktop: return ClawdAssets.desktop.map { Clip(sheet: $0, frames: 76...87, fps: 16) }
         case .searching, .compacting: return Self.turnBack  // turned aside: back to you
+        // Sitting with a thought bubble: the bubble shrinks away as he gets up and turns back to you.
+        case .pondering: return ClawdAssets.thinking.map { Clip(sheet: $0, frames: [21, 20, 3, 0], fps: 10) }
+        // Sat down after waiting five minutes for you: up again. Waving before that: nothing to undo.
+        case .waving where session.previousMotion == .waving && session.motionStart.timeIntervalSince(session.previousMotionStart) >= 300:
+            return ClawdAssets.meditating.map { Clip(sheet: $0, frames: [46, 7, 6, 5, 4, 3], fps: 8) }
         default: return nil
         }
     }
