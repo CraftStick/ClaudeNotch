@@ -84,7 +84,7 @@ struct ClawdTests {
     @Test(.enabled(if: ClawdTests.hasSprites, "needs Claude.app"))
     func everyPastimeAndReactionHasItsFrames() {
         #expect(ClawdAnimator.pastimes.count >= 10)
-        #expect(Set(ClawdAnimator.reactions.keys) == [.idea, .excited, .facepalm, .celebrate, .hello, .arrive])
+        #expect(Set(ClawdAnimator.reactions.keys) == [.idea, .excited, .facepalm, .celebrate, .hello, .arrive, .dizzy])
         #expect(Set(ClawdAnimator.moodReactions.keys) == [.despair, .shrug, .sparkler, .rocket, .thanks, .flinch, .phew, .proud, .sweep, .surprise, .thumbs, .stretch])
         let moods = [("compacting", ClawdAnimator.compacting), ("rate limit", ClawdAnimator.rateLimit), ("searching", ClawdAnimator.searching)].compactMap { name, pastime in
             pastime.map { (name, $0) }

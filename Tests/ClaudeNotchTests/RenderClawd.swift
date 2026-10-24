@@ -66,6 +66,9 @@ struct RenderClawd {
             try write(strip(stride(from: 0.0, to: 2.4, by: 0.1).map { hula.frame($0) }), "\(folder)/hula-on.png")
             try write(strip(stride(from: hula.duration - 2.4, to: hula.duration, by: 0.1).map { hula.frame($0) }), "\(folder)/hula-off.png")
         }
+        if let dizzy = ClawdAnimator.reactions[.dizzy] {
+            try write(strip(stride(from: 0.0, to: dizzy.duration, by: dizzy.duration / 14).map { dizzy.frame($0) }), "\(folder)/dizzy.png")
+        }
         for cue in [Cue.sweep, .rocket] {
             let reaction = try #require(ClawdAnimator.moodReactions[cue], "\(cue)")
             try write(strip(stride(from: 0.0, to: 1.6, by: 0.1).map { reaction.frame($0) }), "\(folder)/\(cue)-start.png")

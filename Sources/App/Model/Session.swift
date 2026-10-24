@@ -88,7 +88,21 @@ enum Motion: Equatable {
 /// confetti after a big task, a hop and a wave when the app is opened, a parachute when he
 /// moves into the notch for good. Head in his hands after failures in a row, a shrug when auto mode
 /// turns something down, a sparkler when tests pass, a rocket after a push.
-enum Cue: Hashable { case idea, excited, facepalm, celebrate, hello, arrive, despair, shrug, sparkler, rocket, thanks, flinch, phew, proud, sweep, surprise, thumbs, stretch }
+enum Cue: Hashable { case idea, excited, facepalm, celebrate, hello, arrive, despair, shrug, sparkler, rocket, thanks, flinch, phew, proud, sweep, surprise, thumbs, stretch, dizzy }
+
+/// The Clawd who was in the notch when this session's work took his place, and when: he puts away what
+/// he had before the new one gets to work. A class, so a session can hold the one before it.
+final class HandOff: Equatable {
+    let from: Session
+    let at: Date
+
+    init(from: Session, at: Date) {
+        self.from = from
+        self.at = at
+    }
+
+    static func == (a: HandOff, b: HandOff) -> Bool { a === b }
+}
 
 struct Session: Equatable {
     let id: String
@@ -114,6 +128,8 @@ struct Session: Equatable {
     private(set) var previousMotion = Motion.done
     /// When the previous motion began: what he was doing when the current one cut it short can be worked out.
     private(set) var previousMotionStart = Date()
+    /// Set as this session's work takes the notch from another Clawd at rest.
+    var handOff: HandOff?
     private(set) var motionStart = Date()
     /// A one-off reaction, and what Clawd was doing when it started (to put the laptop away first).
     private(set) var cue: Cue?

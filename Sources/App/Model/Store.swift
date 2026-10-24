@@ -316,10 +316,20 @@ final class Store: ObservableObject {
     private func poke() {
         guard let g = greeting else { return }
         let now = Date()
+        // Poked again and again: his head spins. Busy or not; and not again while it still does.
+        pokes = pokes.filter { now.timeIntervalSince($0) < 3 } + [now]
+        if pokes.count >= 4 {
+            pokes = []
+            if g.cue != .dizzy || now.timeIntervalSince(g.cueStart) > 3.5 { greeting?.play(.dizzy, at: now) }
+            return
+        }
         if let laptop = ClawdAssets.laptop, let waving = ClawdAssets.waving,
            ClawdAnimator(session: g, laptop: laptop, waving: waving).frame(at: now).busy { return }
         greeting?.play(.hello, at: now)
     }
+
+    /// When Clawd was last poked, the last 3 seconds' worth.
+    private var pokes: [Date] = []
 
     /// Opens the notch on a word from the app for `seconds`, over whatever it shows unless Claude asks
     /// you something. `limited`: Clawd turns to his hourglass; otherwise he hops.
@@ -933,6 +943,13 @@ final class Store: ObservableObject {
 
     private func commit(_ s: Session, expandFor seconds: TimeInterval?) {
         var s = s
+        // Work taking the notch from another Clawd at rest (the one living in it, or another session's):
+        // he puts away what he has first.
+        if s.phase.isActive, sessions[s.id]?.phase.isActive != true, let shown = focused, shown.id != s.id, !shown.phase.isActive {
+            var before = shown
+            before.handOff = nil  // one step back is all it takes
+            s.handOff = HandOff(from: before, at: Date())
+        }
         // A quiet notch doesn't open for what Claude does along the way: only when it needs you or is done.
         let seconds = Self.quiet && (s.phase == .thinking || s.phase == .tool) ? nil : seconds
         s.syncMotion(at: Date())

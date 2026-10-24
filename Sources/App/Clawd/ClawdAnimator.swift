@@ -98,7 +98,7 @@ struct ClawdAnimator {
             // Put the laptop away first (the hat, or the box, back behind him before that).
             let interrupted = session.cueInterrupted
             let away = interrupted == .searching ? Self.hatOff : interrupted == .compacting ? Self.boxAway
-                : session.motion != interrupted ? restInterrupted(interrupted, at: session.cueStart) : nil
+                : session.motion != interrupted ? restInterrupted(interrupted, at: session.cueStart) ?? handedOver(at: session.cueStart) : nil
             let putAway = exit(from: interrupted)
             let lead = (away?.duration ?? 0) + (putAway?.duration ?? 0)
             let t = date.timeIntervalSince(session.cueStart)
@@ -122,7 +122,8 @@ struct ClawdAnimator {
         // What he had beside him or on his head goes back behind him before he turns back to you; and what
         // he had in his hands or on him when his rest was cut short.
         let putAway = previous == motion ? nil : previous == .compacting ? Self.boxAway : previous == .searching ? Self.hatOff
-            : t < 6 ? previous.flatMap { restInterrupted($0, at: session.motionStart) } : nil  // (none takes that long)
+            : t < 6 ? previous.flatMap { restInterrupted($0, at: session.motionStart) } ?? handedOver(at: session.motionStart)
+            : nil  // (none takes that long)
         if let putAway {
             if t < putAway.duration { return putAway.frame(t) }
             t -= putAway.duration
@@ -207,6 +208,8 @@ struct ClawdAnimator {
         let wave = clip(ClawdAssets.waving, 3...16, fps: 12)
         let all: [Cue: Pastime?] = [
             .hello: Pastime([ClawdAssets.jumping.map(hop), wave].compactMap { $0 }),
+            // Poked too often: his head spins, stars in his eyes.
+            .dizzy: Pastime([clip(ClawdAssets.dizzy, 0...40, fps: 12)].compactMap { $0 }),
             .arrive: Pastime.sequence([parachute, Pastime([wave].compactMap { $0 })]),
             .idea: Pastime([clip(ClawdAssets.lightbulb, 2...44, fps: 14)].compactMap { $0 }),
             .excited: Pastime([clip(ClawdAssets.excited, 2...21, fps: 14)].compactMap { $0 }),
@@ -510,6 +513,12 @@ struct ClawdAnimator {
         let frame = Store.alive ? life(at: date, restingSince: date.addingTimeInterval(-t))
                                 : idle(t, sinceRest: sinceRest, at: date, restStart: start)
         return Self.putAway(after: frame)
+    }
+
+    /// What the Clawd this session's work took the notch from puts away, when work starts at `date`.
+    private func handedOver(at date: Date) -> Pastime? {
+        guard let handOff = session.handOff, abs(date.timeIntervalSince(handOff.at)) < 2 else { return nil }
+        return Self.putAway(after: ClawdAnimator(session: handOff.from, laptop: laptop, waving: waving).frame(at: handOff.at))
     }
 
     /// Props he holds, wears or reads, as opposed to how he looks (eyes, a blush, sweat) or what floats by.

@@ -77,6 +77,22 @@ struct StoreTests {
         #expect(!Store.firstPromptOfTheDay(at: now.addingTimeInterval(60)))  // the second one isn't
     }
 
+    @Test func pokedAgainAndAgainHisHeadSpins() {
+        UserDefaults.standard.set(true, forKey: Store.aliveKey)
+        defer { UserDefaults.standard.removeObject(forKey: Store.aliveKey) }
+        store.moveIn()
+        for _ in 0..<4 { store.focus(Store.greetingID) }
+        #expect(store.greeting?.cue == .dizzy)
+    }
+
+    @Test func workTakingTheNotchFromTheClawdLivingInItKnowsWhatHeWasDoing() {
+        UserDefaults.standard.set(true, forKey: Store.aliveKey)
+        defer { UserDefaults.standard.removeObject(forKey: Store.aliveKey) }
+        store.moveIn()
+        send("UserPromptSubmit", ["prompt": "fix it"])
+        #expect(session?.handOff?.from.id == Store.greetingID)
+    }
+
     @Test func aQuietNotchShowsUpOnlyWhenNeeded() {
         UserDefaults.standard.set(true, forKey: Store.quietKey)
         defer { UserDefaults.standard.removeObject(forKey: Store.quietKey) }
