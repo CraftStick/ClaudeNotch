@@ -10,12 +10,7 @@
 See what Claude is doing, how long it's been at it and when it needs you, and answer it right there.<br>
 And Clawd lives in the notch.
 
-<p>
-<a href="https://github.com/CraftStick/ClaudeNotch/releases/latest"><img src="https://img.shields.io/github/v/release/CraftStick/ClaudeNotch?label=release&color=d97757" alt="Latest release"></a>
-<img src="https://img.shields.io/badge/macOS-14%2B-lightgrey?logo=apple" alt="macOS 14+">
-<a href="https://github.com/CraftStick/homebrew-tap"><img src="https://img.shields.io/badge/brew-craftstick%2Ftap%2Fclaude--notch-fbb040?logo=homebrew&logoColor=white" alt="Homebrew"></a>
-<a href="https://github.com/CraftStick/ClaudeNotch/stargazers"><img src="https://img.shields.io/github/stars/CraftStick/ClaudeNotch?style=flat&color=d97757" alt="Stars"></a>
-</p>
+
 
 <img src="docs/notch.gif" width="640" alt="The notch during a task: Clawd gets out his laptop and types, a command runs, Done">
 
