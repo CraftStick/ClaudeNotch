@@ -94,6 +94,13 @@ struct RenderClawd {
             frames += stride(from: 0.0, to: 2.6, by: 0.2).map { ending.frame(at: end.addingTimeInterval($0)) }
             try write(strip(frames), "\(folder)/nightcap.png")
         }
+        // Every reaction, for a look at all of them at once.
+        for (cue, reaction) in ClawdAnimator.reactions.merging(ClawdAnimator.moodReactions, uniquingKeysWith: { a, _ in a }) {
+            try frames(reaction, into: "\(folder)/all/\(cue)")
+        }
+        if let rl = ClawdAnimator.rateLimit { try frames(rl, into: "\(folder)/all/rateLimit") }
+        if let box = ClawdAnimator.compacting, let out = ClawdAnimator.boxOut, let away = ClawdAnimator.boxAway,
+           let all = ClawdAnimator.Pastime.sequence([out, box, box, away]) { try frames(all, into: "\(folder)/all/compacting") }
         if let hula = ClawdAnimator.hula { try frames(hula, into: "\(folder)/gif-hula") }
         if let look = ClawdAnimator.searching, let off = ClawdAnimator.hatOff,
            let search = ClawdAnimator.Pastime.sequence([ClawdAnimator.Pastime(duration: 0.8) { ClawdAnimator.hatOn($0)! }, look, look, off]) {
