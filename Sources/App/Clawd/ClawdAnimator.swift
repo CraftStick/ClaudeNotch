@@ -594,8 +594,8 @@ struct ClawdAnimator {
 
     // MARK: - A nap with a book
 
-    /// Before a nap: he takes a book out from behind his back, opens it in front of him in both hands and
-    /// reads, his eyes going along the lines; yawns; lifts it over his head, opens it on his head and sits
+    /// Before a nap: he takes a book out from behind his back, opens it in front of him in both hands (you
+    /// see its cover) and reads, his eyes going along the lines; yawns; lifts it over his head, opens it on his head and sits
     /// down under it.
     static let napStart: Pastime? = ClawdAssets.pointing.flatMap { sheet in ClawdAssets.meditating.map { meditating in
         let side = grip[0]!
@@ -605,6 +605,11 @@ struct ClawdAnimator {
             let p = smooth(t / 0.35)
             return Frame(sheet, 0, rate: 16, decals: arms(right: lerp(4, 0, p))
                 + [Decal(Props.bookClosed, lerp(side.x, 10, p), lerp(side.y - 2, 10, p))])
+        }
+        // Opened in both hands, its two halves spreading.
+        let opening = Pastime(duration: 0.4) { t in
+            let book = t < 0.15 ? Decal(Props.bookClosed, 10, 10) : t < 0.3 ? Decal(Props.bookOpening, 7, 10) : Decal(Props.bookFront, 4, 10)
+            return Frame(sheet, 0, rate: 12, decals: arms(left: 0, right: 0) + [book, Decal(Props.eyesDown, 6, 7)])
         }
         func holding(_ eyes: PixelArt?, bookY: Int = 10) -> [Decal] {
             arms(left: 0, right: 0) + [Decal(Props.bookFront, 4, bookY)] + (eyes.map { [Decal($0, 5, 7)] } ?? [])
@@ -635,7 +640,7 @@ struct ClawdAnimator {
             let index = sitDown.frame(at: t)
             return Frame(meditating, index, rate: sitDown.fps, decals: [Self.book(on: meditating, index)])
         }
-        return Pastime.sequence([bookOut, toFront, reading, yawn, onHead, sit])!
+        return Pastime.sequence([bookOut, toFront, opening, reading, yawn, onHead, sit])!
     } }
 
     /// Dozing under the book, `t` into it: it rises and falls as he breathes.

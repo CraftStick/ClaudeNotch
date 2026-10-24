@@ -220,26 +220,35 @@ enum Props {
         "w": 0xf6_e9_cc_ff, "p": 0xe6_cf_a0_ff, "s": 0xd8_b9_8a_ff, "c": 0xb8_74_2e_ff, "C": 0x8f_55_20_ff,
     ]
 
-    /// The book shut, held in his hand by its spine: its pages to the right.
+    /// The book shut, held in his hand: only its cover shows, the spine on the left.
     static let bookClosed = PixelArt("bookClosed", [
-        "ccccp",
-        "ccccw",
-        "ccccw",
-        "ccccw",
-        "ccccw",
-        "CCCCp",
+        "Ccccc",
+        "Ccccc",
+        "Ccccc",
+        "Ccccc",
+        "Ccccc",
+        "CCCCC",
     ], bookColors)
 
+    /// The book opening in front of him: half open, its cover still all you see. At (7, 10).
+    static let bookOpening = PixelArt("bookOpening", [
+        "...ccCcccc",
+        "..cccCcccc",
+        "hccccCcccc",
+        "hccccCcccc",
+        "...CCCCCCC",
+    ], bookColors.merging(["h": body]) { $1 })
 
-    /// The book held open in front of him in both hands, its pages to him: you see its cover, a gold title on
-    /// each half. At (4, 10), below his eyes; his hands are its sides.
+
+    /// The book held open in front of him in both hands, its pages to him: all you see is its cover. At
+    /// (4, 10), below his eyes; his hands are its sides.
     static let bookFront = PixelArt("bookFront", [
         "..cccccCCccccc..",
         ".ccccccCCcccccc.",
-        "hcgggccCCcgggcch",
+        "hccccccCCcccccch",
         "hccccccCCcccccch",
         "..CCCCCCCCCCCC..",
-    ], bookColors.merging(["g": 0xe8_c0_5a_ff, "h": body]) { $1 })
+    ], bookColors.merging(["h": body]) { $1 })
 
     /// His eyes down on the page, at the start of a line, and at its end: over both eyes, at (5, 7).
     static let eyesReadingStart = PixelArt("eyesReadingStart", [
