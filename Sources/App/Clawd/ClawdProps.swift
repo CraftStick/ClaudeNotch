@@ -219,39 +219,42 @@ enum Props {
         "w": 0xf6_e9_cc_ff, "p": 0xe6_cf_a0_ff, "s": 0xd8_b9_8a_ff, "c": 0xb8_74_2e_ff, "C": 0x8f_55_20_ff,
     ]
 
-    /// The book shut, held in his hand: only its cover shows, the spine on the left.
+    /// The book shut, held in his hand: only its cover shows, a square-cornered board with a dark edge.
     static let bookClosed = PixelArt("bookClosed", [
-        "Ccccc",
-        "Ccccc",
-        "Ccccc",
-        "Ccccc",
-        "Ccccc",
-        "Ccccc",
-        "CCCCC",
+        "CCCCCC",
+        "CccccC",
+        "CccccC",
+        "CccccC",
+        "CccccC",
+        "CccccC",
+        "CccccC",
+        "CCCCCC",
     ], bookColors)
 
-    /// The book opening in front of him: half open, its cover still all you see. At (7, 10).
+    /// The book opening in front of him: half open, its cover still all you see. At (6, 10).
     static let bookOpening = PixelArt("bookOpening", [
-        "...ccCcccc",
-        "..cccCcccc",
-        "hccccCcccc",
-        "hccccCcccc",
-        ".ccccCcccc",
-        ".ccccCcccc",
-        "...CCCCCCC",
+        "CCCCCCCCCCCC",
+        "CcccCCcccccC",
+        "CcccCCcccccC",
+        "hcccCCcccccC",
+        "hcccCCcccccC",
+        "CcccCCcccccC",
+        "CcccCCcccccC",
+        "CCCCCCCCCCCC",
     ], bookColors.merging(["h": body]) { $1 })
 
 
-    /// The book held open in front of him in both hands, its pages to him: all you see is its cover. At
-    /// (4, 10), below his eyes; his hands are its sides.
+    /// The book held open in front of him in both hands, its pages to him: all you see is its cover, wider
+    /// than he is. At (3, 10), below his eyes; his hands hold its sides.
     static let bookFront = PixelArt("bookFront", [
-        "..cccccCCccccc..",
-        ".ccccccCCcccccc.",
-        "hccccccCCcccccch",
-        "hccccccCCcccccch",
-        ".ccccccCCcccccc.",
-        ".ccccccCCcccccc.",
-        "..CCCCCCCCCCCC..",
+        "CCCCCCCCCCCCCCCCCC",
+        "CcccccccCCcccccccC",
+        "CcccccccCCcccccccC",
+        "hcccccccCCccccccch",
+        "hcccccccCCccccccch",
+        "CcccccccCCcccccccC",
+        "CcccccccCCcccccccC",
+        "CCCCCCCCCCCCCCCCCC",
     ], bookColors.merging(["h": body]) { $1 })
 
     /// His eyes down on the page, at the start of a line, and at its end: over both eyes, at (5, 7).

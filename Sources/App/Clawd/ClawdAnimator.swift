@@ -604,15 +604,15 @@ struct ClawdAnimator {
         let toFront = Pastime(duration: 0.35) { t in
             let p = smooth(t / 0.35)
             return Frame(sheet, 0, rate: 16, decals: arms(right: lerp(4, 0, p))
-                + [Decal(Props.bookClosed, lerp(side.x, 10, p), lerp(side.y - 2, 10, p))])
+                + [Decal(Props.bookClosed, lerp(side.x, 9, p), lerp(side.y - 2, 10, p))])
         }
         // Opened in both hands, its two halves spreading.
         let opening = Pastime(duration: 0.4) { t in
-            let book = t < 0.15 ? Decal(Props.bookClosed, 10, 10) : t < 0.3 ? Decal(Props.bookOpening, 7, 10) : Decal(Props.bookFront, 4, 10)
+            let book = t < 0.15 ? Decal(Props.bookClosed, 9, 10) : t < 0.3 ? Decal(Props.bookOpening, 6, 10) : Decal(Props.bookFront, 3, 10)
             return Frame(sheet, 0, rate: 12, decals: arms(left: 0, right: 0) + [book, Decal(Props.eyesDown, 6, 7)])
         }
         func holding(_ eyes: PixelArt?, bookY: Int = 10) -> [Decal] {
-            arms(left: 0, right: 0) + [Decal(Props.bookFront, 4, bookY)] + (eyes.map { [Decal($0, 5, 7)] } ?? [])
+            arms(left: 0, right: 0) + [Decal(Props.bookFront, 3, bookY)] + (eyes.map { [Decal($0, 5, 7)] } ?? [])
         }
         // Along a line from its start to its end, and back to the start of the next: four lines.
         let reading = Pastime(duration: 4.8) { t in
