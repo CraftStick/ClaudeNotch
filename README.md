@@ -10,6 +10,8 @@
 See what Claude is doing, how long it's been at it and when it needs you, and answer it right there.<br>
 And Clawd lives in the notch.
 
+<img src="docs/notch.gif" width="640" alt="The notch during a task: Clawd gets out his laptop and types, a command runs, Done">
+
 <table>
 <tr>
 <td align="center" valign="top"><img src="docs/clawd/coffee.gif" width="120" alt="Clawd sipping a mug of coffee"><br><b>Coffee</b></td>
