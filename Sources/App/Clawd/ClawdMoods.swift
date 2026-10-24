@@ -98,9 +98,9 @@ extension ClawdAnimator {
     }
 
     /// Putting the hat on, before the first look: lifted from behind his head, up over it, and down onto it,
-    /// as he turns aside. Nil once it's on.
+    /// as he turns aside; then the magnifying glass out from behind him. Nil once both are out.
     static func hatOn(_ t: TimeInterval) -> Frame? {
-        guard t < 0.5, let aside = turnAside else { return nil }
+        guard t < 0.8, let aside = turnAside else { return nil }
         let hat = deerstalkerLifted(t / 0.5)
         guard t >= aside.duration else {
             // Facing you, his head's top row is where it is when he's turned.
@@ -108,12 +108,16 @@ extension ClawdAnimator {
             frame.decals = [hat]
             return frame
         }
-        return turned(rate: 16, decals: [hat])
+        return turned(rate: 16, decals: [hat] + (t < 0.5 ? [] : [fromBehind(Decal(Props.magnifier, 19, -1), (t - 0.5) / 0.3)]))
     }
 
-    /// Done searching: the hat comes off, up and back down behind his head, before he turns back to you.
+    /// Done searching: the magnifying glass goes back behind him, and the hat comes off, up and back down
+    /// behind his head, before he turns back to you.
     static let hatOff: Pastime? = ClawdAssets.turning.map { _ in
-        Pastime(duration: 0.5) { t in turned(rate: 16, decals: [deerstalkerLifted(1 - t / 0.5)])! }
+        Pastime(duration: 0.8) { t in
+            turned(rate: 16, decals: t < 0.3 ? [Decal(Props.deerstalker, 2, -6), fromBehind(Decal(Props.magnifier, 19, -1), 1 - t / 0.3)]
+                                             : [deerstalkerLifted(1 - (t - 0.3) / 0.5)])!
+        }
     }
 
     /// The deerstalker `p` of the way on (0…1): from behind his head (its brim at his eyes) up till it's clear
@@ -200,7 +204,11 @@ extension ClawdAnimator {
                 },
             ])
             let joy = ClawdAssets.excited.flatMap { Pastime([Clip(sheet: $0, frames: 2...21, fps: 14)]) }
-            return Pastime.sequence([turnIn, launch, joy])
+            // The button back behind him, then he's delighted.
+            let buttonAway = Pastime(duration: 0.35) { t in
+                turned(rate: 16, decals: [fromBehind(Decal(Props.remote, 21, 5), 1 - t / 0.35)])!
+            }
+            return Pastime.sequence([turnIn, launch, buttonAway, joy])
         }
         // You said thanks: he goes shy, eyes smiling and cheeks pink, rocking a little, while a heart rises
         // over his head and a small one after it.

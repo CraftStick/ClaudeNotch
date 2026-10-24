@@ -51,7 +51,8 @@ struct RenderClawd {
         }
         var props: [ClawdAnimator.Frame] = []
         if let out = ClawdAnimator.boxOut { props += stride(from: 0.0, to: out.duration, by: 0.1).map { out.frame($0) } }
-        for t in stride(from: 0.0, to: 0.5, by: 0.08) { if let f = ClawdAnimator.hatOn(t) { props.append(f) } }
+        for t in stride(from: 0.0, to: 0.8, by: 0.08) { if let f = ClawdAnimator.hatOn(t) { props.append(f) } }
+        if let off = ClawdAnimator.hatOff { props += stride(from: 0.0, to: off.duration, by: 0.1).map { off.frame($0) } }
         if let rl = ClawdAnimator.rateLimit { props += stride(from: 0.2, to: 0.9, by: 0.1).map { rl.frame($0) } }
         try write(strip(props), "\(folder)/props-in.png")
         for cue in [Cue.surprise, .thumbs, .stretch] {
