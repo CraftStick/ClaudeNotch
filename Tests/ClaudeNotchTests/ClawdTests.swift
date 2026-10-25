@@ -161,6 +161,26 @@ struct ClawdTests {
         #expect(!animator.frame(at: start + reaction.duration + 1).busy)
     }
 
+    /// At night his nightcap rests on his head in every frame of every pose he wears it in: not on an arm
+    /// raised in a wave, nor on both hands up, its brim on him all along.
+    @Test(.enabled(if: ClawdTests.hasSprites, "needs Claude.app"))
+    func theNightcapSitsOnHisHead() throws {
+        let sheets = [ClawdAssets.laptop, ClawdAssets.waving, ClawdAssets.lookingAround, ClawdAssets.meditating,
+                      ClawdAssets.thinking, ClawdAssets.desktop, ClawdAssets.running, ClawdAssets.pointing].compactMap { $0 }
+        for sheet in sheets {
+            let skin = Set(sheet.palette.indices.filter { i in
+                let c = sheet.palette[i]
+                return c.r > 0.55 && c.r > c.g + 0.2 && c.g > c.b && c.b < 0.5
+            }.map(UInt8.init))
+            for index in sheet.frames.indices {
+                let head = try #require(ClawdAnimator.head(sheet, index), "\(sheet.name) #\(index)")
+                let row = sheet.frames[index][(head.y * sheet.width)..<((head.y + 1) * sheet.width)]
+                let under = (head.x..<min(head.x + Props.nightcap.width, sheet.width)).filter { skin.contains(row[row.startIndex + $0]) }
+                #expect(under.count >= 12, "\(sheet.name) #\(index): the brim on \(under.count) pixels of him")
+            }
+        }
+    }
+
     @Test func aPastimeComesBackOnlyAfterSixOthers() {
         var random = SeededRandom(seed: 42)
         var recent: [Int] = []

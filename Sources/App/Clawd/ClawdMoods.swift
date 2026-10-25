@@ -374,17 +374,21 @@ extension ClawdAnimator {
 
     /// The top of his head in a frame: its row, and the column it starts at. Found by his orange, lit or in
     /// shadow: what he has beside him (a desk with its screen, a speech bubble) may reach higher, and so may
-    /// a hand.
+    /// a hand or an arm.
     static func head(_ sheet: PixelSheet, _ index: Int) -> (x: Int, y: Int)? {
         let pixels = sheet.frames[min(index, sheet.frames.count - 1)]
         let skin = Set(sheet.palette.indices.filter { i in
             let c = sheet.palette[i]
             return c.r > 0.55 && c.r > c.g + 0.2 && c.g > c.b && c.b < 0.5
         }.map(UInt8.init))
-        // The first row with a head's width of him in it: a hand raised above his head is narrower.
+        // The first row with a head's width of him in one piece (16, 12 thinking): an arm raised in a wave is
+        // 8 across, and both hands up are two pieces.
         for y in 0..<sheet.height {
-            let row = (0..<sheet.width).filter { skin.contains(pixels[y * sheet.width + $0]) }
-            if row.count >= 8, let x = row.first { return (x, y) }
+            var run = 0
+            for x in 0..<sheet.width {
+                run = skin.contains(pixels[y * sheet.width + x]) ? run + 1 : 0
+                if run == 12 { return (x - 11, y) }
+            }
         }
         return nil
     }
