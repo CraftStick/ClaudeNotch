@@ -164,14 +164,17 @@ struct RenderClawd {
             { s in s.phase = phase; s.lastEvent = s.turnStart; if let activity { s.activity = activity } }
         }
         func rest(_ phase: Phase) -> (inout Session) -> Void { { s in s.phase = phase } }
-        let bash = Describe.tool("Bash", ["command": "make"])
+        let bash = Describe.tool("Bash", ["command": "python3 migrate.py"])
+        let build = Describe.tool("Bash", ["command": "swift build"])
         let agent = Describe.tool("Task", ["description": "Look around", "subagent_type": "Explore"])
 
         // Reactions.
         let cues: [(String, Cue)] = [("idea", .idea), ("excited", .excited), ("facepalm", .facepalm), ("celebrate", .celebrate),
                                      ("despair", .despair), ("shrug", .shrug), ("sparkler", .sparkler), ("rocket", .rocket),
                                      ("thanks", .thanks), ("flinch", .flinch), ("phew", .phew), ("proud", .proud), ("sweep", .sweep),
-                                     ("surprise", .surprise), ("thumbs", .thumbs), ("stretch", .stretch), ("dizzy", .dizzy)]
+                                     ("surprise", .surprise), ("thumbs", .thumbs), ("stretch", .stretch), ("dizzy", .dizzy),
+                                     ("coin", .coin), ("sneeze", .sneeze), ("graduate", .graduate), ("peekaboo", .peekaboo),
+                                     ("peek", .peek), ("skip", .skip)]
         for (name, cue) in cues {
             let reaction = try #require(ClawdAnimator.reactions[cue] ?? ClawdAnimator.moodReactions[cue], "\(cue)")
             try frames(reaction, into: "\(folder)/\(name)")
@@ -188,9 +191,11 @@ struct RenderClawd {
         try play([(0, work())], from: 0, to: 3.5, "typing")
         try play([(0, work()), (12.1, { _ in })], from: 12.1, to: 17, "thinking")
         try play([(0, work(.tool, bash)), (8.1, { _ in })], from: 8.1, to: 12.5, "desktop")
+        try play([(0, work(.tool, build)), (8.1, { _ in })], from: 8.1, to: 13.5, "cooking")
         try play([(0, work(.tool, agent))], from: 0, to: 2, "running")
         try play([(0, work(.waiting))], from: 0, to: 2.4, "waving")
         try play([(0, work(.waiting))], from: 60, to: 63, "looking-for-you")
+        try play([(0, work(.waiting))], from: 72, to: 74.8, "tapping")
         try play([(0, work(.waiting))], from: 300, to: 304, "waiting-long")
         try play([(0, { s in s.phase = .thinking; s.lastEvent = s.turnStart; s.contextTokens = 185_000; s.contextWindow = 200_000 })],
                  from: 2, to: 5.3, "sweating")

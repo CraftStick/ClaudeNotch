@@ -60,9 +60,14 @@ struct SessionTests {
         #expect(session(.thinking, at: now).desiredMotion(at: now + 13) == .pondering)
 
         var command = session(.tool, at: now)
-        command.activity = Describe.tool("Bash", ["command": "make"])
+        command.activity = Describe.tool("Bash", ["command": "python3 migrate.py"])
         #expect(command.desiredMotion(at: now + 1) == .typing)
         #expect(command.desiredMotion(at: now + 9) == .desktop)
+        // A build or an install running long: something's cooking.
+        for build in ["make", "swift build", "npm install"] {
+            command.activity = Describe.tool("Bash", ["command": build])
+            #expect(command.desiredMotion(at: now + 9) == .cooking, "\(build)")
+        }
 
         var agent = session(.tool, at: now)
         agent.activity = Describe.tool("Task", [:])

@@ -30,8 +30,12 @@ struct DescribeTests {
                         "cargo test", "python3 -m pytest", "make check"] {
             #expect(Describe.cheer(for: command) == .sparkler, "\(command)")
         }
-        for command in ["git push", "git push -u origin main", "cd x && git push --force-with-lease", "git -C repo push"] {
+        for command in ["git push", "git push -u origin main", "cd x && git push --force-with-lease", "git -C repo push",
+                        "git commit -m 'x' && git push"] {
             #expect(Describe.cheer(for: command) == .rocket, "\(command)")
+        }
+        for command in ["git commit -m 'Fix it'", "git add . && git commit -m x", "git -C repo commit --amend --no-edit"] {
+            #expect(Describe.cheer(for: command) == .coin, "\(command)")
         }
         for command in ["git status", "swift build", "ls test", "echo 'git pushed'", "cat latest.txt", "gh pr create"] {
             #expect(Describe.cheer(for: command) == nil, "\(command)")

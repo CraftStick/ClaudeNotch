@@ -24,6 +24,8 @@ struct Activity: Equatable {
     var agent = false
     /// A search (code, files, the web): Clawd puts on his deerstalker.
     var search = false
+    /// A build or an install: should it run long, something's cooking.
+    var cooks = false
     /// `detail` is a sentence (a prompt, a thought): cut it at the end, not in the middle like a path.
     var prose = false
     /// Why Claude runs this tool, in its own words: what it wrote around the call. Only for tools
@@ -73,16 +75,22 @@ enum Motion: Equatable {
     /// running while subagents work or tools fly by; waving while waiting for you;
     /// resting after a turn that ended in one of three ways. Packing papers into a box while the
     /// context is compacted; by an hourglass after a turn that hit the rate limit.
-    /// Peering through a magnifying glass in a deerstalker while Claude searches.
-    case typing, pondering, desktop, running, waving, done, stopped, failed, compacting, limited, searching
+    /// Peering through a magnifying glass in a deerstalker while Claude searches. Stirring a pot on a fire
+    /// while a build or an install runs long.
+    case typing, pondering, desktop, running, waving, done, stopped, failed, compacting, limited, searching, cooking
 }
 
 /// A one-off reaction Clawd plays over whatever he is doing: an idea when a task comes in,
 /// joy when you allow something, a facepalm when a tool fails or you say no,
 /// confetti after a big task, a hop and a wave when the app is opened, a parachute when he
 /// moves into the notch for good. Head in his hands after failures in a row, a shrug when auto mode
-/// turns something down, a sparkler when tests pass, a rocket after a push.
-enum Cue: Hashable { case idea, excited, facepalm, celebrate, hello, arrive, despair, shrug, sparkler, rocket, thanks, flinch, phew, proud, sweep, surprise, thumbs, stretch, dizzy }
+/// turns something down, a sparkler when tests pass, a rocket after a push, a hop with a spin after a
+/// commit, a sneeze at the dust after compacting, a mortarboard when every step of his plan is done.
+/// Coming into the notch to say hi: up through its floor, peeking in round its edge, or skipping in.
+enum Cue: Hashable {
+    case idea, excited, facepalm, celebrate, hello, arrive, despair, shrug, sparkler, rocket, thanks, flinch, phew, proud, sweep,
+         surprise, thumbs, stretch, dizzy, coin, sneeze, graduate, peekaboo, peek, skip
+}
 
 /// The Clawd who was in the notch when this session's work took his place, and when: he puts away what
 /// he had before the new one gets to work. A class, so a session can hold the one before it.
@@ -186,7 +194,8 @@ struct Session: Equatable {
             return activity.agent ? .running : .searching
         case .tool:
             if activity.agent || isBusy(at: now) { return .running }
-            return activity.command && quiet > 8 ? .desktop : .typing
+            guard activity.command, quiet > 8 else { return .typing }
+            return activity.cooks ? .cooking : .desktop
         case .thinking:
             // Between two searches he keeps his hat on, rather than back to the laptop for a moment.
             if motion == .searching, now.timeIntervalSince(lastEvent) < 3 { return .searching }

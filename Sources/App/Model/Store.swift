@@ -370,14 +370,15 @@ final class Store: ObservableObject {
         scheduleCollapse(after: seconds)
     }
 
-    /// Clawd on his own in the notch, hopping and waving hello (or floating in under a parachute):
-    /// "Ready to work", a click opens Claude.
-    private static func makeGreeting(at now: Date, cue: Cue = .hello) -> Session {
+    /// Clawd on his own in the notch, coming in to wave hello: a hop, up through the floor, a peek round the
+    /// edge or skipping in, whichever comes up (or floating in under a parachute). "Ready to work", a click
+    /// opens Claude.
+    private static func makeGreeting(at now: Date, cue: Cue? = nil) -> Session {
         var g = Session(id: greetingID, turnStart: now, lastEvent: now)
         let app = AppFocus.claudeApp.map { $0.deletingPathExtension().lastPathComponent }
         g.activity = Activity(symbol: "hand.wave.fill", title: tr("Готов к работе", "Ready to work"),
                               detail: app.map { tr("Нажми, чтобы открыть \($0)", "Click to open \($0)") } ?? "")
-        g.play(cue, at: now)
+        g.play(cue ?? [.hello, .peekaboo, .peek, .skip].randomElement()!, at: now)
         return g
     }
 
@@ -674,6 +675,7 @@ final class Store: ObservableObject {
 
         case "PostCompact":
             guard known, s.activity == .compacting else { return }
+            s.play(.sneeze, at: now)  // the dust from packing his papers away
             if s.compactingAlone {
                 // Your own /compact: back to rest, with what it took.
                 s.compactingAlone = false
@@ -708,14 +710,17 @@ final class Store: ObservableObject {
             s.activity = last.isEmpty
                 ? Activity(symbol: "checkmark.circle.fill", title: tr("Готово", "Done"), detail: summary(s, until: now))
                 : Activity(symbol: "checkmark.circle.fill", title: tr("Готово", "Done"), detail: last, note: summary(s, until: now), prose: true)
-            // A tidy-up (much more taken out than put in) gets a broom, 300+ new lines pride, and another big
-            // task (5+ minutes or 150+ changed lines) confetti, instead of a hop.
+            // A tidy-up (much more taken out than put in) gets a broom, 300+ new lines pride, another big
+            // task (5+ minutes or 150+ changed lines) confetti, and a plan of three steps or more all done a
+            // mortarboard, instead of a hop.
             if s.linesRemoved >= 80, s.linesRemoved > 2 * s.linesAdded {
                 s.play(.sweep, at: now)
             } else if s.linesAdded >= 300 {
                 s.play(.proud, at: now)
             } else if now.timeIntervalSince(s.turnStart) >= 300 || s.linesAdded + s.linesRemoved >= 150 {
                 s.play(.celebrate, at: now)
+            } else if s.tasks.count >= 3, s.tasks.current == nil {
+                s.play(.graduate, at: now)
             }
             // If you're in another app, the result stays up longer, with a sound.
             let away = chime("Glass", for: &s)

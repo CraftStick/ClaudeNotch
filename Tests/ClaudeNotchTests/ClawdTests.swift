@@ -36,7 +36,10 @@ struct ClawdTests {
                      Props.chefHat, Props.pan, Props.pancakeFlat, Props.pancakeEdge, Props.book, Props.bookClosed, Props.bookOpening, Props.bookFront, Props.eyesReadingStart, Props.eyesReadingEnd, Props.parachute,
                      Props.arm, Props.headphonesFolded, Props.wizardHatTucked, Props.heart, Props.heartFading, Props.smallHeart,
                      Props.blush, Props.squeezedEyes, Props.eyesDown, Props.breath, Props.breathFading, Props.broom,
-                     Props.wideEyes, Props.exclamation, Props.thumbUp, Props.winkShut, Props.nightcap, Props.nightcapOtherWay, Props.teaMug]
+                     Props.wideEyes, Props.exclamation, Props.thumbUp, Props.winkShut, Props.nightcap, Props.nightcapOtherWay, Props.teaMug,
+                     Props.gradCap, Props.gradCapTucked, Props.gradCapEdge, Props.gradCapUnder, Props.diploma, Props.pot, Props.fire,
+                     Props.fireFlicker, Props.fireSmall, Props.spoonNear, Props.spoonMid, Props.spoonFar, Props.bubble, Props.droplet,
+                     Props.shadowWide, Props.shadowNarrow, Props.cut(3, 2)]
         #expect(Set(props.map(\.name)).count == props.count)
         for art in props {
             #expect(art.width > 0 && art.height > 0, "\(art.name)")
@@ -84,12 +87,15 @@ struct ClawdTests {
     @Test(.enabled(if: ClawdTests.hasSprites, "needs Claude.app"))
     func everyPastimeAndReactionHasItsFrames() {
         #expect(ClawdAnimator.pastimes.count >= 10)
-        #expect(Set(ClawdAnimator.reactions.keys) == [.idea, .excited, .facepalm, .celebrate, .hello, .arrive, .dizzy])
-        #expect(Set(ClawdAnimator.moodReactions.keys) == [.despair, .shrug, .sparkler, .rocket, .thanks, .flinch, .phew, .proud, .sweep, .surprise, .thumbs, .stretch])
-        let moods = [("compacting", ClawdAnimator.compacting), ("rate limit", ClawdAnimator.rateLimit), ("searching", ClawdAnimator.searching)].compactMap { name, pastime in
+        #expect(Set(ClawdAnimator.reactions.keys) == [.idea, .excited, .facepalm, .celebrate, .hello, .arrive, .dizzy, .peekaboo, .peek, .skip])
+        #expect(Set(ClawdAnimator.moodReactions.keys) == [.despair, .shrug, .sparkler, .rocket, .thanks, .flinch, .phew, .proud, .sweep, .surprise, .thumbs, .stretch,
+                                                          .coin, .sneeze, .graduate])
+        let moods = [("compacting", ClawdAnimator.compacting), ("rate limit", ClawdAnimator.rateLimit), ("searching", ClawdAnimator.searching),
+                     ("cooking", ClawdAnimator.cooking), ("pot out", ClawdAnimator.potOut), ("pot away", ClawdAnimator.potAway),
+                     ("foot tap", ClawdAnimator.footTap)].compactMap { name, pastime in
             pastime.map { (name, $0) }
         }
-        #expect(moods.count == 3)
+        #expect(moods.count == 7)
         let all = ClawdAnimator.pastimes.enumerated().map { ("pastime \($0.offset)", $0.element) }
             + ClawdAnimator.reactions.map { ("reaction \($0.key)", $0.value) }
             + ClawdAnimator.moodReactions.map { ("mood \($0.key)", $0.value) } + moods
@@ -110,17 +116,23 @@ struct ClawdTests {
         // Also compacting, after the rate limit, with the context nearly full, and late at night.
         let late = Calendar.current.date(bySettingHour: 2, minute: 0, second: 0, of: start)!
         for (phase, extra) in [(Phase.thinking, ""), (.tool, ""), (.waiting, ""), (.done, ""), (.stopped, ""), (.failed, ""),
-                               (.tool, "compacting"), (.failed, "rate limit"), (.tool, "full"), (.thinking, "full"), (.tool, "search")] {
-            for cue in [nil, Cue.celebrate, .facepalm, .despair, .rocket] {
+                               (.tool, "compacting"), (.failed, "rate limit"), (.tool, "full"), (.thinking, "full"), (.tool, "search"),
+                               (.tool, "build")] {
+            for cue in [nil, Cue.celebrate, .facepalm, .despair, .rocket, .coin, .sneeze, .graduate, .peek] {
                 let start = extra == "full" ? late : start
                 var s = Session(id: "s", turnStart: start, lastEvent: start)
                 s.syncMotion(at: start)
                 s.phase = phase
                 if extra == "compacting" { s.activity = .compacting }
                 if extra == "search" { s.activity = Describe.tool("Grep", ["pattern": "TODO"]) }
+                if extra == "build" { s.activity = Describe.tool("Bash", ["command": "swift build"]) }
                 if extra == "rate limit" { s.rateLimited = true }
                 if extra == "full" { s.contextTokens = 196_000 }
                 s.syncMotion(at: start)
+                if extra == "build" {
+                    s.syncMotion(at: start + 9)  // over 8 seconds: the pot comes out
+                    #expect(s.motion == .cooking)
+                }
                 if let cue { s.play(cue, at: start) }
                 let animator = ClawdAnimator(session: s, laptop: laptop, waving: waving)
                 for t in stride(from: 0.0, through: Store.restDuration + 10, by: 0.7) {

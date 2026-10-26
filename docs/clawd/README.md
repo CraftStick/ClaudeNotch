@@ -15,13 +15,17 @@ Clawd shows what Claude is doing, so you can tell at a glance.
 <td align="center" valign="top" width="25%"><img src="idea.gif" width="120" alt="A light bulb"><br><b>A light bulb</b><br><sub>A new task comes in</sub></td>
 <td align="center" valign="top" width="25%"><img src="typing.gif" width="120" alt="Types on his laptop"><br><b>Types on his laptop</b><br><sub>Claude is working</sub></td>
 <td align="center" valign="top" width="25%"><img src="thinking.gif" width="120" alt="Sits down to think"><br><b>Sits down to think</b><br><sub>No actions for 12+ seconds</sub></td>
-<td align="center" valign="top" width="25%"><img src="desktop.gif" width="120" alt="Moves to his computer"><br><b>Moves to his computer</b><br><sub>A command runs over 8 seconds</sub></td>
+<td align="center" valign="top" width="25%"><img src="desktop.gif" width="120" alt="Moves to his computer"><br><b>Moves to his computer</b><br><sub>Another command runs over 8 seconds</sub></td>
 </tr>
 <tr>
 <td align="center" valign="top" width="25%"><img src="running.gif" width="120" alt="Runs"><br><b>Runs</b><br><sub>Subagents at work, or a burst of actions</sub></td>
 <td align="center" valign="top" width="25%"><img src="searching.gif" width="120" alt="Turns detective"><br><b>Turns detective</b><br><sub>Searching code, files or the web</sub></td>
 <td align="center" valign="top" width="25%"><img src="compacting.gif" width="120" alt="Packs his papers away"><br><b>Packs his papers away</b><br><sub>The context is compacted</sub></td>
 <td align="center" valign="top" width="25%"><img src="sweating.gif" width="120" alt="Breaks a sweat"><br><b>Breaks a sweat</b><br><sub>The context is 85% full</sub></td>
+</tr>
+<tr>
+<td align="center" valign="top" width="25%"><img src="cooking.gif" width="120" alt="Stirs a pot"><br><b>Stirs a pot</b><br><sub>A build or an install runs over 8 seconds</sub></td>
+<td align="center" valign="top" width="25%"><img src="sneeze.gif" width="120" alt="Sneezes"><br><b>Sneezes</b><br><sub>The dust once the context is compacted</sub></td>
 </tr>
 </table>
 
@@ -35,6 +39,9 @@ When Claude needs an answer, a permission or a plan approved.
 <td align="center" valign="top" width="25%"><img src="looking-for-you.gif" width="120" alt="Looks around for you"><br><b>Looks around for you</b><br><sub>Waiting over a minute</sub></td>
 <td align="center" valign="top" width="25%"><img src="waiting-long.gif" width="120" alt="Sits down to wait"><br><b>Sits down to wait</b><br><sub>Waiting over five minutes</sub></td>
 <td align="center" valign="top" width="25%"><img src="thumbs.gif" width="120" alt="A thumb up and a wink"><br><b>A thumb up and a wink</b><br><sub>You allowed an action</sub></td>
+</tr>
+<tr>
+<td align="center" valign="top" width="25%"><img src="tapping.gif" width="120" alt="Taps his foot"><br><b>Taps his foot</b><br><sub>Waiting over a minute, between looks</sub></td>
 </tr>
 </table>
 
@@ -66,6 +73,9 @@ Short reactions play over whatever Clawd was doing.
 <td align="center" valign="top" width="25%"><img src="rocket.gif" width="120" alt="Launches a rocket"><br><b>Launches a rocket</b><br><sub>git push went through</sub></td>
 <td align="center" valign="top" width="25%"><img src="rate-limit.gif" width="120" alt="Waits by an hourglass"><br><b>Waits by an hourglass</b><br><sub>The rate limit was reached</sub></td>
 </tr>
+<tr>
+<td align="center" valign="top" width="25%"><img src="coin.gif" width="120" alt="Hops and spins round"><br><b>Hops and spins round</b><br><sub>git commit went through</sub></td>
+</tr>
 </table>
 
 ## End of a task
@@ -80,6 +90,7 @@ Short reactions play over whatever Clawd was doing.
 <tr>
 <td align="center" valign="top" width="25%"><img src="stopped.gif" width="120" alt="Turns to you and listens"><br><b>Turns to you and listens</b><br><sub>You stopped Claude with Esc</sub></td>
 <td align="center" valign="top" width="25%"><img src="error.gif" width="120" alt="Gets dizzy"><br><b>Gets dizzy</b><br><sub>An API error</sub></td>
+<td align="center" valign="top" width="25%"><img src="graduate.gif" width="120" alt="Graduates"><br><b>Graduates</b><br><sub>Every step of his plan done, three or more</sub></td>
 </tr>
 </table>
 
@@ -91,6 +102,18 @@ From midnight till 6 he works in a nightcap, taken from behind his back and put 
 <tr>
 <td align="center" valign="top" width="25%"><img src="nightcap.gif" width="120" alt="Puts on his nightcap"><br><b>Puts on his nightcap</b><br><sub>Work starts at night</sub></td>
 <td align="center" valign="top" width="25%"><img src="yawning.gif" width="120" alt="Yawns now and then"><br><b>Yawns now and then</b><br><sub>At work between 1 and 5</sub></td>
+</tr>
+</table>
+
+## Saying hi
+
+When the app opens (it opens as Claude Code starts), Clawd comes in and waves: with a hop, or one of these. Living in the notch for good, he comes back from a stroll these ways too.
+
+<table>
+<tr>
+<td align="center" valign="top" width="25%"><img src="peekaboo.gif" width="120" alt="Pops up through the floor"><br><b>Pops up through the floor</b></td>
+<td align="center" valign="top" width="25%"><img src="peek.gif" width="120" alt="Peeks in round the edge"><br><b>Peeks in round the edge</b></td>
+<td align="center" valign="top" width="25%"><img src="skip.gif" width="120" alt="Skips in"><br><b>Skips in</b></td>
 </tr>
 </table>
 

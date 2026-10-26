@@ -3,10 +3,12 @@ import Foundation
 // MARK: - Formatting
 
 enum Describe {
-    /// A command worth a cheer once it went through: a push gets a rocket, a test run a sparkler.
+    /// A command worth a cheer once it went through: a push gets a rocket, a commit a hop with a spin, a
+    /// test run a sparkler.
     static func cheer(for command: String) -> Cue? {
         func has(_ pattern: String) -> Bool { command.range(of: pattern, options: .regularExpression) != nil }
         if has(#"(^|[;&|(]\s*|\s)git(\s+-\S+(\s+(?!push\b)[^\s-]\S*)?)*\s+push\b"#) { return .rocket }  // also git -C dir push
+        if has(#"(^|[;&|(]\s*|\s)git(\s+-\S+(\s+(?!commit\b)[^\s-]\S*)?)*\s+commit\b"#) { return .coin }
         let tests = [#"\bswift\s+test\b"#, #"\b(npm|pnpm|yarn|bun)\s+(run\s+)?test\b"#, #"\bpytest\b"#, #"\bgo\s+test\b"#,
                      #"\bcargo\s+(test|nextest)\b"#, #"\bxcodebuild\b.*\btest\b"#, #"\b(jest|vitest|rspec|phpunit)\b"#,
                      #"\b(mvn|gradle|\./gradlew)\s+test\b"#, #"\bmake\s+(test|check)\b"#, #"\bpython3?\s+-m\s+(pytest|unittest)\b"#]
@@ -124,9 +126,11 @@ enum Describe {
 
         switch name {
         case "Bash":
-            let title = CommandKind.of(str("command"))?.title ?? tr("Выполняет команду", "Running a command")
-            return Activity(symbol: "terminal", title: title, detail: flat(str("command")),
-                            monospaced: true, note: oneLine(str("description")), command: true)
+            let kind = CommandKind.of(str("command"))
+            var activity = Activity(symbol: "terminal", title: kind?.title ?? tr("Выполняет команду", "Running a command"),
+                                    detail: flat(str("command")), monospaced: true, note: oneLine(str("description")), command: true)
+            activity.cooks = kind == .build || kind == .install
+            return activity
         case "BashOutput":
             return Activity(symbol: "terminal", title: tr("Смотрит вывод команды", "Reading command output"), detail: "")
         case "Read":

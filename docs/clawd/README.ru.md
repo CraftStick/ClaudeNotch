@@ -15,13 +15,17 @@ Clawd показывает, чем занят Claude, чтобы это было
 <td align="center" valign="top" width="25%"><img src="idea.gif" width="120" alt="Лампочка"><br><b>Лампочка</b><br><sub>Пришла новая задача</sub></td>
 <td align="center" valign="top" width="25%"><img src="typing.gif" width="120" alt="Печатает на ноутбуке"><br><b>Печатает на ноутбуке</b><br><sub>Claude работает</sub></td>
 <td align="center" valign="top" width="25%"><img src="thinking.gif" width="120" alt="Садится подумать"><br><b>Садится подумать</b><br><sub>12+ секунд без действий</sub></td>
-<td align="center" valign="top" width="25%"><img src="desktop.gif" width="120" alt="Пересаживается за компьютер"><br><b>Пересаживается за компьютер</b><br><sub>Команда идёт дольше 8 секунд</sub></td>
+<td align="center" valign="top" width="25%"><img src="desktop.gif" width="120" alt="Пересаживается за компьютер"><br><b>Пересаживается за компьютер</b><br><sub>Другая команда идёт дольше 8 секунд</sub></td>
 </tr>
 <tr>
 <td align="center" valign="top" width="25%"><img src="running.gif" width="120" alt="Бегает"><br><b>Бегает</b><br><sub>Работают субагенты или много действий подряд</sub></td>
 <td align="center" valign="top" width="25%"><img src="searching.gif" width="120" alt="Становится сыщиком"><br><b>Становится сыщиком</b><br><sub>Поиск по коду, файлам или в сети</sub></td>
 <td align="center" valign="top" width="25%"><img src="compacting.gif" width="120" alt="Складывает бумаги в коробку"><br><b>Складывает бумаги в коробку</b><br><sub>Сжатие контекста</sub></td>
 <td align="center" valign="top" width="25%"><img src="sweating.gif" width="120" alt="Потеет"><br><b>Потеет</b><br><sub>Контекст заполнен на 85%</sub></td>
+</tr>
+<tr>
+<td align="center" valign="top" width="25%"><img src="cooking.gif" width="120" alt="Помешивает в кастрюле"><br><b>Помешивает в кастрюле</b><br><sub>Сборка или установка идёт дольше 8 секунд</sub></td>
+<td align="center" valign="top" width="25%"><img src="sneeze.gif" width="120" alt="Чихает"><br><b>Чихает</b><br><sub>Пыль после сжатия контекста</sub></td>
 </tr>
 </table>
 
@@ -35,6 +39,9 @@ Clawd показывает, чем занят Claude, чтобы это было
 <td align="center" valign="top" width="25%"><img src="looking-for-you.gif" width="120" alt="Ищет тебя глазами"><br><b>Ищет тебя глазами</b><br><sub>Ждёт больше минуты</sub></td>
 <td align="center" valign="top" width="25%"><img src="waiting-long.gif" width="120" alt="Садится ждать"><br><b>Садится ждать</b><br><sub>Ждёт больше пяти минут</sub></td>
 <td align="center" valign="top" width="25%"><img src="thumbs.gif" width="120" alt="Палец вверх и подмигивает"><br><b>Палец вверх и подмигивает</b><br><sub>Ты разрешил действие</sub></td>
+</tr>
+<tr>
+<td align="center" valign="top" width="25%"><img src="tapping.gif" width="120" alt="Притопывает ногой"><br><b>Притопывает ногой</b><br><sub>Ждёт дольше минуты, между оглядываниями</sub></td>
 </tr>
 </table>
 
@@ -66,6 +73,9 @@ Clawd показывает, чем занят Claude, чтобы это было
 <td align="center" valign="top" width="25%"><img src="rocket.gif" width="120" alt="Запускает ракету"><br><b>Запускает ракету</b><br><sub>git push прошёл</sub></td>
 <td align="center" valign="top" width="25%"><img src="rate-limit.gif" width="120" alt="Ждёт у песочных часов"><br><b>Ждёт у песочных часов</b><br><sub>Лимит запросов</sub></td>
 </tr>
+<tr>
+<td align="center" valign="top" width="25%"><img src="coin.gif" width="120" alt="Прыгает с разворотом"><br><b>Прыгает с разворотом</b><br><sub>Прошёл git commit</sub></td>
+</tr>
 </table>
 
 ## Конец задачи
@@ -80,6 +90,7 @@ Clawd показывает, чем занят Claude, чтобы это было
 <tr>
 <td align="center" valign="top" width="25%"><img src="stopped.gif" width="120" alt="Поворачивается и слушает"><br><b>Поворачивается и слушает</b><br><sub>Ты остановил Claude через Esc</sub></td>
 <td align="center" valign="top" width="25%"><img src="error.gif" width="120" alt="Кружится голова"><br><b>Кружится голова</b><br><sub>Ошибка API</sub></td>
+<td align="center" valign="top" width="25%"><img src="graduate.gif" width="120" alt="Выпускается"><br><b>Выпускается</b><br><sub>Выполнены все шаги плана, от трёх</sub></td>
 </tr>
 </table>
 
@@ -91,6 +102,18 @@ Clawd показывает, чем занят Claude, чтобы это было
 <tr>
 <td align="center" valign="top" width="25%"><img src="nightcap.gif" width="120" alt="Надевает колпак"><br><b>Надевает колпак</b><br><sub>Работа началась ночью</sub></td>
 <td align="center" valign="top" width="25%"><img src="yawning.gif" width="120" alt="Иногда зевает"><br><b>Иногда зевает</b><br><sub>За работой с 1 до 5 ночи</sub></td>
+</tr>
+</table>
+
+## Приветствие
+
+Когда открывается приложение (а открывается оно вместе с Claude Code), Clawd заходит и машет: с прыжком или одним из этих способов. Когда он живёт в чёлке всегда, так же возвращается с прогулки.
+
+<table>
+<tr>
+<td align="center" valign="top" width="25%"><img src="peekaboo.gif" width="120" alt="Выныривает из-под пола"><br><b>Выныривает из-под пола</b></td>
+<td align="center" valign="top" width="25%"><img src="peek.gif" width="120" alt="Выглядывает из-за края"><br><b>Выглядывает из-за края</b></td>
+<td align="center" valign="top" width="25%"><img src="skip.gif" width="120" alt="Забегает вприпрыжку"><br><b>Забегает вприпрыжку</b></td>
 </tr>
 </table>
 

@@ -108,7 +108,7 @@ struct ClawdAnimator {
         if let cue = session.cue, let reaction = Self.reactions[cue] ?? Self.moodReactions[cue] {
             // Put the laptop away first (the hat, or the box, back behind him before that).
             let interrupted = session.cueInterrupted
-            let away = interrupted == .searching ? Self.hatOff : interrupted == .compacting ? Self.boxAway
+            let away = interrupted == .searching ? Self.hatOff : interrupted == .compacting ? Self.boxAway : interrupted == .cooking ? Self.potAway
                 : session.motion != interrupted ? restInterrupted(interrupted, at: session.cueStart) ?? handedOver(at: session.cueStart) : nil
             let putAway = exit(from: interrupted)
             // At night the nightcap goes on as work starts, after he's put away what he had; and comes off
@@ -143,6 +143,7 @@ struct ClawdAnimator {
         // What he had beside him or on his head goes back behind him before he turns back to you; and what
         // he had in his hands or on him when his rest was cut short.
         let putAway = previous == motion ? nil : previous == .compacting ? Self.boxAway : previous == .searching ? Self.hatOff
+            : previous == .cooking ? Self.potAway
             : t < 6 ? previous.flatMap { restInterrupted($0, at: session.motionStart) } ?? handedOver(at: session.motionStart)
             : nil  // (none takes that long)
         let (capOn, capOff) = previous.map { nightcap(from: $0, to: motion, at: session.motionStart) } ?? (nil, nil)
@@ -193,6 +194,15 @@ struct ClawdAnimator {
                 t -= out.duration
             }
             return box.frame(t.truncatingRemainder(dividingBy: box.duration))
+        case .cooking:
+            guard let stirring = Self.cooking else { return Frame(laptop, typingLoop.looped(at: t)) }
+            if previous != .cooking, let aside = Self.turnAside, let out = Self.potOut {
+                if t < aside.duration { return Frame(aside, at: t) }
+                t -= aside.duration
+                if t < out.duration { return out.frame(t) }
+                t -= out.duration
+            }
+            return stirring.frame(t.truncatingRemainder(dividingBy: stirring.duration))
         case .limited:
             // Also after a reaction (nil): a rate limit often comes while the light bulb is still up.
             if let hourglass = Self.rateLimit {
@@ -218,7 +228,7 @@ struct ClawdAnimator {
         switch motion {
         case .typing: return closeLaptop
         case .desktop: return ClawdAssets.desktop.map { Clip(sheet: $0, frames: 76...87, fps: 16) }
-        case .searching, .compacting: return Self.turnBack  // turned aside: back to you
+        case .searching, .compacting, .cooking: return Self.turnBack  // turned aside: back to you
         // Sitting with a thought bubble: the bubble shrinks away as he gets up and turns back to you.
         case .pondering: return ClawdAssets.thinking.map { Clip(sheet: $0, frames: [21, 20, 3, 0], fps: 10) }
         // Sat down after waiting five minutes for you: up again. Waving before that: nothing to undo.
@@ -230,7 +240,8 @@ struct ClawdAnimator {
 
     /// One-off reactions: an idea when a task comes in, joy when you allow something,
     /// a facepalm when a tool fails or you say no, confetti and a breakdance after a big task,
-    /// a hop and a wave when the app is opened, a parachute and a wave when he moves into the notch.
+    /// coming in with a wave when the app is opened (a hop, up through the floor, a peek round the edge or
+    /// skipping in), a parachute and a wave when he moves into the notch.
     /// Made once: Clawd's frame is worked out many times a second, and a session keeps its last cue
     /// long after it has played.
     static let reactions: [Cue: Pastime] = {
@@ -240,6 +251,9 @@ struct ClawdAnimator {
         let wave = clip(ClawdAssets.waving, 3...16, fps: 12)
         let all: [Cue: Pastime?] = [
             .hello: Pastime([ClawdAssets.jumping.map(hop), wave].compactMap { $0 }),
+            .peekaboo: Pastime.sequence([peekaboo, Pastime([wave].compactMap { $0 })]),
+            .peek: Pastime.sequence([peek, Pastime([wave].compactMap { $0 })]),
+            .skip: Pastime.sequence([skip, Pastime([wave].compactMap { $0 })]),
             // Poked too often: his head spins, stars in his eyes.
             .dizzy: Pastime([clip(ClawdAssets.dizzy, 0...40, fps: 12)].compactMap { $0 }),
             .arrive: Pastime.sequence([parachute, Pastime([wave].compactMap { $0 })]),
@@ -421,6 +435,10 @@ struct ClawdAnimator {
         }
         let stroll = walkOff == nil || walkBack == nil ? nil : Pastime.sequence([walkOff, away(5), walkBack])
         let skydive = walkOff == nil || parachute == nil ? nil : Pastime.sequence([walkOff, away(3), parachute])
+        // Or back up through the floor, peeking in round the edge first, or skipping.
+        let popUp = walkOff == nil || peekaboo == nil ? nil : Pastime.sequence([walkOff, away(3), peekaboo])
+        let peekIn = walkOff == nil || peek == nil ? nil : Pastime.sequence([walkOff, away(2), peek])
+        let skipIn = walkOff == nil || skip == nil ? nil : Pastime.sequence([walkOff, away(3), skip])
 
         // Props come out from behind his back and go back there: see "Props in his hands" below.
 
@@ -525,14 +543,14 @@ struct ClawdAnimator {
         return [pastime(clip(ClawdAssets.lookingAround, 4...30)), pastime(clip(ClawdAssets.swaying, 4...48)),
                 pastime(dance), pastime(dance, dance), hula, pastime(hop, hop),
                 pastime(clip(ClawdAssets.excited, 2...21, fps: 14)), breakdance, think, nap, stroll, skydive,
-                coffee, music, wizard, chef]
+                popUp, peekIn, skipIn, coffee, music, wizard, chef]
             .compactMap { $0 }
     }()
 
     // MARK: - The nightcap
 
     /// The motions he wears his nightcap in at night: at work, waiting for you, not under a deerstalker.
-    static let cappedMotions: Set<Motion> = [.typing, .pondering, .desktop, .running, .waving, .compacting]
+    static let cappedMotions: Set<Motion> = [.typing, .pondering, .desktop, .running, .waving, .compacting, .cooking]
 
     /// At night, going from `previous` to `motion` at `date`: putting the nightcap on as work starts after a
     /// rest, or taking it off as it ends.
@@ -581,7 +599,7 @@ struct ClawdAnimator {
     private static let carried: Set<String> = [
         "mug", "teaMug", "wand", "wizardHat", "wizardHatTucked", "chefHat", "headphones", "headphonesFolded", "pan",
         "pancakeFlat", "pancakeEdge", "book", "bookClosed", "bookOpening", "bookFront", "broom", "grassSkirt",
-        "grassSkirtFolded", "deerstalker", "magnifier",
+        "grassSkirtFolded", "deerstalker", "magnifier", "gradCap", "gradCapTucked", "gradCapEdge", "gradCapUnder", "diploma",
     ]
 
     /// Putting away what's in `frame`: up from under his book and the book off over his head, the grass

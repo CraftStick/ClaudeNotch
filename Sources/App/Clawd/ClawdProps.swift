@@ -621,4 +621,109 @@ enum Props {
         "...ssss..",
     ], ["r": 0xe2_cb_a3_ff, "o": 0xb8_6a_1c_ff, "w": 0xf6_e7_cc_ff, "s": 0xd2_b9_8f_ff, "h": 0xe2_cb_a3_ff,
         "t": 0xc8_c8_c0_ff, "T": 0x6a_9a_4a_ff])
+
+    // MARK: Graduating (Pointing frame 0)
+
+    private static let board: [Character: UInt32] = ["T": 0x62_66_72_ff, "B": 0x4a_4d_58_ff, "K": 0x34_36_3f_ff,
+                                                     "y": 0xf2_c1_4e_ff, "Y": 0xc8_93_2c_ff]
+
+    /// A mortarboard on top of his head, a little wider than it, its tassel hanging off the corner away from
+    /// you once mirrored: at (3, -1), its band resting on his head's top row.
+    static let gradCap = PixelArt("gradCap", [
+        "........TT........",
+        ".....TTTTTTTT.....",
+        "..TTTTTTTTTTTTTT..",
+        "BBBBBBBBBBBBBBBBBy",
+        "..BBKKKKKKKKKKBB.y",
+        "....KKKKKKKKKK...y",
+        ".................Y",
+    ], board)
+
+    /// The mortarboard tilted on its edge, narrow enough to be out of sight behind him: at (5, y).
+    static let gradCapTucked = PixelArt("gradCapTucked", [
+        "..TTTTTTTTTT..",
+        "BBBBBBBBBBBBBB",
+        "...KKKKKKKK...",
+    ], board)
+
+    /// Turning over in the air: edge on, then upside down.
+    static let gradCapEdge = PixelArt("gradCapEdge", [
+        "TTTTTTTTTTTTTTTTTT",
+        "BBBBBBBBBBBBBBBBBB",
+        "....KKKKKKKKKK....",
+    ], board)
+    static let gradCapUnder = PixelArt("gradCapUnder", [
+        "....KKKKKKKKKK....",
+        "..BBKKKKKKKKKKBB..",
+        "BBBBBBBBBBBBBBBBBB",
+        "..TTTTTTTTTTTTTT..",
+        ".....TTTTTTTT.....",
+        "........TT........",
+    ], board)
+
+    /// His diploma, rolled up and tied with a ribbon: held at the ribbon, at (0, -4) from his grip.
+    static let diploma = PixelArt("diploma", [
+        ".s.",
+        "sws",
+        "sws",
+        "sws",
+        "rrr",
+        "RrR",
+        "sws",
+        "sws",
+        "sws",
+        ".s.",
+    ], ["w": 0xf6_ee_d8_ff, "s": 0xd6_c8_a6_ff, "r": 0xd8_3a_3a_ff, "R": 0xa8_22_28_ff])
+
+    // MARK: Cooking (turned, Turning frame 8): a pot on a fire beside him, his near hand at x 22, y 5–8
+
+    /// A pot of soup: at (24, 9), its bottom row at y 14, over the fire.
+    static let pot = PixelArt("pot", [
+        ".RSSSSSSSSR.",
+        "HRRRRRRRRRRH",
+        ".PPPPPPPPPPD",
+        ".PPPPPPPPPPD",
+        ".PPPPPPPPPPD",
+        "..PPPPPPPPD.",
+    ], ["R": 0xa8_b0_bc_ff, "S": 0xe8_a8_4a_ff, "H": 0x8a_93_a0_ff, "P": 0x63_6d_7c_ff, "D": 0x4a_53_61_ff])
+
+    private static let flames: [Character: UInt32] = ["y": 0xff_e0_6a_ff, "o": 0xf5_9e_2b_ff, "r": 0xe2_4b_3a_ff]
+
+    /// The fire under the pot, flickering between the two: at (26, 15), on the ground. Small as it catches.
+    static let fire = PixelArt("fire", ["y..y..y.", "oror.oro"], flames)
+    static let fireFlicker = PixelArt("fireFlicker", [".y..y..y", "rorooror"], flames)
+    static let fireSmall = PixelArt("fireSmall", ["........", "..oyyo.."], flames)
+
+    /// The wooden spoon from his hand at (22, 5) into the soup at y 9, its end near, midway or far in the pot.
+    static let spoonNear = line("spoonNear", 5, 4, 0xc4_93_5e_ff)
+    static let spoonMid = line("spoonMid", 7, 4, 0xc4_93_5e_ff)
+    static let spoonFar = line("spoonFar", 9, 4, 0xc4_93_5e_ff)
+
+    /// A bubble coming up in the soup.
+    static let bubble = PixelArt("bubble", ["b"], ["b": 0xf8_d8_8a_ff])
+
+    // MARK: Odds and ends
+
+    /// A drop flying off in a sneeze.
+    static let droplet = PixelArt("droplet", ["d"], ["d": 0xbf_e3_ff_ff])
+
+    /// His shadow on the ground under him in a hop: wide, and narrower the higher he is.
+    static let shadowWide = PixelArt("shadowWide", ["ssssssssssss"], ["s": 0x4a_45_42_ff])
+    static let shadowNarrow = PixelArt("shadowNarrow", ["ssssssss"], ["s": 0x36_33_31_ff])
+
+    /// A rectangle to cut him away with: where he's below the floor or round the notch's edge, or a foot
+    /// he lifts.
+    static func cut(_ width: Int, _ height: Int) -> PixelArt {
+        PixelArt("cut\(width)x\(height)", Array(repeating: String(repeating: "x", count: width), count: height), ["x": 0xff_ff_ff_ff])
+    }
+
+    /// A straight line from the top-left corner `dx` across and `dy` down, a pixel thick.
+    private static func line(_ name: String, _ dx: Int, _ dy: Int, _ color: UInt32) -> PixelArt {
+        var rows = Array(repeating: Array(repeating: Character("."), count: dx + 1), count: dy + 1)
+        let steps = max(dx, dy)
+        for i in 0...steps {
+            rows[Int((Double(i * dy) / Double(steps)).rounded())][Int((Double(i * dx) / Double(steps)).rounded())] = "w"
+        }
+        return PixelArt(name, rows.map { String($0) }, ["w": color])
+    }
 }

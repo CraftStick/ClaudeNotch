@@ -367,6 +367,40 @@ struct StoreTests {
         #expect(session?.agents.first?.finished != nil)
     }
 
+    @Test func aCommitGetsAHopAndADonePlanAMortarboard() {
+        send("UserPromptSubmit", ["prompt": "Do the three things"])
+        send("PreToolUse", ["tool_name": "Bash", "tool_input": ["command": "git commit -m 'One'"]])
+        send("PostToolUse", ["tool_name": "Bash", "tool_input": ["command": "git commit -m 'One'"]])
+        #expect(session?.cue == .coin)
+        let todos: [[String: Any]] = ["One", "Two", "Three"].map { ["content": $0, "status": "completed"] }
+        send("PreToolUse", ["tool_name": "TodoWrite", "tool_input": ["todos": todos]])
+        send("PostToolUse", ["tool_name": "TodoWrite", "tool_input": ["todos": todos]])
+        send("Stop")
+        #expect(session?.cue == .graduate)  // every step of the plan done
+
+        send("UserPromptSubmit", ["prompt": "And this"])
+        send("Stop")
+        #expect(session?.cue != .graduate)  // no plan this time
+    }
+
+    @Test func compactingEndsInASneeze() {
+        send("UserPromptSubmit", ["prompt": "Go on"])
+        send("PreCompact")
+        #expect(session?.motion == .compacting)
+        send("PostCompact")
+        #expect(session?.cue == .sneeze)
+    }
+
+    @Test func clawdComesInToSayHi() {
+        var seen = Set<Cue>()
+        for _ in 0..<60 {
+            store.greet()
+            if let cue = store.greeting?.cue { seen.insert(cue) }
+        }
+        #expect(seen.isSubset(of: [.hello, .peekaboo, .peek, .skip]))
+        #expect(seen.count > 1)  // not the same way every time
+    }
+
     @Test func theEndOfASessionTakesItAway() {
         send("UserPromptSubmit", ["prompt": "Hi"])
         #expect(session != nil)

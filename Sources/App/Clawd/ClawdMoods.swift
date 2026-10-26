@@ -63,6 +63,52 @@ extension ClawdAnimator {
         Pastime(duration: 0.4) { t in turned(rate: 16, decals: [fromBehind(Decal(Props.boxShut, 25, 9), 1 - t / 0.4)])! }
     }
 
+    /// A build or an install running long: something's cooking. Turned to a pot on a fire beside him, he
+    /// stirs it with a wooden spoon, eyes on it, while it bubbles and steams; now and then he blinks. Loops.
+    static let cooking: Pastime? = ClawdAssets.turning.map { _ in
+        Pastime(duration: 2.4) { t in
+            let blink = t.truncatingRemainder(dividingBy: 2.4) > 2.25
+            return turned(rate: 12, decals: stirring(t) + [Decal(blink ? Props.closedEyesTurned : Props.eyesDownTurned, 9, 3)])!
+        }
+    }
+
+    /// The fire flickering, the pot on it, the spoon going round in it, a bubble coming up, steam curling
+    /// up from it: `t` seconds in.
+    private static func stirring(_ t: TimeInterval) -> [Decal] {
+        let spoons = [Props.spoonNear, Props.spoonMid, Props.spoonFar, Props.spoonMid]
+        var decals = [Decal(Int(t / 0.15) % 2 == 0 ? Props.fire : Props.fireFlicker, 26, 15), Decal(Props.pot, 24, 9),
+                      Decal(spoons[Int(t / 0.2) % spoons.count], 22, 5)]
+        let bubble = t.truncatingRemainder(dividingBy: 0.8)
+        if bubble < 0.3 { decals.append(Decal(Props.bubble, [27, 32, 29][Int(t / 0.8) % 3], bubble < 0.15 ? 9 : 8)) }
+        for i in 0..<3 {
+            let p = (t / 1.6 + Double(i) / 3).truncatingRemainder(dividingBy: 1)
+            let rise = Int(p * 7)
+            decals.append(Decal(p < 0.6 ? Props.steam : Props.steamFading, 28 + 2 * i + rise / 2 % 2, 7 - rise))
+        }
+        return decals
+    }
+
+    /// The pot and the spoon out from behind him once he's turned to them, and the fire catching under it;
+    /// and when it's done, the fire out in a puff and both back behind him.
+    static let potOut: Pastime? = ClawdAssets.turning.map { _ in
+        Pastime(duration: 0.8) { t in
+            let p = t / 0.4
+            var decals = [fromBehind(Decal(Props.pot, 24, 9), p), fromBehind(Decal(Props.spoonNear, 22, 5), p)]
+            if t >= 0.45 { decals.insert(t < 0.6 ? Decal(Props.spark, 29, 16) : Decal(Props.fireSmall, 26, 15), at: 0) }
+            return turned(rate: 16, decals: decals + [Decal(Props.eyesDownTurned, 9, 3)])!
+        }
+    }
+    static let potAway: Pastime? = ClawdAssets.turning.map { _ in
+        Pastime(duration: 0.7) { t in
+            guard t >= 0.3 else {
+                let smoke = t < 0.15 ? Decal(Props.puff, 29, 14) : Decal(Props.puffWide, 28, 13)
+                return turned(rate: 16, decals: [Decal(Props.pot, 24, 9), Decal(Props.spoonNear, 22, 5), smoke])!
+            }
+            let p = 1 - (t - 0.3) / 0.4
+            return turned(rate: 16, decals: [fromBehind(Decal(Props.pot, 24, 9), p), fromBehind(Decal(Props.spoonNear, 22, 5), p)])!
+        }
+    }
+
     /// A rate limit: he turns to an hourglass beside him, eyes on it, while its sand runs down; once it's
     /// all through he blinks and turns back to you.
     static let rateLimit: Pastime? = turnAside.flatMap { aside in turnBack.map { back in
@@ -127,8 +173,8 @@ extension ClawdAnimator {
         return Decal(Props.deerstalker, 2, lerp(-9, -6, smooth((p - 0.6) / 0.4)))
     }
 
-    /// Waiting for you a long while: after a minute he looks around for you between waves; after five
-    /// he sits down to wait, blinking. Nil while it's still just waving.
+    /// Waiting for you a long while: after a minute he looks around for you between waves, or taps his
+    /// foot; after five he sits down to wait, blinking. Nil while it's still just waving.
     static func waitingLong(_ t: TimeInterval) -> Frame? {
         if t >= 300, let sheet = ClawdAssets.meditating {
             let sitting = t - 300
@@ -140,9 +186,24 @@ extension ClawdAnimator {
         if t >= 60, let sheet = ClawdAssets.lookingAround {
             let look = Clip(sheet: sheet, frames: 4...30, fps: 12)
             let c = (t - 60).truncatingRemainder(dividingBy: 12)
-            if c < look.duration { return Frame(look, at: c) }
+            if Int((t - 60) / 12) % 2 == 1, let tap = footTap {
+                if c < tap.duration { return tap.frame(c) }
+            } else if c < look.duration {
+                return Frame(look, at: c)
+            }
         }
         return nil
+    }
+
+    /// Impatient: eyes up, then off to the side, he taps his front foot.
+    static let footTap: Pastime? = ClawdAssets.pointing.map { sheet in
+        Pastime(duration: 2.8) { t in
+            var decals = [t < 1.4 ? Decal(Props.eyesUp, 6, 7) : Decal(Props.eyesAsideNear, 5, 7)]
+            if t > 0.15, t < 2.6, t.truncatingRemainder(dividingBy: 0.35) < 0.15 {
+                decals.append(Decal(Props.cut(2, 2), 18, 19, .cut))  // the foot off the ground
+            }
+            return Frame(sheet, 0, rate: 12, decals: decals)
+        }
     }
 
     // MARK: Cues
@@ -326,6 +387,94 @@ extension ClawdAnimator {
                 return Frame(down, at: held - 1.6)
             }
         }
+        // The dust from compacting gets up his nose: eyes screwing up, he leans back as his arms rise, "ah…
+        // ah…", and sneezes with a jolt in a puff of spray; then shakes it off and blinks.
+        all[.sneeze] = ClawdAssets.pointing.map { sheet in
+            Pastime(duration: 2.7) { t in
+                if t < 0.1 { return Frame(sheet, 0, rate: 12) }
+                if t < 1.0 {
+                    let squeezing = t >= 0.45
+                    return Frame(sheet, t < 0.55 ? 0 : 6, rate: 12, offsetY: squeezing ? -1 : 0,
+                                 decals: [squeezing ? Decal(Props.squeezedEyes, 5, 6) : Decal(Props.closedEyes, 5, 7)])
+                }
+                if t < 1.5 {
+                    // The spray bursts out from his face to both sides, spreading and thinning out.
+                    let u = t - 1.0, spread = Int(u * 12)
+                    var decals = [Decal(Props.squeezedEyes, 5, 6)]
+                    if u < 0.12 { decals.append(Decal(Props.puff, 10, 10)) }
+                    if u < 0.4 {
+                        let cloud = u < 0.2 ? Props.puff : Props.puffWide
+                        decals += [Decal(cloud, 1 - cloud.width - spread, 7 + spread / 3), Decal(cloud, 23 + spread, 7 + spread / 3)]
+                    }
+                    let drops = [(-2 - 2 * spread, 5 + spread / 2), (25 + 2 * spread, 5 + spread / 2),
+                                 (-1 - 2 * spread, 11 + spread / 3), (24 + 2 * spread, 11 + spread / 3)]
+                    decals += drops.map { Decal(Props.droplet, $0.0, $0.1) }
+                    return Frame(sheet, u < 0.08 ? 16 : 0, rate: 16, offsetY: u < 0.3 ? 1 : 0, decals: decals)
+                }
+                let u = t - 1.5
+                if u < 0.6 { return Frame(sheet, 0, rate: 16, offsetX: Int(u * 16) % 2 == 0 ? 1 : -1, decals: [Decal(Props.closedEyes, 5, 7)]) }
+                return Frame(sheet, 0, rate: 12, decals: (0.85..<0.97).contains(u) ? [Decal(Props.closedEyes, 5, 7)] : [])
+            }
+        }
+        // A commit went through: he crouches, hops, turns round and round in the air over his shadow, and
+        // lands with a twinkle on either side.
+        all[.coin] = ClawdAssets.jumping.flatMap { jumping in ClawdAssets.turning.flatMap { turning in ClawdAssets.pointing.map { pointing in
+            let crouch = Clip(sheet: jumping, frames: [3, 4], fps: 14), land = Clip(sheet: jumping, frames: 13...17, fps: 14)
+            let air: TimeInterval = 0.75, high = 12.0
+            let spin = [0, 8, 20, 0, 8, 20, 0]  // facing you, one side, the other
+            let hop = Pastime(duration: air) { t in
+                let p = t / air
+                let lift = Int((high * 4 * p * (1 - p)).rounded())
+                let (sheet, index) = p < 0.2 || p > 0.85 ? (pointing, 8) : (turning, spin[min(spin.count - 1, Int((p - 0.2) / 0.65 * Double(spin.count)))])
+                let shadow = lift > 5 ? Props.shadowNarrow : Props.shadowWide
+                return Frame(sheet, index, rate: 16, offsetY: CGFloat(-lift),
+                             decals: [Decal(shadow, Int(sheet.anchor.x) - shadow.width / 2, Int(sheet.anchor.y) - 1 + lift, .behind)])
+            }
+            let landing = Pastime(duration: land.duration + 0.35) { t in
+                var frame = t < land.duration ? Frame(land, at: t) : Frame(jumping, 17, rate: 12)
+                if t > 0.1 {
+                    let big = Int(t * 8) % 2 == 0
+                    frame.decals = [Decal(big ? Props.bigSparkle : Props.sparkle, big ? 0 : 1, big ? 17 : 18),
+                                    Decal(big ? Props.sparkle : Props.bigSparkle, big ? 22 : 21, big ? 15 : 14)]
+                }
+                return frame
+            }
+            return Pastime.sequence([Pastime([crouch]), hop, landing])
+        } } }
+        // Every step of his plan done: he graduates. A mortarboard from behind his back onto his head, his
+        // diploma held out with a glint; then the cap goes up in the air, turning over, back into his hands
+        // and onto his head, and back behind him.
+        all[.graduate] = ClawdAssets.pointing.flatMap { sheet in
+            let cap = Props.gradCap, worn = Decal(cap, 3, -1)
+            let (capOn, capOff) = headgear(sheet, cap, x: 3, folded: (Props.gradCapTucked, 5), tucked: 16 - Props.gradCapTucked.height,
+                                           raising: 2 - cap.height, overhead: -cap.height, lowering: 1 - cap.height, worn: worn.y)
+            let diploma = [Decal(Props.diploma, 0, -4)]
+            let (scrollOut, scrollAway) = handHeld(sheet, diploma, wearing: [worn])
+            let present = holdOut(sheet, diploma, hat: worn, seconds: 1.4) { u in
+                let big = Int(u * 4) % 2 == 0
+                return moved(diploma, grip[24]!.x, grip[24]!.y) + [Decal(Props.happyEyes, 7, 7)]
+                    + (u > 0.2 ? [big ? Decal(Props.bigSparkle, 29, -1) : Decal(Props.sparkle, 30, 0)] : [])
+            }
+            // From his head up into his raised hands, thrown up turning over, caught and put back on.
+            let overhead = -cap.height
+            let turnings = [(cap, 0), (Props.gradCapEdge, 2), (Props.gradCapUnder, 0), (Props.gradCapEdge, 2)]
+            let toss = Pastime.sequence([
+                Pastime(duration: 0.12) { _ in Frame(sheet, 16, rate: 12, decals: [worn.moved(0, 1)]) },
+                Pastime(duration: 0.12) { _ in Frame(sheet, 15, rate: 12, decals: [Decal(cap, 3, 1 - cap.height)]) },
+                Pastime(duration: 0.15) { _ in Frame(sheet, 10, rate: 12, decals: [Decal(cap, 3, overhead)]) },
+                Pastime(duration: 0.9) { t in
+                    let p = t / 0.9
+                    let (art, dy) = turnings[Int(p * 8) % turnings.count]
+                    let y = overhead - Int((14 * 4 * p * (1 - p)).rounded())
+                    return Frame(sheet, 10, rate: 16, decals: [Decal(art, 3, y + dy), Decal(Props.eyesUp, 6, 7)])
+                },
+                Pastime(duration: 0.2) { _ in Frame(sheet, 10, rate: 12, decals: [Decal(cap, 3, overhead), Decal(Props.happyEyes, 5, 7)]) },
+                Pastime(duration: 0.12) { _ in Frame(sheet, 15, rate: 12, decals: [Decal(cap, 3, 1 - cap.height)]) },
+                Pastime(duration: 0.12) { _ in Frame(sheet, 16, rate: 12, decals: [worn.moved(0, 1)]) },
+                Pastime(duration: 0.4) { _ in Frame(sheet, 0, rate: 4, decals: [worn, Decal(Props.happyEyes, 5, 7)]) },
+            ])
+            return Pastime.sequence([capOn, scrollOut, present, scrollAway, toss, capOff])
+        }
         return all.compactMapValues { $0 }
     }()
 
@@ -348,7 +497,7 @@ extension ClawdAnimator {
             let cap = session.motion == .pondering ? Props.nightcapOtherWay : Props.nightcap
             frame.decals.append(Decal(cap, head.x, head.y - cap.height + 1))
         }
-        guard session.phase.isActive, [.typing, .pondering, .desktop, .running, .searching].contains(session.motion) else { return frame }
+        guard session.phase.isActive, [.typing, .pondering, .desktop, .running, .searching, .cooking].contains(session.motion) else { return frame }
         let t = date.timeIntervalSince(session.motionStart)
         let full = session.contextWindow > 0 ? Double(session.contextTokens) / Double(session.contextWindow) : 0
         if full >= 0.85, let head = Self.head(frame.sheet, frame.index) {
