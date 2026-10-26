@@ -3,7 +3,7 @@ import Foundation
 /// Claude Code sessions that are open, from the list Claude Code keeps of them: a
 /// `~/.claude/sessions/<pid>.json` for each one running. Hooks only tell about a session once something
 /// happens in it, so one opened and left waiting for a task, or one that finished a while ago, is found
-/// here. Only read, and only when the card opens: nothing runs for it in between.
+/// here. Read when the card opens, and by `ClaudeCodeWatcher` when sessions come and go.
 enum SessionRegistry {
     struct Open: Equatable {
         var id: String
@@ -20,35 +20,45 @@ enum SessionRegistry {
     /// The sessions whose process still runs and which aren't at work: Claude Code says "idle" for
     /// those. One at work tells about itself through the hooks.
     static func open(in dir: String = dir) -> [Open] {
-        let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
+        (records(in: dir) ?? []).compactMap { json, pid in
+            guard let id = json["sessionId"] as? String, !id.isEmpty,
+                  (json["status"] as? String ?? "idle") == "idle" else { return nil }
+            let started = startedAt(json)
+            guard isRunning(pid, since: started) else { return nil }
+            return Open(id: id, cwd: json["cwd"] as? String ?? "", name: json["name"] as? String ?? "",
+                        entrypoint: json["entrypoint"] as? String ?? "", started: started)
+        }
+    }
+
+    /// The processes of the sessions that run now, at work or not; nil when there's no list to tell from
+    /// (Claude Code has never run, or is from before it kept one).
+    static func running(in dir: String = dir) -> [pid_t]? {
+        records(in: dir)?.compactMap { json, pid in isRunning(pid, since: startedAt(json)) ? pid : nil }
+    }
+
+    /// Each session file with the process it names.
+    private static func records(in dir: String) -> [(json: [String: Any], pid: pid_t)]? {
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return nil }
         return files.filter { $0.hasSuffix(".json") }.compactMap { file in
             guard let data = FileManager.default.contents(atPath: dir + "/" + file),
                   let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  let id = json["sessionId"] as? String, !id.isEmpty,
-                  let pid = (json["pid"] as? NSNumber)?.int32Value, isRunning(pid),
-                  (json["status"] as? String ?? "idle") == "idle"
-            else { return nil }
-            return Open(id: id, cwd: json["cwd"] as? String ?? "", name: json["name"] as? String ?? "",
-                        entrypoint: json["entrypoint"] as? String ?? "",
-                        started: (json["startedAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) })
+                  let pid = (json["pid"] as? NSNumber)?.int32Value else { return nil }
+            return (json, pid)
         }
     }
 
-    /// The session's Claude Code quit without a word (killed, or crashed): every file with its id names a
-    /// process that's gone. False while one runs, and when there's no file to tell.
-    static func isGone(_ sessionID: String, in dir: String = dir) -> Bool {
-        let files = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
-        let pids = files.filter { $0.hasSuffix(".json") }.compactMap { file -> pid_t? in
-            guard let data = FileManager.default.contents(atPath: dir + "/" + file),
-                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  json["sessionId"] as? String == sessionID else { return nil }
-            return (json["pid"] as? NSNumber)?.int32Value
-        }
-        return !pids.isEmpty && !pids.contains(where: isRunning)
+    private static func startedAt(_ json: [String: Any]) -> Date? {
+        (json["startedAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) }
     }
 
-    /// The process is there, ours or not: a file left behind by a crash names one that's gone.
-    private static func isRunning(_ pid: pid_t) -> Bool {
-        pid > 0 && (kill(pid, 0) == 0 || errno == EPERM)
+    /// The process is there, ours or not, and is the one the file was written for: a file left behind by
+    /// a crash names one that's gone, or by now another process that was given its number, which started
+    /// after the session did.
+    private static func isRunning(_ pid: pid_t, since started: Date?) -> Bool {
+        guard pid > 0, kill(pid, 0) == 0 || errno == EPERM else { return false }
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard let started, proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return true }
+        return TimeInterval(info.pbi_start_tvsec) <= started.timeIntervalSince1970 + 1
     }
 }

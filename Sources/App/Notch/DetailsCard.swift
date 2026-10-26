@@ -13,13 +13,6 @@ enum DetailsLayout {
     static let maxAgentRows = 3
     static let maxHistoryRows = 3
     static let maxOtherRows = 3
-    /// The buttons that answer a finished turn.
-    static let replies: CGFloat = 26
-
-    /// A finished turn in a session a reply can be typed into gets buttons for it.
-    static func showsReplies(_ s: Session) -> Bool {
-        !s.phase.isActive && !s.isApp && !s.waitingForTask && QuickReply.supports(s)
-    }
     /// The current step's line and the progress bar under it.
     static let plan: CGFloat = line + 5 + 3
     /// The row of answers to a question, with a little room above it.
@@ -50,7 +43,6 @@ enum DetailsLayout {
         let task = taskLines(s)
         if task > 0 { sections.append(caption + captionGap + CGFloat(task) * line) }
         sections.append(caption + captionGap + nowHeight(DetailsCard.now(s)))
-        if showsReplies(s) { sections.append(replies) }
         if !s.tasks.isEmpty { sections.append(caption + captionGap + plan) }
         list(agentRows(s))
         list(min(s.history.count, maxHistoryRows))
@@ -81,15 +73,6 @@ struct DetailsCard: View {
     let others: [Session]
     /// Another session was clicked: show it in the card.
     let pick: (String) -> Void
-    /// A button under a finished turn: type this into the session.
-    let reply: (String) -> Void
-
-    /// What a finished turn can be answered with in one click: what Claude offered, or else Continue and Commit.
-    static func replies(for s: Session) -> [Reply] {
-        guard s.replies.isEmpty else { return Array(s.replies.prefix(3)) }
-        return [Reply(label: tr("Продолжай", "Continue"), text: tr("Продолжай", "Continue")),
-                Reply(label: tr("Закоммить", "Commit"), text: tr("Закоммить изменения", "Commit the changes"))]
-    }
 
     /// Between tools Claude is thinking; the last tool has already moved to the history. Unless it
     /// failed: that stays until Claude writes its next thought.
@@ -112,15 +95,6 @@ struct DetailsCard: View {
             // Ticks slowly, for "quiet for 6 min".
             TimelineView(.periodic(from: .now, by: 20)) { context in
                 section(nowCaption(at: context.date)) { NowRow(activity: Self.now(session), phase: session.phase) }
-            }
-            if DetailsLayout.showsReplies(session) {
-                HStack(spacing: 6) {
-                    ForEach(Self.replies(for: session), id: \.label) { r in
-                        Button { reply(r.text) } label: { Text(r.label).lineLimit(1) }
-                            .buttonStyle(NotchButtonStyle(kind: .secondary))
-                    }
-                }
-                .frame(height: DetailsLayout.replies)
             }
             if !session.tasks.isEmpty {
                 section(planCaption) { PlanRow(tasks: session.tasks) }

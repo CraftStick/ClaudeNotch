@@ -128,10 +128,44 @@ struct StoreTests {
         #expect(store.others(than: "s1").map(\.id) == ["open"])
         #expect(store.working.map(\.id) == ["s1"])  // the notch itself doesn't show it
 
-        // A quick reply isn't typed into a session whose Claude Code is gone: its tab holds a shell now.
-        #expect(SessionRegistry.isGone("gone", in: dir))
-        #expect(!SessionRegistry.isGone("open", in: dir))
-        #expect(!SessionRegistry.isGone("never-seen", in: dir))
+        // Claude Code runs while any of them does, at work or not.
+        #expect(SessionRegistry.running(in: dir)?.count == 3)
+        #expect(SessionRegistry.running(in: dir + "/none") == nil)  // no list: can't tell
+    }
+
+    @Test func aFileLeftByACrashDoesNotCountOnceItsNumberIsTaken() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("notch-sessions-\(UUID())").path
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        // This process started long after 2001: it isn't the one that session ran in.
+        let json: [String: Any] = ["pid": Int(getpid()), "sessionId": "old", "cwd": "/tmp/old", "status": "idle",
+                                   "startedAt": 1_000_000_000_000]
+        try JSONSerialization.data(withJSONObject: json).write(to: URL(fileURLWithPath: dir + "/1.json"))
+        #expect(SessionRegistry.running(in: dir) == [])
+        #expect(SessionRegistry.open(in: dir).isEmpty)
+    }
+
+    @Test func withClaudeCodeGoneTheAppKeepsOutOfSight() {
+        send("UserPromptSubmit", ["prompt": "Hi"])
+        let hook = send("PermissionRequest", ["tool_name": "Bash", "tool_input": ["command": "ls"]])
+        #expect(store.shown)
+        store.claudeCode(running: false)  // killed: no SessionEnd
+        #expect(session == nil)
+        #expect(store.prompts.isEmpty)
+        #expect(hook.decision() == nil)  // let go, back to Claude Code (gone anyway)
+        #expect(!store.shown)
+        #expect(store.mode == .hidden)
+        store.show(notice: Activity(symbol: "hourglass", title: "Limit reached", detail: ""), limited: true)
+        #expect(store.notice == nil)  // Telegram tells it
+
+        store.greet()  // opened by hand: Clawd says hi, icon and all
+        #expect(store.shown)
+        store.claudeCode(running: true)
+        send("UserPromptSubmit", ["prompt": "Again"])
+        #expect(store.mode != .hidden)
+        store.claudeCode(running: false)  // quit again: the greeting goes with the rest
+        #expect(store.greeting == nil)
+        #expect(!store.shown)
     }
 
     @Test func aQuestionIsAnsweredFromTheNotch() throws {

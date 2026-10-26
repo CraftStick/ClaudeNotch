@@ -58,6 +58,7 @@ cd ~/ClaudeNotch && ./install.sh
 ## What it does
 
 - **Status in the notch.** Clawd on the left, the task's time on the right, a counter when several sessions are at work. The notch opens for what matters: a new task, a failure, Claude waiting for you, done.
+- **Only while Claude Code runs.** When the last Claude Code session quits, in a terminal, an editor or the Claude app, the notch empties and Clawd's menu bar icon goes too; they're back with the next session. To get to the menu meanwhile, open Claude Notch again.
 - **Details on hover.** The task, what Claude is doing and why, its plan, subagents, recent actions, tokens and context, other sessions. A click brings forward the terminal tab or app the session runs in.
 - **Answers from the notch.** Allow or deny a permission request (⌃⌥⌘Y / ⌃⌥⌘N, or **Always**), and pick the answers to Claude's questions (⌃⌥⌘1…4).
 - **Clawd.** He types while Claude works, thinks, waves when it needs you, hops when it's done and dozes while he rests; he turns detective while Claude searches, packs papers into a box while it compacts and launches a rocket after a push. With **Clawd stays in the notch** on, he lives there for good, with pastimes of his own. [All his animations →](docs/clawd/README.md)
@@ -90,7 +91,7 @@ He lives in the notch and reacts to everything Claude does, more than 40 animati
 
 ## How it works
 
-Claude Code runs a tiny hook on every event, which hands it to the app over a local socket and, for a permission request or a question, hands your answer back. The app also reads the session files in `~/.claude/projects`, to notice Esc and count tokens.
+Claude Code runs a tiny hook on every event, which hands it to the app over a local socket and, for a permission request or a question, hands your answer back. The app also reads the session files in `~/.claude/projects`, to notice Esc and count tokens, and watches Claude Code's list of running sessions in `~/.claude/sessions`, to know when it quits.
 
 Everything about Claude's work stays on your Mac. The app goes online for three things only. To watch the plan's limits it asks api.anthropic.com, signed in as Claude Code (renewing its login when it has gone stale, as Claude Code itself does), every few minutes while Claude works and every 10 minutes otherwise, as chats and other devices spend the limits too (switch it off in the settings). Telegram messages, if you link the bot, go through Claude Notch's own [server](Server/), which keeps only your chat. And a check for updates on GitHub once a day, if you switch it on. While the notch can't be seen (the display asleep, the screen locked), the app wakes up only for that look at the limits; while Claude works, it takes about 1–2% of one core.
 

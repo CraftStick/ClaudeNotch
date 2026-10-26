@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let updates = Updates()
     private let limits = PlanLimits()
     private let telegram = Telegram()
+    private let claudeCode = ClaudeCodeWatcher()
     private lazy var questions = TelegramQuestions(store: store, telegram: telegram)
     /// When a limit was last told from a turn that hit it, rather than from the limits themselves.
     private var lastLimitNotice = Date.distantPast
@@ -93,11 +94,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSApp.terminate(nil)
             return
         }
+        let atLogin = Self.launchedAtLogin
+        claudeCode.onChange = { [weak self] running in self?.store.claudeCode(running: running) }
+        claudeCode.start()
+        store.claudeCode(running: claudeCode.running)
 
-        let server = SocketServer(path: Paths.socket) { [store] data, reply in
+        let server = SocketServer(path: Paths.socket) { [store, claudeCode] data, reply in
             // Parsed here, off the main thread: a payload can carry megabytes of tool output.
             let json = Store.prepare((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])
-            DispatchQueue.main.async { store.handle(json, reply: reply) }
+            DispatchQueue.main.async {
+                claudeCode.seen()
+                store.handle(json, reply: reply)
+            }
         }
         do {
             try server.start()
@@ -130,6 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async {  // after the change
                 self.changePending = false
                 self.notchChanged = true
+                self.syncShown()
                 self.updatePointerTracking()
                 // The notch changed under a pointer that may not move: is it still over it?
                 if self.followingMouse, self.store.mode != .hidden, self.store.onScreen { self.trackPointer() }
@@ -141,19 +150,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NotificationCenter.default.addObserver(
             self, selector: #selector(layoutPanel),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
-        // Sessions already under way show up at once; with none, Clawd says hi. Clawd's sprites are read
-        // from Claude.app here too, off the main thread, rather than on the first event.
+        // Sessions already under way show up at once; with none, Clawd says hi. Opened at login with no
+        // Claude Code about, the app keeps out of sight instead. Clawd's sprites are read from Claude.app
+        // here too, off the main thread, rather than on the first event.
         DispatchQueue.global(qos: .userInitiated).async { [store] in
             _ = ClawdAssets.laptop
             let running = TranscriptWatcher.running()
             DispatchQueue.main.async {
-                store.adopt(running)
-                store.greet()
+                if store.claudeCodeRuns { store.adopt(running) }
+                if store.claudeCodeRuns || !atLogin { store.greet() }
             }
         }
     }
 
-    /// Opened again while running (Finder, Spotlight, Launchpad): there's no window to show, so the notch says hi.
+    /// Started by macOS at login, rather than by you or by Claude Code's hook. Only told while the launch's
+    /// own event is current, in `applicationDidFinishLaunching`.
+    private static var launchedAtLogin: Bool {
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        return event?.eventID == kAEOpenApplication
+            && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
+    }
+
+    /// Opened again while running (Finder, Spotlight, Launchpad): there's no window to show, so the notch
+    /// says hi; with no Claude Code about, the menu bar icon comes back with him for as long as he stays.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         store.greet()
         return false
@@ -175,7 +194,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hosting.sizingOptions = []
         panel.contentView = hosting
         resizePanel()
-        panel.orderFrontRegardless()
+        if store.shown { panel.orderFrontRegardless() }
+    }
+
+    /// In sight while Claude Code runs, or while Clawd greets you: the notch and the menu bar icon come
+    /// and go together. Out of sight, the panel's covered and the store's clock stops.
+    private func syncShown() {
+        let shown = store.shown
+        if statusItem?.isVisible != shown { statusItem?.isVisible = shown }
+        guard shown != panel.isVisible else { return }
+        EventLog.append(shown ? "App in sight" : "App out of sight")
+        if shown { panel.orderFrontRegardless() } else { panel.orderOut(nil) }
     }
 
     /// Big enough for the hover card; only as big as the permission card and its glow while that one
@@ -396,6 +425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = ClawdSprite.menuBarImage()
         item.button?.toolTip = "Claude Notch"
+        item.isVisible = store.shown
         statusItem = item
         buildMenu()
     }

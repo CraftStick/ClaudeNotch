@@ -133,14 +133,12 @@ enum AppFocus {
 
     /// Opens a session that runs in the Claude app at that very session, not just the app; `otherwise`
     /// runs when the app keeps no record of it. Looked up off the main thread: it reads a file per session.
-    /// `opened` runs once it was asked to open that session.
-    static func openInClaudeApp(_ sessionID: String, opened: (() -> Void)? = nil, otherwise: @escaping () -> Void) {
+    static func openInClaudeApp(_ sessionID: String, otherwise: @escaping () -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             let local = claudeAppSession(for: sessionID)
             DispatchQueue.main.async {
                 guard let local, let url = URL(string: "claude://code/continue?session=\(local)") else { return otherwise() }
                 NSWorkspace.shared.open(url, configuration: activating)
-                opened?()
             }
         }
     }

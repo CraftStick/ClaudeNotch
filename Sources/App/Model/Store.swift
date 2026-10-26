@@ -37,6 +37,10 @@ final class Store: ObservableObject {
     /// ran out (Clawd by his hourglass) or is back.
     @Published private(set) var notice: Session?
     static let noticeID = "notice"
+    /// Claude Code runs on the Mac, as `ClaudeCodeWatcher` tells. Without it the notch is empty and the
+    /// app keeps out of sight, menu bar icon and all, but for the greeting when you open it yourself.
+    @Published private(set) var claudeCodeRuns = true
+    var shown: Bool { claudeCodeRuns || greeting != nil }
     /// What happened that you may want to hear about away from the Mac, in Telegram.
     enum News { case done(Session), waiting(Session), failed(Session) }
     var onNews: (News) -> Void = { _ in }
@@ -166,6 +170,7 @@ final class Store: ObservableObject {
     }
 
     var mode: DisplayMode {
+        guard shown else { return .hidden }
         if prompt != nil { return .permission }
         if hovering, detailsSession != nil { return .details }
         if expanded, let id = focusID, sessions[id] != nil || (id == Self.noticeID && notice != nil) { return .expanded }
@@ -225,11 +230,25 @@ final class Store: ObservableObject {
         }
     }
 
-    /// A button under a finished turn: types `text` into the session, as if you had.
-    func reply(_ id: String, _ text: String) {
-        guard let s = sessions[id], !s.phase.isActive else { return }
+    /// The last Claude Code on the Mac quit, or the first one started. Gone, its sessions are over whether
+    /// they said goodbye or not (killed, it says nothing), and no hook waits for an answer any more.
+    func claudeCode(running: Bool) {
+        guard running != claudeCodeRuns else { return }
+        claudeCodeRuns = running
+        guard !running else { return }
+        let stale = prompts
+        prompts = []
+        stale.forEach { $0.reply.send(nil) }
+        for id in sessions.keys { transcripts.stop(sessionID: id) }
+        sessions = [:]
+        idle = []
+        greeting = nil
+        notice = nil
+        pickedID = nil
+        hoverWork?.cancel()
+        hoverWork = nil
         hovering = false
-        QuickReply.send(text, to: s)
+        collapse()
     }
 
     /// When you last gave Claude a task, in any session.
@@ -334,6 +353,7 @@ final class Store: ObservableObject {
     /// Opens the notch on a word from the app for `seconds`, over whatever it shows unless Claude asks
     /// you something. `limited`: Clawd turns to his hourglass; otherwise he hops.
     func show(notice activity: Activity, limited: Bool, for seconds: TimeInterval = 8) {
+        guard shown else { return }  // Claude Code is closed: Telegram, if linked, tells it
         let now = Date()
         var n = Session(id: Self.noticeID, turnStart: now, lastEvent: now)
         n.phase = limited ? .failed : .done
@@ -509,7 +529,6 @@ final class Store: ObservableObject {
             }
             s.actions += 1
             if TaskList.handles(toolName) { s.tasks.apply(toolName, toolInput, useID: json["tool_use_id"] as? String) }
-            if let replies = Describe.replies(toolName, toolInput) { s.replies = replies }
             let previousTool = s.recentTools.last ?? .distantPast
             s.recentTools = Array((s.recentTools + [now]).suffix(8))
             if toolName == "Task" || toolName == "Agent" {
@@ -1034,7 +1053,7 @@ final class Store: ObservableObject {
             prune()
         }
         if Self.alive {
-            if greeting == nil { greeting = Self.makeGreeting(at: now, cue: .arrive) }
+            if greeting == nil, claudeCodeRuns { greeting = Self.makeGreeting(at: now, cue: .arrive) }
         } else if let g = greeting, now.timeIntervalSince(g.lastEvent) > Self.restDuration {
             greeting = nil
         }
