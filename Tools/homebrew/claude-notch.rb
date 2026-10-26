@@ -3,7 +3,7 @@
 # sha256 (shasum -a 256 build/ClaudeNotch-<version>-<build>.dmg).
 cask "claude-notch" do
   version "0.2.4,32"
-  sha256 "b028b2ec0c9b26dd5db237681a71dbd44d83d7cb471596cb8b162b38ca566496"
+  sha256 "bab3c32cb125352545ba70ebe7d872a32491c83d2bf6c0ad4cf5b04e153e9162"
 
   url "https://github.com/CraftStick/ClaudeNotch/releases/download/v#{version.csv.first}/ClaudeNotch-#{version.csv.first}-#{version.csv.second}.dmg"
   name "Claude Notch"
