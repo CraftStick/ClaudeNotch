@@ -2,7 +2,7 @@
 
 **English** · [Русский](README.ru.md)
 
-<img src="docs/icon.png" width="128" alt="Claude Notch icon: pixel Clawd on a dark tile">
+<img src="docs/icon.png" width="128" alt="Claude Notch icon: pixel Clawd behind his open laptop on a cream tile">
 
 # Claude Notch
 

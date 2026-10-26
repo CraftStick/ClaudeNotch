@@ -2,7 +2,7 @@
 
 [English](README.md) · **Русский**
 
-<img src="docs/icon.png" width="128" alt="Иконка Claude Notch: пиксельный Clawd на тёмной плитке">
+<img src="docs/icon.png" width="128" alt="Иконка Claude Notch: пиксельный Clawd за открытым ноутбуком на кремовой плитке">
 
 # Claude Notch
 
