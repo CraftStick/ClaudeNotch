@@ -1,10 +1,10 @@
+# Claude Notch
+
+[English](README.md) · [Русский](README.ru.md)
+
 <div align="center">
 
-**English** · [Русский](README.ru.md)
-
 <img src="docs/icon.png" width="128" alt="Claude Notch icon: pixel Clawd behind his open laptop on a cream tile">
-
-# Claude Notch
 
 **[Claude Code](https://claude.com/claude-code) in your MacBook's notch, like the Dynamic Island on an iPhone.**<br>
 See what Claude is doing, how long it's been at it and when it needs you, and answer it right there.<br>
@@ -110,7 +110,3 @@ Have an idea for what to add, or found something that doesn't work? [Open an iss
 Clawd is Anthropic's character, and his sprites aren't in this repository: the app reads them from the Claude app on your Mac, and draws a simpler Clawd if it isn't there. This project isn't affiliated with or endorsed by Anthropic.
 
 [PolyForm Strict License 1.0.0](LICENSE), for every version, 0.1.0 to 0.2.5 included: you may use Claude Notch for any noncommercial purpose and share unchanged copies of it for free, but not make changes or new works based on it.
-
----
-
-⭐ If Claude Notch makes your day with Claude Code a little nicer, [give it a star](https://github.com/CraftStick/ClaudeNotch): it's made by one person, and every star helps others find it.
