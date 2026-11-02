@@ -18,6 +18,15 @@ struct PlanLimitsTests {
         #expect(PlanLimit.parse(Data(#"{"error":"nope"}"#.utf8)) == nil)
     }
 
+    @Test func relayedLimitsCountOnlyWhileFresh() throws {
+        let path = NSTemporaryDirectory() + "limits-\(UUID().uuidString).json"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        #expect(PlanLimits.relayed(path: path) == nil)
+        try Data(#"{"five_hour":{"utilization":63.0,"resets_at":"2026-11-02T01:40:00+00:00"}}"#.utf8).write(to: URL(fileURLWithPath: path))
+        #expect(PlanLimits.relayed(path: path)?.map(\.used) == [63])
+        #expect(PlanLimits.relayed(path: path, now: Date().addingTimeInterval(PlanLimits.relayedFor + 1)) == nil)
+    }
+
     @Test func resetTextSaysHowLongWithinADay() {
         let now = Date(timeIntervalSince1970: 0)
         let limit = PlanLimit(kind: .session, used: 100, resets: now.addingTimeInterval(4 * 3600 + 50 * 60 + 30))

@@ -44,15 +44,25 @@ enum ClawdAssets {
         sheets[name].flatMap { $0.frames.count >= frames ? $0 : nil }
     }
 
-    /// Every sheet in the bundle, by name. Read once, whichever thread asks first.
+    /// Every sheet in the bundle, by name. Read once, whichever thread asks first. The bundle is kept
+    /// in `Paths.clawdEngine` once read, so Clawd stays himself after Claude.app is gone.
     private static let sheets: [String: PixelSheet] = {
-        guard let source = engineSource() else {
-            EventLog.append("Clawd sprites: Claude.app not found, using the drawn Clawd")
-            return [:]
+        func names(_ sheets: [String: PixelSheet]) -> String {
+            sheets.map { "\($0.key) (\($0.value.frames.count))" }.sorted().joined(separator: ", ")
         }
-        let result = parse(source)
-        EventLog.append("Clawd sprites from Claude.app: " + result.map { "\($0.key) (\($0.value.frames.count))" }.sorted().joined(separator: ", "))
-        return result
+        if let source = engineSource() {
+            let result = parse(source)
+            if !result.isEmpty { try? source.write(toFile: Paths.clawdEngine, atomically: true, encoding: .utf8) }
+            EventLog.append("Clawd sprites from Claude.app: " + names(result))
+            return result
+        }
+        if let kept = try? String(contentsOfFile: Paths.clawdEngine, encoding: .utf8) {
+            let result = parse(kept)
+            EventLog.append("Clawd sprites from the kept copy: " + names(result))
+            return result
+        }
+        EventLog.append("Clawd sprites: Claude.app not found, using the drawn Clawd")
+        return [:]
     }()
 
     // MARK: - app.asar

@@ -136,6 +136,10 @@ final class PlanLimits: ObservableObject {
     /// out stale anyway. Off the main thread.
     private static func fetch() -> [PlanLimit]? {
         guard var login = ClaudeLogin.read() else {
+            if let relayed = relayed() {
+                EventLog.append("Limits (relayed): " + relayed.map { "\($0.kind.rawValue) \(Int($0.used))%" }.joined(separator: ", "))
+                return relayed
+            }
             EventLog.append("Limits: no Claude Code login")
             return nil
         }
@@ -159,6 +163,17 @@ final class PlanLimits: ObservableObject {
                             ?? "Limits: HTTP \(status)")
             return limits
         }
+    }
+
+    /// How old the relayed limits may be and still count.
+    static let relayedFor: TimeInterval = 15 * 60
+
+    /// The limits another machine left in `Paths.relayedLimits`, if they're fresh.
+    static func relayed(path: String = Paths.relayedLimits, now: Date = Date()) -> [PlanLimit]? {
+        guard let written = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date,
+              now.timeIntervalSince(written) < relayedFor,
+              let data = FileManager.default.contents(atPath: path) else { return nil }
+        return PlanLimit.parse(data)
     }
 
     private func update(_ fresh: [PlanLimit]) {
